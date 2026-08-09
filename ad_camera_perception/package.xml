@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ad_camera_perception</name>
+  <version>0.1.0</version>
+  <description>Camera traffic-signal and object perception for the HEVEN AD stack.</description>
+  <maintainer email="taeyeong@users.noreply.github.com">Taeyeong</maintainer>
+  <maintainer email="minxu2002@g.skku.edu">HEVEN Vision Team</maintainer>
+  <license>Apache-2.0</license>
+  <license>Proprietary</license>
+
+  <exec_depend>ad_interfaces</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>vision_msgs</exec_depend>
+
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

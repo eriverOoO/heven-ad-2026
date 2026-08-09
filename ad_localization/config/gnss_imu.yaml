@@ -1,0 +1,21 @@
+gnss_imu_localization:
+  ros__parameters:
+    gnss_pose_topic: /ad/localization/input/gnss_pose
+    imu_topic: /ad/sensors/imu/data
+    wheel_speed_topic: /ad/localization/input/wheel_speed
+    output_odometry_topic: /ad/localization/backends/gnss_imu/odometry
+    reference_frame: odom
+    base_frame: base_link
+    imu_frame: imu_link
+    gnss_lever_arm_m: [0.0, 0.0, 1.5685]
+    imu_mount_rpy_rad: [0.0, 0.0, 0.0]
+    # MORAI reports true-north yaw while projected GNSS/path coordinates use
+    # the UTM 52N grid at K-City. Apply the grid-convergence correction to
+    # every direct GNSS/IMU odometry sample.
+    world_yaw_offset_rad: -0.02350724531030645
+    synchronization_tolerance_sec: 0.1
+    gnss_xy_variance_m2: 0.25
+    gnss_z_variance_m2: 0.25
+    imu_orientation_variance_rad2: 0.0001
+    unobserved_twist_variance: 1000000.0
+    publish_tf: false

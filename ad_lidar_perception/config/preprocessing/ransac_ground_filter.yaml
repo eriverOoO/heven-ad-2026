@@ -1,0 +1,19 @@
+/**:
+  ros__parameters:
+    # Launch supplies base_frame and topic remaps from the enabled/bypass route.
+    unit_axis: z
+    max_iterations: 200
+    min_trial: 1000
+    min_points: 500
+    # Plane-fit band. This backend is optional; Patchwork remains the default.
+    outlier_threshold: 0.15
+    plane_slope_threshold: 12.0
+    voxel_size_x: 0.10
+    voxel_size_y: 0.10
+    voxel_size_z: 0.10
+    # Treat low curb-height returns as ground on the competition's flat roads.
+    height_threshold: 0.18
+    # Autoware's normal output is nonground only. Debug publishes its
+    # downsampled ground inliers for the existing RViz ground topic.
+    debug: true
+    publish_processing_time_detail: false

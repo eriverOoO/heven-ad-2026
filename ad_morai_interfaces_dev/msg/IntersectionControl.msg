@@ -1,0 +1,4 @@
+std_msgs/Header header
+int16 intersection_index
+int16 intersection_status
+float32 intersection_time

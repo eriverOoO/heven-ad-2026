@@ -1,0 +1,16 @@
+<root main_tree_to_execute="AdPlanner">
+  <BehaviorTree ID="AdPlanner">
+    <ReactiveFallback>
+      <ReactiveSequence>
+        <InputsReady/>
+        <ReactiveFallback>
+          <CollisionRecovery/>
+          <TrafficStop/>
+          <PerceptionMission/>
+          <FollowGlobalPath/>
+        </ReactiveFallback>
+      </ReactiveSequence>
+      <FailSafeBrake/>
+    </ReactiveFallback>
+  </BehaviorTree>
+</root>

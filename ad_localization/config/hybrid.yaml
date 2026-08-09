@@ -1,0 +1,19 @@
+localization_handoff:
+  ros__parameters:
+    gnss_odometry_topic: /ad/localization/backends/gnss_imu/odometry
+    fastlio_odometry_topic: /ad/localization/backends/fastlio/odometry
+    canonical_odometry_topic: /ad/localization/odometry
+    fastlio_initial_pose_topic: /ad/localization/input/initial_pose
+    diagnostics_topic: /diagnostics
+    reference_frame: odom
+    base_frame: base_link
+    entry_xy_m: [38.868875371112615, -480.68740975673563]
+    exit_xy_m: [-81.83284234744308, -547.3316347631321]
+    prewarm_radius_m: 20.0
+    entry_switch_radius_m: 8.0
+    exit_switch_radius_m: 20.0
+    source_timeout_sec: 0.5
+    maximum_position_disagreement_m: 2.0
+    maximum_yaw_disagreement_rad: 0.20
+    blend_duration_sec: 2.0
+    diagnostics_period_sec: 1.0

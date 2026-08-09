@@ -1,0 +1,10 @@
+{
+  "closed": true,
+  "derived_point_count": 4370,
+  "derived_sha256": "094032a5810245bc9474705edb7d5d6652d3c5148662df2386bcae81c207e8b1",
+  "duplicate_tolerance_m": 1e-06,
+  "smooth_passes": 1,
+  "source_point_count": 4430,
+  "source_sha256": "50658991e607d9339d76e4cd6cb169dfc733ea53b93de2c3e222460bb497cc05",
+  "spacing_m": 0.5
+}

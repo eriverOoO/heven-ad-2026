@@ -1,0 +1,7 @@
+ad_combined_occupancy_grid:
+  ros__parameters:
+    maximum_pending_messages: 8
+    topics.static_grid: "/ad/perception/occupancy/static"
+    topics.dynamic_grid: "/ad/perception/occupancy/dynamic"
+    topics.combined_grid: "/ad/perception/occupancy/combined"
+    topics.compatibility_grid: "/ad/perception/occupancy_grid"

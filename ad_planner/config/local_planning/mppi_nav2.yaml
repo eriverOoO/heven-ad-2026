@@ -1,0 +1,66 @@
+ad_planner:
+  ros__parameters:
+    mppi_nav2.cmd_vel_topic: "/ad/planner/mppi/cmd_vel"
+    mppi_nav2.command_timeout_s: 0.20
+    mppi_nav2.path_refresh_period_s: 0.25
+    mppi_nav2.diagnostic_rollout_dt_s: 0.10
+    mppi_nav2.diagnostic_rollout_horizon_s: 3.0
+    mppi_nav2.wheelbase_m: 3.0
+    mppi_nav2.maximum_road_wheel_angle_rad: 0.588
+    mppi_nav2.steering_rate_limit_rad_s: 0.35
+    mppi_nav2.near_zero_speed_mps: 0.05
+
+controller_server:
+  ros__parameters:
+    controller_frequency: 20.0
+    odom_topic: "/ad/localization/odometry"
+    controller_plugins: [FollowPath]
+    FollowPath:
+      plugin: "nav2_mppi_controller::MPPIController"
+      time_steps: 60
+      model_dt: 0.05
+      batch_size: 1000
+      iteration_count: 1
+      motion_model: "Ackermann"
+      vx_min: 0.0
+      vx_max: 6.1
+      visualize: false
+      critics:
+        - "ConstraintCritic"
+        - "CostCritic"
+        - "GoalCritic"
+        - "GoalAngleCritic"
+        - "PathAlignCritic"
+        - "PathFollowCritic"
+        - "PathAngleCritic"
+        - "PreferForwardCritic"
+      AckermannConstraints:
+        min_turning_r: 4.50
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        critical_cost: 300.0
+        consider_footprint: true
+        collision_cost: 1000000.0
+        near_goal_distance: 1.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      global_frame: "odom"
+      robot_base_frame: "base_link"
+      rolling_window: true
+      width: 54
+      height: 54
+      resolution: 0.1
+      track_unknown_space: true
+      trinary_costmap: false
+      lethal_cost_threshold: 100
+      footprint: "[[-0.790, -0.945], [-0.790, 0.945], [3.845, 0.945], [3.845, -0.945]]"
+      plugins: [static_layer]
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_topic: "/ad/planner/mppi/occupancy_grid_odom"
+        map_subscribe_transient_local: false
+        subscribe_to_updates: false

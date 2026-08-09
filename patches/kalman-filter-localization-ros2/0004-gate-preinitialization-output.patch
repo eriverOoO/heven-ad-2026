@@ -1,0 +1,419 @@
+diff --git a/kalman_filter_localization_ros2/CMakeLists.txt b/kalman_filter_localization_ros2/CMakeLists.txt
+index 1b171a1..8e3602a 100644
+--- a/kalman_filter_localization_ros2/CMakeLists.txt
++++ b/kalman_filter_localization_ros2/CMakeLists.txt
+@@ -73,7 +73,7 @@ if(BUILD_TESTING)
+     rclcpp geometry_msgs nav_msgs sensor_msgs)
+   target_link_libraries(test_ekf_stationary_initialization ekf_localization_component)
+   ament_target_dependencies(test_ekf_stationary_initialization
+-    rclcpp geometry_msgs sensor_msgs std_msgs)
++    rclcpp geometry_msgs nav_msgs sensor_msgs std_msgs)
+   target_link_libraries(test_ekf_wheel_confirmed_zupt ekf_localization_component)
+   ament_target_dependencies(test_ekf_wheel_confirmed_zupt
+     rclcpp geometry_msgs sensor_msgs std_msgs)
+diff --git a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+index f1ea740..1c3c68d 100644
+--- a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
++++ b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+@@ -1702,6 +1702,7 @@ struct EkfLocalizationComponent::Impl
+         slip_turn_detector_.reset();
+         gnss_reacquisition_gate_.reset();
+         stationary_initialization_complete_ = !enable_stationary_initialization_;
++        initialization_output_ready_ = !enable_stationary_initialization_;
+         yaw_initializer_.reset();
+         (void)yaw_initializer_.offer(
+           core::YawInitializer::Source::kExternalPose,
+@@ -2543,6 +2544,7 @@ struct EkfLocalizationComponent::Impl
+         previous_time_imu_ = current_time_imu;
+         has_previous_time_imu_ = true;
+         if (status == core::EskfReplay::Status::kApplied) {
++          initialization_output_ready_ = true;
+           awaiting_post_gap_propagation_ = false;
+         }
+         releasePostGapOutputGateIfTrusted();
+@@ -2635,7 +2637,7 @@ struct EkfLocalizationComponent::Impl
+         "skip EKF prediction update due to invalid input or numerical invariant failure");
+       return;
+     }
+-
++    initialization_output_ready_ = true;
+     const auto stationary_state = stationary_detector_.update(
+       current_time_imu, gyro, linear_acceleration,
+       ekf_.getVelocity().norm(), gravity_mps2_,
+@@ -4122,7 +4124,8 @@ struct EkfLocalizationComponent::Impl
+ 
+   void broadcastPose()
+   {
+-    if (!initial_pose_received_ || !has_received_input_ || awaiting_post_gap_gnss_ ||
++    if (!initial_pose_received_ || !has_received_input_ || !initialization_output_ready_ ||
++      awaiting_post_gap_gnss_ ||
+       awaiting_post_gap_propagation_)
+     {
+       return;
+@@ -4400,6 +4403,7 @@ struct EkfLocalizationComponent::Impl
+   bool initial_pose_received_{false};
+   bool has_received_input_{false};
+   bool has_latest_imu_stamp_{false};
++  bool initialization_output_ready_{false};
+   bool awaiting_post_gap_gnss_{false};
+   bool awaiting_post_gap_propagation_{false};
+   double post_gap_epoch_start_time_{std::numeric_limits<double>::quiet_NaN()};
+diff --git a/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp b/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp
+index ccb2e7c..aae266a 100644
+--- a/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp
++++ b/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp
+@@ -42,6 +42,7 @@
+ 
+ #include <geometry_msgs/msg/pose_stamped.hpp>
+ #include <geometry_msgs/msg/vector3_stamped.hpp>
++#include <nav_msgs/msg/odometry.hpp>
+ #include <rclcpp/rclcpp.hpp>
+ #include <sensor_msgs/msg/imu.hpp>
+ #include <std_msgs/msg/float64_multi_array.hpp>
+@@ -122,6 +123,322 @@ TEST(EkfStationaryInitialization, WarnsWhenAccelBiasStartsWithZeroUncertaintyAnd
+     std::string::npos);
+ }
+ 
++TEST(EkfStationaryInitialization, SuppressesOutputsUntilReplayAppliesAPropagation)
++{
++  const std::vector<rclcpp::Parameter> parameters{
++    rclcpp::Parameter("initial_pose_topic", "/stationary_readiness_test/initial_pose"),
++    rclcpp::Parameter("imu_topic", "/stationary_readiness_test/imu"),
++    rclcpp::Parameter("output_odometry_topic", "/stationary_readiness_test/odometry"),
++    rclcpp::Parameter("output_publish_mode", "imu"),
++    rclcpp::Parameter("publish_tf", false),
++    rclcpp::Parameter("use_gnss", false),
++    rclcpp::Parameter("propagation_model", "legacy"),
++    rclcpp::Parameter("enable_measurement_replay", true),
++    rclcpp::Parameter("measurement_history_duration_sec", 2.0),
++    rclcpp::Parameter("max_future_measurement_wait_sec", 0.25),
++    rclcpp::Parameter("enable_stationary_initialization", true),
++    rclcpp::Parameter("stationary_initialization_window_sec", 0.1),
++    rclcpp::Parameter("stationary_initialization_min_samples", 10),
++    rclcpp::Parameter("gravity_mps2", 9.80665),
++    rclcpp::Parameter("publish_debug_topics", true)};
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_stationary_readiness_test"});
++  options.parameter_overrides(parameters);
++  const auto ekf_node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  const auto probe_node = std::make_shared<rclcpp::Node>("ekf_stationary_readiness_probe");
++  const auto initial_pose_pub =
++    probe_node->create_publisher<geometry_msgs::msg::PoseStamped>(
++    "/stationary_readiness_test/initial_pose", 10);
++  const auto imu_pub = probe_node->create_publisher<sensor_msgs::msg::Imu>(
++    "/stationary_readiness_test/imu", rclcpp::SensorDataQoS());
++
++  std::size_t pose_count = 0U;
++  std::size_t odometry_count = 0U;
++  std::size_t gyro_bias_count = 0U;
++  std::size_t accel_bias_count = 0U;
++  builtin_interfaces::msg::Time pose_output_stamp;
++  builtin_interfaces::msg::Time odometry_output_stamp;
++  std::vector<std_msgs::msg::Float64MultiArray> initialization_diagnostics;
++  const auto pose_sub =
++    probe_node->create_subscription<geometry_msgs::msg::PoseStamped>(
++    "/ekf_stationary_readiness_test/current_pose", 10,
++    [&pose_count, &pose_output_stamp](geometry_msgs::msg::PoseStamped::ConstSharedPtr message) {
++      ++pose_count;
++      pose_output_stamp = message->header.stamp;
++    });
++  const auto odometry_sub =
++    probe_node->create_subscription<nav_msgs::msg::Odometry>(
++    "/stationary_readiness_test/odometry", 10,
++    [&odometry_count, &odometry_output_stamp](nav_msgs::msg::Odometry::ConstSharedPtr message) {
++      ++odometry_count;
++      odometry_output_stamp = message->header.stamp;
++    });
++  const auto gyro_bias_sub =
++    probe_node->create_subscription<geometry_msgs::msg::Vector3Stamped>(
++    "/ekf_stationary_readiness_test/current_gyro_bias", 10,
++    [&gyro_bias_count](geometry_msgs::msg::Vector3Stamped::ConstSharedPtr) {++gyro_bias_count;});
++  const auto accel_bias_sub =
++    probe_node->create_subscription<geometry_msgs::msg::Vector3Stamped>(
++    "/ekf_stationary_readiness_test/current_accel_bias", 10,
++    [&accel_bias_count](geometry_msgs::msg::Vector3Stamped::ConstSharedPtr) {++accel_bias_count;});
++  const auto initialization_sub =
++    probe_node->create_subscription<std_msgs::msg::Float64MultiArray>(
++    "/ekf_stationary_readiness_test/debug/initialization", 10,
++    [&initialization_diagnostics](std_msgs::msg::Float64MultiArray::ConstSharedPtr message) {
++      initialization_diagnostics.push_back(*message);
++    });
++
++  rclcpp::executors::SingleThreadedExecutor executor;
++  executor.add_node(ekf_node);
++  executor.add_node(probe_node);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return initial_pose_pub->get_subscription_count() == 1U &&
++        imu_pub->get_subscription_count() == 1U &&
++        pose_sub->get_publisher_count() == 1U &&
++        odometry_sub->get_publisher_count() == 1U &&
++        gyro_bias_sub->get_publisher_count() == 1U &&
++        accel_bias_sub->get_publisher_count() == 1U &&
++        initialization_sub->get_publisher_count() == 1U;
++      }));
++
++  geometry_msgs::msg::PoseStamped initial_pose;
++  initial_pose.header.stamp = stamp(10.0);
++  initial_pose.header.frame_id = "map";
++  initial_pose.pose.orientation.w = 1.0;
++  initial_pose_pub->publish(initial_pose);
++  spinFor(executor, 20ms);
++
++  const auto publish_imu = [&](const double time) {
++      sensor_msgs::msg::Imu message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "base_link";
++      message.orientation.w = 1.0;
++      message.linear_acceleration.z = 9.80665;
++      imu_pub->publish(message);
++    };
++  const auto wait_for_initialization_sample =
++    [&initialization_diagnostics, &executor, &publish_imu](
++    const double time, const std::size_t expected_sample_count)
++    {
++      publish_imu(time);
++      return spinUntil(
++        executor,
++        [&]() {
++          return !initialization_diagnostics.empty() &&
++          initialization_diagnostics.back().data.size() >= 6U &&
++          initialization_diagnostics.back().data[5] ==
++          static_cast<double>(expected_sample_count);
++        });
++    };
++  const auto expect_no_output = [&]() {
++      EXPECT_EQ(pose_count, 0U);
++      EXPECT_EQ(odometry_count, 0U);
++      EXPECT_EQ(gyro_bias_count, 0U);
++      EXPECT_EQ(accel_bias_count, 0U);
++    };
++
++  for (int index = 0; index <= 10; ++index) {
++    ASSERT_TRUE(
++      wait_for_initialization_sample(
++        10.0 + index * 0.0099, static_cast<std::size_t>(index + 1)));
++    expect_no_output();
++  }
++  ASSERT_DOUBLE_EQ(
++    initialization_diagnostics.back().data[0],
++    static_cast<double>(
++      kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
++
++  publish_imu(10.11);
++  spinFor(executor, 50ms);
++  expect_no_output();
++
++  const auto propagation_stamp = stamp(10.12);
++  publish_imu(10.12);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return pose_count > 0U && odometry_count > 0U &&
++        pose_output_stamp.sec == propagation_stamp.sec &&
++        pose_output_stamp.nanosec == propagation_stamp.nanosec &&
++        odometry_output_stamp.sec == propagation_stamp.sec &&
++        odometry_output_stamp.nanosec == propagation_stamp.nanosec;
++      }));
++  spinFor(executor, 20ms);
++  EXPECT_EQ(pose_count, 1U);
++  EXPECT_EQ(odometry_count, 1U);
++  EXPECT_EQ(gyro_bias_count, 1U);
++  EXPECT_EQ(accel_bias_count, 1U);
++
++  executor.remove_node(probe_node);
++  executor.remove_node(ekf_node);
++}
++
++TEST(EkfStationaryInitialization, SuppressesOutputsUntilDirectPredictionUpdates)
++{
++  const std::vector<rclcpp::Parameter> parameters{
++    rclcpp::Parameter("initial_pose_topic", "/stationary_direct_test/initial_pose"),
++    rclcpp::Parameter("imu_topic", "/stationary_direct_test/imu"),
++    rclcpp::Parameter("output_publish_mode", "imu"),
++    rclcpp::Parameter("publish_tf", false),
++    rclcpp::Parameter("use_gnss", false),
++    rclcpp::Parameter("propagation_model", "legacy"),
++    rclcpp::Parameter("enable_measurement_replay", false),
++    rclcpp::Parameter("enable_stationary_initialization", true),
++    rclcpp::Parameter("stationary_initialization_window_sec", 0.1),
++    rclcpp::Parameter("stationary_initialization_min_samples", 10),
++    rclcpp::Parameter("gravity_mps2", 9.80665),
++    rclcpp::Parameter("publish_debug_topics", true)};
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_stationary_direct_test"});
++  options.parameter_overrides(parameters);
++  const auto ekf_node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  const auto probe_node = std::make_shared<rclcpp::Node>("ekf_stationary_direct_probe");
++  const auto initial_pose_pub =
++    probe_node->create_publisher<geometry_msgs::msg::PoseStamped>(
++    "/stationary_direct_test/initial_pose", 10);
++  const auto imu_pub = probe_node->create_publisher<sensor_msgs::msg::Imu>(
++    "/stationary_direct_test/imu", rclcpp::SensorDataQoS());
++  std::size_t pose_count = 0U;
++  builtin_interfaces::msg::Time pose_output_stamp;
++  std::vector<std_msgs::msg::Float64MultiArray> initialization_diagnostics;
++  const auto pose_sub =
++    probe_node->create_subscription<geometry_msgs::msg::PoseStamped>(
++    "/ekf_stationary_direct_test/current_pose", 10,
++    [&pose_count, &pose_output_stamp](geometry_msgs::msg::PoseStamped::ConstSharedPtr message) {
++      ++pose_count;
++      pose_output_stamp = message->header.stamp;
++    });
++  const auto initialization_sub =
++    probe_node->create_subscription<std_msgs::msg::Float64MultiArray>(
++    "/ekf_stationary_direct_test/debug/initialization", 10,
++    [&initialization_diagnostics](std_msgs::msg::Float64MultiArray::ConstSharedPtr message) {
++      initialization_diagnostics.push_back(*message);
++    });
++
++  rclcpp::executors::SingleThreadedExecutor executor;
++  executor.add_node(ekf_node);
++  executor.add_node(probe_node);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return initial_pose_pub->get_subscription_count() == 1U &&
++        imu_pub->get_subscription_count() == 1U &&
++        pose_sub->get_publisher_count() == 1U &&
++        initialization_sub->get_publisher_count() == 1U;
++      }));
++
++  geometry_msgs::msg::PoseStamped initial_pose;
++  initial_pose.header.stamp = stamp(10.0);
++  initial_pose.header.frame_id = "map";
++  initial_pose.pose.orientation.w = 1.0;
++  initial_pose_pub->publish(initial_pose);
++  spinFor(executor, 20ms);
++  const auto publish_imu = [&](const double time) {
++      sensor_msgs::msg::Imu message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "base_link";
++      message.orientation.w = 1.0;
++      message.linear_acceleration.z = 9.80665;
++      imu_pub->publish(message);
++    };
++
++  for (int index = 0; index <= 10; ++index) {
++    publish_imu(10.0 + index * 0.0099);
++    ASSERT_TRUE(
++      spinUntil(
++        executor,
++        [&]() {
++          return !initialization_diagnostics.empty() &&
++          initialization_diagnostics.back().data.size() >= 6U &&
++          initialization_diagnostics.back().data[5] ==
++          static_cast<double>(index + 1);
++        }));
++    EXPECT_EQ(pose_count, 0U);
++  }
++  ASSERT_DOUBLE_EQ(
++    initialization_diagnostics.back().data[0],
++    static_cast<double>(
++      kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
++
++  publish_imu(10.11);
++  spinFor(executor, 50ms);
++  EXPECT_EQ(pose_count, 0U);
++  const auto propagation_stamp = stamp(10.12);
++  publish_imu(10.12);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return pose_count > 0U && pose_output_stamp.sec == propagation_stamp.sec &&
++        pose_output_stamp.nanosec == propagation_stamp.nanosec;
++      }));
++  spinFor(executor, 20ms);
++  EXPECT_EQ(pose_count, 1U);
++
++  executor.remove_node(probe_node);
++  executor.remove_node(ekf_node);
++}
++
++TEST(EkfStationaryInitialization, DisabledInitializationPublishesOnFirstImu)
++{
++  const std::vector<rclcpp::Parameter> parameters{
++    rclcpp::Parameter("initial_pose_topic", "/initialization_disabled_test/initial_pose"),
++    rclcpp::Parameter("imu_topic", "/initialization_disabled_test/imu"),
++    rclcpp::Parameter("output_publish_mode", "imu"),
++    rclcpp::Parameter("publish_tf", false),
++    rclcpp::Parameter("use_gnss", false),
++    rclcpp::Parameter("propagation_model", "legacy"),
++    rclcpp::Parameter("enable_measurement_replay", true),
++    rclcpp::Parameter("enable_stationary_initialization", false)};
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=initialization_disabled_test"});
++  options.parameter_overrides(parameters);
++  const auto ekf_node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  const auto probe_node = std::make_shared<rclcpp::Node>("initialization_disabled_probe");
++  const auto initial_pose_pub =
++    probe_node->create_publisher<geometry_msgs::msg::PoseStamped>(
++    "/initialization_disabled_test/initial_pose", 10);
++  const auto imu_pub = probe_node->create_publisher<sensor_msgs::msg::Imu>(
++    "/initialization_disabled_test/imu", rclcpp::SensorDataQoS());
++  std::size_t pose_count = 0U;
++  const auto pose_sub =
++    probe_node->create_subscription<geometry_msgs::msg::PoseStamped>(
++    "/initialization_disabled_test/current_pose", 10,
++    [&pose_count](geometry_msgs::msg::PoseStamped::ConstSharedPtr) {++pose_count;});
++
++  rclcpp::executors::SingleThreadedExecutor executor;
++  executor.add_node(ekf_node);
++  executor.add_node(probe_node);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return initial_pose_pub->get_subscription_count() == 1U &&
++        imu_pub->get_subscription_count() == 1U &&
++        pose_sub->get_publisher_count() == 1U;
++      }));
++
++  geometry_msgs::msg::PoseStamped initial_pose;
++  initial_pose.header.stamp = stamp(10.0);
++  initial_pose.header.frame_id = "map";
++  initial_pose.pose.orientation.w = 1.0;
++  initial_pose_pub->publish(initial_pose);
++  spinFor(executor, 20ms);
++  sensor_msgs::msg::Imu imu;
++  imu.header.stamp = stamp(10.01);
++  imu.header.frame_id = "base_link";
++  imu.orientation.w = 1.0;
++  imu.linear_acceleration.z = 9.80665;
++  imu_pub->publish(imu);
++  ASSERT_TRUE(spinUntil(executor, [&]() {return pose_count == 1U;}));
++
++  executor.remove_node(probe_node);
++  executor.remove_node(ekf_node);
++}
++
+ TEST(EkfStationaryInitialization, OptInPublishesGravityObservableAccelBias)
+ {
+   const std::vector<rclcpp::Parameter> parameters{
+@@ -223,8 +540,8 @@ TEST(EkfStationaryInitialization, OptInPublishesGravityObservableAccelBias)
+       kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
+   const std::size_t bias_count_before_replay = accel_biases.size();
+   publish_imu(10.11, 9.90665);
+-  ASSERT_TRUE(
+-    spinUntil(executor, [&]() {return accel_biases.size() > bias_count_before_replay;}));
++  spinFor(executor, 50ms);
++  EXPECT_EQ(accel_biases.size(), bias_count_before_replay);
+   const std::size_t bias_count_before_propagation = accel_biases.size();
+   publish_imu(10.12, 9.90665);
+   ASSERT_TRUE(
+@@ -246,10 +563,8 @@ TEST(EkfStationaryInitialization, OptInPublishesGravityObservableAccelBias)
+       kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
+   const std::size_t bias_count_before_reinitialized_replay = accel_biases.size();
+   publish_imu(20.11, 9.70665);
+-  ASSERT_TRUE(
+-    spinUntil(
+-      executor,
+-      [&]() {return accel_biases.size() > bias_count_before_reinitialized_replay;}));
++  spinFor(executor, 50ms);
++  EXPECT_EQ(accel_biases.size(), bias_count_before_reinitialized_replay);
+   const std::size_t bias_count_before_reinitialized_propagation = accel_biases.size();
+   publish_imu(20.12, 9.70665);
+   ASSERT_TRUE(

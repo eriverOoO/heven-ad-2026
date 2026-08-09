@@ -1,0 +1,16 @@
+ad_road_corridor_mask:
+  ros__parameters:
+    data_dir: ""
+    route_corridor_file: "map/route_corridor.json"
+    route_corridor.expected_global_path_sha256: ""
+    base_frame: "base_link"
+    transform_timeout_sec: 0.05
+    deduplication_cache_size: 64
+    grid.minimum_x_m: -4.0
+    grid.maximum_x_m: 100.0
+    grid.minimum_y_m: -10.0
+    grid.maximum_y_m: 10.0
+    grid.resolution_m: 0.1
+    topics.lidar_points: "/ad/sensors/lidar/points"
+    topics.predicted_objects: "/ad/perception/objects/predicted"
+    topics.drivable_mask: "/ad/planning/drivable_mask"

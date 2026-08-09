@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    topics:
+      input: /ad/perception/lidar/nonground
+      output: /ad/perception/lidar/nonground_finite

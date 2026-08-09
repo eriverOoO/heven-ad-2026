@@ -1,0 +1,36 @@
+ad_planner:
+  ros__parameters:
+    dwa.goal_weight: 0.6853184133737663
+    dwa.heading_weight: 0.820915742282049
+    dwa.clearance_weight: 6.988105376107245
+    dwa.smoothness_weight: 0.3726570996518491
+    dwa.path_distance_weight: 4.72607942186904
+    dwa.speed_weight: 2.2175181155016617
+    dwa.speed_pid.kp: 0.10126381913499712
+    dwa.speed_pid.kd: 0.04819595596230445
+    dwa.brake_pid.kp: 0.523935377814553
+    dwa.brake_pid.kd: 0.040023230562033836
+    dwa.minimum_speed_mps: 0.0
+    dwa.maximum_speed_mps: 16.25
+    dwa.speed_step_mps: 1.0
+    dwa.minimum_steering_rad: -0.52
+    dwa.maximum_steering_rad: 0.52
+    dwa.steering_step_rad: 0.04
+    dwa.simulation_dt: 0.2
+    dwa.horizon_sec: 1.5
+    dwa.dynamic_window_time_sec: 0.5
+    dwa.maximum_acceleration_mps2: 5.0
+    dwa.maximum_deceleration_mps2: 1.8
+    dwa.emergency_deceleration_mps2: 6.0
+    dwa.initial_inflation_escape_sec: 0.6
+    dwa.maximum_steering_rate_radps: 2.0943951023931953
+    dwa.maximum_lateral_acceleration_mps2: 6.0
+    dwa.clearance_saturation_m: 8.0
+    dwa.maximum_path_distance_m: 4.5
+    dwa.progress_weight: 1.0
+    dwa.speed_pid.ki: 0.0
+    dwa.speed_pid.integral_limit: 10.0
+    dwa.speed_pid.derivative_limit: 10.0
+    dwa.speed_pid.derivative_filter_time_constant_s: 0.1
+    dwa.speed_pid.brake_deadband_mps: 0.1
+    dwa.brake_pid.ki: 0.0

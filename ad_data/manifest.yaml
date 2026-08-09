@@ -1,0 +1,54 @@
+schema_version: 1
+
+collections:
+  - id: kcity_2025_map
+    path: map
+    kind: source_and_derived
+    source: MORAI 25.S4 competition MGeo and 2026 competition reference paths
+    license: MORAI and 웨이즈원 source metadata; HEVEN-generated derivatives
+    purpose: MGeo source, lane graph, checkpoints and planner road corridors
+
+  - id: competition_paths
+    path: path
+    kind: source_and_derived
+    source: 2026 competition reference path and project preparation scripts
+    license: HEVEN internal competition asset
+    purpose: global planning and checkpoint-specific validation
+
+  - id: morai_25s4_savefile
+    path: morai/SaveFile
+    kind: source_and_template
+    source: MORAI 25.S4 MolitComp03 live SaveFile snapshot
+    license: MORAI internal competition asset
+    purpose: simulator scenarios, sensors and reproducible network port layout
+    notes: NetworkInfo host addresses are replaced with loopback
+
+  - id: synchronized_sensor_snapshot
+    path: morai/fixtures/synchronized_sensor_snapshot
+    kind: fixture
+    source: MORAI 25.S4 SensorData timestamp 26-08-01-04-56-46-150132
+    license: MORAI internal competition asset
+    purpose: synchronized Camera, LiDAR, GPS and IMU decoder regression fixture
+
+  - id: ioniq5_vehicle_dynamics
+    path: vehicle_dynamics/ioniq5
+    kind: derived
+    source: MORAI 25.S4 IONIQ 5 automatic accelerator and brake profiling
+    license: HEVEN-generated measurements
+    purpose: Profile Stanley longitudinal response model and provenance
+
+  - id: controller_best_parameters
+    path: tuning/best_parameters
+    kind: derived
+    source: HEVEN MORAI Optuna studies
+    license: HEVEN-generated tuning results
+    purpose: Stanley and Profile Stanley best trials with experimental DWA reference
+
+lfs_paths:
+  - map/link_set.json
+  - morai/fixtures/synchronized_sensor_snapshot/CAMERA_1/26-08-01-04-56-46-150132_Intensity.png
+  - morai/fixtures/synchronized_sensor_snapshot/CAMERA_2/26-08-01-04-56-46-150132_Intensity.png
+  - morai/fixtures/synchronized_sensor_snapshot/CAMERA_3/26-08-01-04-56-46-150132_Intensity.png
+  - morai/fixtures/synchronized_sensor_snapshot/CAMERA_4/26-08-01-04-56-46-150132_Intensity.png
+  - morai/fixtures/synchronized_sensor_snapshot/LIDAR_5/26-08-01-04-56-46-150132_Intensity.bin
+  - vehicle_dynamics/ioniq5/brake/plots/brake_profile_partial.png

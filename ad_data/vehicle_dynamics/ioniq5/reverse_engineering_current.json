@@ -1,0 +1,870 @@
+{
+  "assembly_path_hint": "Simulator_Data/Managed/Assembly-CSharp.dll",
+  "assembly_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+  "claims": [
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "vehicle.mass.mass_kg",
+      "units": "kg",
+      "value": 1905.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "vehicle.tires.wheel_collider_radius_m",
+      "units": "m",
+      "value": 0.36
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.speed_control.speed_limit_kph",
+      "units": "km/h",
+      "value": 185.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.speed_control.throttle_slope",
+      "units": null,
+      "value": 1.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.driveline.controller_max_drive_torque_nm",
+      "units": "N*m",
+      "value": 600.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.differential.gear_ratio",
+      "units": null,
+      "value": 4.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.brakes.max_brake_torque_nm",
+      "units": "N*m",
+      "value": 6500.0
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.brakes.full_brake_threshold",
+      "units": "normalized",
+      "value": 0.8
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.tire_friction.adherent_friction",
+      "units": null,
+      "value": 0.95
+    },
+    {
+      "claim": "serialized_vehicle_parameter",
+      "confidence": "exact",
+      "source_kind": "serialized_asset",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "morai_asset.controller.electric_motor.max_drive_torque_nm",
+      "units": "N*m",
+      "value": 991.0
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleCtrlDataInfo",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "MVPWheelCollider",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "fullBrakeThreshold",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "throttleSlope",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "maxBrakeTorque",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "maxDriveTorque",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "speedLimiter",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_symbol_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": true
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleCtrlDataInfo.data",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_symbol_not_recovered",
+      "confidence": "unknown",
+      "source_kind": "unknown",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": null
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.m_dataInfo",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SccBrakeTtc",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errPrevBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errIntegAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errIntegBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errIntegForwardsInput",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errIntegBackwardsInput",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.errIntegSidewayInput",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.lowPassFilterGain",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.prevThrottleValue",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.prevBrakeValue",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.medianBoxBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.medianBoxThrottle",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.lateralControlGain",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainSteer",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainAccelAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainBrakeAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainLongVel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.CtrlGainAngVel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.DeadOffsetVelocityThrottle",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.DeadOffsetVelocityBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.DeadOffsetAccelThrottle",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.DeadOffsetAccelBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MaxErrIntegAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MinErrIntegAccel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MaxErrIntegBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MinErrIntegBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MaxErrIntegVel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MinErrIntegVel",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MaxValueThrottle",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.MaxValueBrake",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.GetData",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SetCtrlGain",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushSidewayCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SetDeadOffsetAccel",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SetDeadOffsetVelocity",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SetData",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushBackwardsCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushAccelCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.SetSCCParam",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushAllCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushBrakeCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VehicleVariables.FlushForwardsCtrlErr",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_symbol_not_recovered",
+      "confidence": "unknown",
+      "source_kind": "unknown",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": null
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "MVPWheelCollider.SetFrictionMultiplier",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "MVPWheelCollider.FixedUpdateVehicle",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_symbol_not_recovered",
+      "confidence": "unknown",
+      "source_kind": "unknown",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": null
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.speedControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.driveline",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.torqueSplitter",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.brakes",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.tireFriction",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.tractionControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.stabilityControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.GetWheelFinalRatio",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPVehicleController.GetLimitSpeed",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_symbol_not_recovered",
+      "confidence": "unknown",
+      "source_kind": "unknown",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": null
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.speedControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.maxDriveTorque",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.maxDriveRpm",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.gearChangeMaxSpeed",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.brakes",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.tireFriction",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.electricMotor",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.tractionControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.stabilityControl",
+      "units": null,
+      "value": "field"
+    },
+    {
+      "claim": "managed_metadata_member_present",
+      "confidence": "high",
+      "source_kind": "managed_il",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "VPElectricVehicleController.GetLimitSpeed",
+      "units": null,
+      "value": "method"
+    },
+    {
+      "claim": "managed_metadata_symbol_not_recovered",
+      "confidence": "unknown",
+      "source_kind": "unknown",
+      "source_sha256": "a2ad7d12af07e2b3173c9c3e66a4c499af9fe70d2d91d48d5671db8a2547d669",
+      "symbol_or_field": "electricMotor",
+      "units": null,
+      "value": null
+    },
+    {
+      "claim": "motor_side_full_throttle_upper_bound",
+      "confidence": "medium",
+      "source_kind": "derived",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "torque*gear_ratio/(wheel_radius*mass)",
+      "units": "m/s^2",
+      "value": 3.499562554680665
+    },
+    {
+      "claim": "wheel_side_full_throttle_alternative",
+      "confidence": "medium",
+      "source_kind": "derived",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "torque/(wheel_radius*mass)",
+      "units": "m/s^2",
+      "value": 0.8748906386701663
+    },
+    {
+      "claim": "flat_surface_full_brake_upper_bound",
+      "confidence": "medium",
+      "source_kind": "derived",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "min(brake_torque/(wheel_radius*mass), friction*g)",
+      "units": "m/s^2",
+      "value": 9.316317499999998
+    },
+    {
+      "claim": "motor_speed_at_configured_speed_limit",
+      "confidence": "medium",
+      "source_kind": "derived",
+      "source_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173",
+      "symbol_or_field": "vehicle_speed/wheel_radius*gear_ratio*60/(2*pi)",
+      "units": "rpm",
+      "value": 5452.530457777895
+    }
+  ],
+  "diagnostics": [],
+  "limitations": [
+    "metadata symbol presence does not prove a control equation",
+    "native PhysX and WheelCollider behavior is not recovered here",
+    "runtime profiling is authoritative for net acceleration"
+  ],
+  "schema_version": 1,
+  "vehicle_parameters_path": "ad_description/config/vehicle_parameters.yaml",
+  "vehicle_parameters_sha256": "9c3922fec70af5a83a57ea38aa18020b82a28aa570e6bcd8cceea7bda207b173"
+}

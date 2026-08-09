@@ -1,0 +1,4 @@
+{
+  "global_coordinate_system": "+proj=utm +zone=52 +datum=WGS84 +units=m +no_defs",
+  "local_origin_in_global": [0.0, 0.0, 0.0]
+}

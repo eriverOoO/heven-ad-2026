@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "references": {
+    "morai_msgs_24r2_commit": "176610aeaecad28cc31e62e1cd2548ba14c6fde7",
+    "morai_msgs_26r1_commit": "c84d648638510d28b691b959b03502009f4e2070",
+    "wire_authority": "MORAI 2025 competition build captures and migrated mm_udp/lib/define"
+  },
+  "raw_audit": {
+    "parameter": "publish_raw_packets",
+    "default": false,
+    "topics_are_capabilities_not_default_publishers": true
+  },
+  "endpoints": [
+    {"name":"competition_status","profile":"competition","direction":"input","runtime_key":"competition_status","port":1909,"wire_header":["#MoraiInfo$","#EgoStatus$"],"packet_sizes":[181,229],"support":"typed","topics":["/ad/vehicle/status","/ad/udp/raw/competition_status"]},
+    {"name":"collisions","profile":"competition","direction":"input","runtime_key":"collisions","port":9092,"wire_header":["#CollisionData$"],"packet_sizes":[181],"support":"typed","topics":["/ad/safety/collisions","/ad/udp/raw/collisions"]},
+    {"name":"camera_front","profile":"competition","direction":"input","runtime_key":"camera_front","port":9291,"wire_header":["MOR","BOX"],"packet_sizes":[65000],"support":"typed","topics":["/ad/sensors/camera/front/compressed","/ad/udp/raw/camera_front"]},
+    {"name":"camera_left","profile":"competition","direction":"input","runtime_key":"camera_left","port":9293,"wire_header":["MOR","BOX"],"packet_sizes":[65000],"support":"typed","topics":["/ad/sensors/camera/left/compressed","/ad/udp/raw/camera_left"]},
+    {"name":"camera_right","profile":"competition","direction":"input","runtime_key":"camera_right","port":9295,"wire_header":["MOR","BOX"],"packet_sizes":[65000],"support":"typed","topics":["/ad/sensors/camera/right/compressed","/ad/udp/raw/camera_right"]},
+    {"name":"camera_traffic_light","profile":"competition","direction":"input","runtime_key":"camera_traffic_light","port":9307,"wire_header":["MOR","BOX"],"packet_sizes":[65000],"support":"typed","topics":["/ad/sensors/camera/traffic_light/compressed","/ad/udp/raw/camera_traffic_light"]},
+    {"name":"gps","profile":"competition","direction":"input","runtime_key":"gps","port":9297,"wire_header":["$GPRMC","$GPGGA"],"packet_sizes":[],"support":"typed","topics":["/ad/sensors/gps/rmc","/ad/sensors/gps/gga","/ad/sensors/gps/fix","/ad/udp/raw/gps"]},
+    {"name":"imu","profile":"competition","direction":"input","runtime_key":"imu","port":9299,"wire_header":["#IMUData$"],"packet_sizes":[107,115],"support":"typed","topics":["/ad/sensors/imu/full","/ad/sensors/imu/data","/ad/udp/raw/imu"]},
+    {"name":"velodyne","profile":"competition","direction":"input","runtime_key":"velodyne","port":2368,"wire_header":[],"packet_sizes":[1206],"support":"typed","topics":["/ad/sensors/lidar/raw","/ad/sensors/lidar/points","/ad/udp/raw/velodyne"]},
+    {"name":"ctrl_cmd","profile":"competition","direction":"output","runtime_key":null,"port":9093,"wire_header":["#MoraiCtrlCmd$"],"packet_sizes":[55],"support":"typed","topics":["/ad/control/command"]},
+    {"name":"ego_status","profile":"development","direction":"input","runtime_key":"ego_status","port":1911,"wire_header":["#MoraiInfo$","#EgoStatus$"],"packet_sizes":[181,229],"support":"typed","topics":["/ad/dev/vehicle/ego_status/full","/ad/dev/vehicle/ego_status"]},
+    {"name":"objects","profile":"development","direction":"input","runtime_key":"objects","port":7505,"wire_header":["#MoraiObjInfo$"],"packet_sizes":[2160],"support":"typed","topics":["/ad/dev/objects"]},
+    {"name":"lidar2d","profile":"development","direction":"input","runtime_key":"lidar2d","port":9301,"wire_header":["#Lidar2D$"],"packet_sizes":[1107],"support":"typed","topics":["/ad/dev/lidar2d/full","/ad/dev/lidar2d/scan"]},
+    {"name":"traffic_light_status","profile":"development","direction":"input","runtime_key":"traffic_light_status","port":7502,"wire_header":["#TrafficLight$"],"packet_sizes":[48],"support":"typed","topics":["/ad/dev/traffic_light/status"]},
+    {"name":"intersection_status","profile":"development","direction":"input","runtime_key":"intersection_status","port":9102,"wire_header":["#IntStatus$","#Intersection"],"packet_sizes":[37,39],"support":"typed","topics":["/ad/dev/intersection/status"]},
+    {"name":"npc_collisions","profile":"development","direction":"input","runtime_key":"npc_collisions","port":9108,"wire_header":["#VehicleCollision$"],"packet_sizes":[1156],"support":"typed","topics":["/ad/dev/npc/collisions"]},
+    {"name":"ego_ghost","profile":"development","direction":"output","runtime_key":"ego_ghost","port":9095,"wire_header":["#EgoGhostCmd$"],"packet_sizes":[63],"support":"typed","topics":["/ad/dev/command/ego_ghost"]},
+    {"name":"traffic_light","profile":"development","direction":"output","runtime_key":"traffic_light","port":7607,"wire_header":["#TrafficLight$"],"packet_sizes":[46],"support":"typed","topics":["/ad/dev/command/traffic_light"]},
+    {"name":"intersection","profile":"development","direction":"output","runtime_key":"intersection","port":9132,"wire_header":["#SetIntStatus$"],"packet_sizes":[40],"support":"typed","topics":["/ad/dev/command/intersection"]},
+    {"name":"sensor_control","profile":"development","direction":"output","runtime_key":"sensor_control","port":9103,"wire_header":["#SensorControl$"],"packet_sizes":[59],"support":"typed","topics":["/ad/dev/command/sensor_control"]},
+    {"name":"lamp_control","profile":"development","direction":"output","runtime_key":"lamp_control","port":9097,"wire_header":["#LampControl$"],"packet_sizes":[33],"support":"typed","topics":["/ad/dev/command/lamp_control"]},
+    {"name":"scenario_load","profile":"development","direction":"output","runtime_key":"scenario_load","port":9099,"wire_header":["#ScenarioLoad$"],"packet_sizes":[69],"support":"typed","topics":["/ad/dev/command/scenario_load"]},
+    {"name":"save_sensor_data","profile":"development","direction":"output","runtime_key":"save_sensor_data","port":9105,"wire_header":["#SaveSensorData$"],"packet_sizes":[125],"support":"typed","topics":["/ad/dev/command/save_sensor_data"]},
+    {"name":"multi_ego","profile":"development","direction":"output","runtime_key":"multi_ego","port":7604,"wire_header":["#MultiEgoSetting$"],"packet_sizes":[683],"support":"typed","topics":["/ad/dev/command/multi_ego"]},
+    {"name":"npc_ghost","profile":"development","direction":"output","runtime_key":"npc_ghost","port":9101,"wire_header":["#NpcGhostCmd$"],"packet_sizes":[1031],"support":"typed","topics":["/ad/dev/command/npc_ghost"]}
+  ],
+  "official_reference_only": [
+    "AutoDoorCtrlCmd",
+    "AutoDoorStatus",
+    "ElevatorCtrlCmd",
+    "ERP42Info",
+    "MapSpec",
+    "PRCtrlCmd",
+    "PREvent",
+    "PRStatus",
+    "RadarDetections",
+    "RadarTracks",
+    "SkidCtrlCmd",
+    "SkidCtrlReport",
+    "SpeedGateCtrlCmd",
+    "SpeedGateStatus",
+    "SyncModeAddObj",
+    "SyncModeRemoveObj",
+    "VehicleSpec",
+    "WaitForTick",
+    "WheelRpm",
+    "WheelTorque"
+  ]
+}

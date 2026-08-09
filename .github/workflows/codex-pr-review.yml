@@ -1,0 +1,43 @@
+name: codex PR review
+
+# self-hosted runner에서 codex가 PR을 리뷰해 코멘트 1개를 단다 (1-phase, advisory).
+#
+# ⚠️ opt-in: self-hosted runner가 붙은 repo에서만 의미가 있으므로,
+# Actions variables 두 개를 설정해야 돈다 (없으면 job이 조용히 skip — 초록/무해):
+#   ENABLE_RUNNER_AUTOMATION = true
+#   RUNNER_SCRIPTS           = runner 머신의 스크립트 경로 (예: $HOME/heven_common_test_ws/runner/bin)
+# runner env/배포 정본: ops/runner/README.md
+# 사람용 공통 workflow·컨벤션·운영 가이드(선택 context):
+# https://app.notion.com/p/39c3bf068300807c9e5bcf6b469f94ee
+# automation은 이 URL을 직접 fetch하지 않는다.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+
+concurrency:
+  group: codex-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: ${{ vars.ENABLE_RUNNER_AUTOMATION == 'true' && vars.RUNNER_SCRIPTS != '' && !github.event.pull_request.draft }}
+    runs-on: self-hosted
+    timeout-minutes: 45
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run codex review
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          "${{ vars.RUNNER_SCRIPTS }}/codex-pr-review.sh" \
+            ${{ github.event.pull_request.number }}

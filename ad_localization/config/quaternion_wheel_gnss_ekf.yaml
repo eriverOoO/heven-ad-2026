@@ -1,0 +1,30 @@
+quaternion_wheel_gnss_ekf:
+  ros__parameters:
+    imu_topic: /ad/sensors/imu/data
+    wheel_topic: /ad/localization/input/wheel_speed
+    gnss_topic: /ad/localization/input/gnss_pose
+    output_odometry_topic: /ad/localization/backends/quaternion_wheel_gnss_ekf/odometry
+    reference_frame: odom
+    base_frame: base_link
+    imu_frame: imu_link
+    gnss_lever_arm_m: [0.0, 0.0, 1.5685]
+    imu_mount_rpy_rad: [0.0, 0.0, 0.0]
+    world_yaw_offset_rad: -0.02350724531030645
+    maximum_imu_age_sec: 0.1
+    maximum_prediction_dt_sec: 0.5
+    initialization.sample_count: 20
+    initial_position_variance_m2: 1.0
+    initial_wheel_bias_mps: 0.0
+    initial_wheel_bias_variance_m2ps2: 0.25
+    wheel_speed_variance_floor_m2ps2: 0.001
+    wheel_bias_random_walk_variance_m2ps3: 0.01
+    gnss_variance_m2: 9.0
+    gnss_mahalanobis_threshold: 9.21
+    teleport.distance_m: 8.0
+    teleport.confirmation_samples: 3
+    teleport.candidate_radius_m: 4.0
+    teleport.max_interval_sec: 0.5
+    fixed_output_z_m: 0.0
+    unobserved_variance: 1000000.0
+    orientation_variance_rad2: 0.0001
+    publish_tf: false

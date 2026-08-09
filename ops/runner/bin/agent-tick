@@ -1,0 +1,394 @@
+#!/usr/bin/env bash
+# agent-tick — planner wrapper (B design)
+#
+# Single wrapper performs phase 1 -> 30s sleep -> phase 2 -> issue creation.
+# Triggered by systemd timer or manual invocation.
+#
+# Usage:
+#   agent-tick                    # full cycle
+#   agent-tick --force-cycle      # ignore minute check, run now
+#   agent-tick --phase-1-only     # phase 1, save result, exit
+#   agent-tick --phase-2-only     # phase 2 using latest phase 1 file
+#
+# 설정: env 파일(~/.config/heven-agent/heven-agent.env)에 GH_REPO(필수),
+# PROJECT_NO(필수), MODE, AGENT_WS, REPO_CHECKOUT 등.
+
+set -Eeuo pipefail
+
+# Standard paths first.
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# Then load nvm so codex (a node tool) finds the right node.
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+# === Env file 먼저 로드 (파생 경로 계산 전에 — AGENT_WS 등이 반영되도록) ===
+# 새 경로 우선, 구 경로(testbed 시절) fallback.
+for _f in "${AGENT_ENV_FILE:-}" \
+          "$HOME/.config/heven-agent/heven-agent.env" \
+          "$HOME/.config/heven-common-test-agent/heven-common-test.env"; do
+  if [[ -n "$_f" && -f "$_f" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$_f"
+    set +a
+    break
+  fi
+done
+
+# === Defaults ===
+: "${AGENT_WS:=${HEVEN_COMMON_TEST_WS:-$HOME/heven_common_test_ws}}"
+: "${PHASE_GAP_SEC:=30}"
+
+PROMPTS_DIR="$AGENT_WS/runner/prompts"
+CONTEXT_FILE="$AGENT_WS/runner/repo-context.sh"
+RENDER_SH="$AGENT_WS/runner/bin/render_prompt.sh"
+RUNNER_DIR="$AGENT_WS/runner"
+LOG_FILE="$RUNNER_DIR/logs/tick.log"
+LOCK_FILE="$RUNNER_DIR/tmp/tick.lock"
+
+mkdir -p "$RUNNER_DIR"/{state,logs,tmp,codex/tick}
+
+log_msg() {
+  local msg="$1"
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$msg" | tee -a "$LOG_FILE"
+}
+
+# === Args ===
+FORCE_CYCLE=false
+PHASE_1_ONLY=false
+PHASE_2_ONLY=false
+TRIGGER="timer"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force-cycle)   FORCE_CYCLE=true; TRIGGER="manual"; shift ;;
+    --phase-1-only)  PHASE_1_ONLY=true; FORCE_CYCLE=true; TRIGGER="manual"; shift ;;
+    --phase-2-only)  PHASE_2_ONLY=true; FORCE_CYCLE=true; TRIGGER="manual"; shift ;;
+    *)               echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [[ "$PHASE_1_ONLY" == "true" && "$PHASE_2_ONLY" == "true" ]]; then
+  echo "--phase-1-only and --phase-2-only cannot be combined" >&2
+  exit 2
+fi
+
+: "${MODE:=test}"
+# repo는 env 파일이 정본. 하드코딩 fallback 없음 (다른 repo에 이슈 오발사 방지).
+: "${GH_REPO:?GH_REPO missing — env 파일에 설정하세요}"
+: "${GH_OWNER:=${GH_REPO%%/*}}"
+: "${PROJECT_NO:?PROJECT_NO missing in env file}"
+: "${DEFAULT_BRANCH:=dev}"
+# planner가 스캔할 로컬 체크아웃 (기본: 워크스페이스의 src/<repo이름>)
+: "${REPO_CHECKOUT:=$AGENT_WS/src/${GH_REPO#*/}}"
+
+# === Lock ===
+exec 9>"$LOCK_FILE"
+flock -n 9 || { log_msg "skip: another instance running"; exit 0; }
+
+# === Cycle decision ===
+NOW_HOUR=$(TZ=Asia/Seoul date '+%H')
+NOW_MIN=$(TZ=Asia/Seoul date '+%M')
+
+should_run_cycle() {
+  if [[ "$FORCE_CYCLE" == "true" ]]; then return 0; fi
+  if [[ "$NOW_MIN" != "00" ]]; then return 1; fi
+  if [[ "$MODE" == "production" && "$NOW_HOUR" != "00" ]]; then return 1; fi
+  return 0
+}
+
+if ! should_run_cycle; then
+  log_msg "skip: mode=$MODE hour=$NOW_HOUR min=$NOW_MIN trigger=$TRIGGER (not a cycle minute)"
+  exit 0
+fi
+
+# 가드레일: 열린 agent-proposed 이슈가 쌓여 있으면 새 제안을 만들지 않는다 (triage 우선)
+: "${MAX_OPEN_AGENT_ISSUES:=10}"
+OPEN_AGENT=$(gh issue list -R "$GH_REPO" --label agent-proposed --state open --limit 100 --json number --jq 'length' 2>/dev/null || echo 0)
+if [[ "$OPEN_AGENT" -ge "$MAX_OPEN_AGENT_ISSUES" ]]; then
+  log_msg "skip: open agent-proposed=$OPEN_AGENT >= $MAX_OPEN_AGENT_ISSUES (가드레일 — triage로 줄이면 재개)"
+  exit 0
+fi
+
+CYCLE_ID="$(TZ=Asia/Seoul date '+%Y%m%d-%H%M')"
+DATE_DIR="$RUNNER_DIR/state/tick/$(TZ=Asia/Seoul date '+%Y%m%d')"
+mkdir -p "$DATE_DIR"
+
+PHASE1_FILE="$DATE_DIR/cycle-${CYCLE_ID}-phase-1.md"
+PHASE2_FILE="$DATE_DIR/cycle-${CYCLE_ID}-phase-2.json"
+HEARTBEAT="$DATE_DIR/heartbeat-${NOW_HOUR}${NOW_MIN}-cycle-${TRIGGER}.txt"
+
+write_heartbeat() {
+  local extra="$1"
+  cat > "$HEARTBEAT.tmp" <<EOF
+cycle=$CYCLE_ID
+mode=$MODE
+trigger=$TRIGGER
+timestamp=$(date -Iseconds)
+gh_repo=$GH_REPO
+project_no=$PROJECT_NO
+$extra
+EOF
+  mv "$HEARTBEAT.tmp" "$HEARTBEAT"
+}
+
+find_latest_phase1() {
+  find "$RUNNER_DIR/state/tick" -path '*/cycle-*-phase-1.md' -type f -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr \
+    | head -1 \
+    | cut -d' ' -f2-
+}
+
+build_context_bundle() {
+  local ctx_dir="$DATE_DIR/context-${CYCLE_ID}"
+  mkdir -p "$ctx_dir"
+
+  log_msg "context: gathering GitHub state"
+
+  gh issue list -R "$GH_REPO" --state all --limit 100 --json number,title,state,labels,milestone,createdAt,updatedAt \
+    > "$ctx_dir/issues.json" 2>/dev/null || echo "[]" > "$ctx_dir/issues.json"
+
+  gh pr list -R "$GH_REPO" --state all --limit 50 --json number,title,state,headRefName,baseRefName,createdAt,updatedAt \
+    > "$ctx_dir/prs.json" 2>/dev/null || echo "[]" > "$ctx_dir/prs.json"
+
+  gh project item-list "$PROJECT_NO" --owner "$GH_OWNER" --limit 200 --format json \
+    > "$ctx_dir/project.json" 2>/dev/null || echo "{}" > "$ctx_dir/project.json"
+
+  gh api "repos/$GH_REPO/milestones?state=open" \
+    > "$ctx_dir/milestones.json" 2>/dev/null || echo "[]" > "$ctx_dir/milestones.json"
+
+  local bundle_dir_repo="$REPO_CHECKOUT/.agent/context"
+  mkdir -p "$bundle_dir_repo"
+
+  cat > "$bundle_dir_repo/CONTEXT_BUNDLE.md" <<EOF
+# CONTEXT_BUNDLE.md
+
+Generated: $(date -Iseconds)
+Cycle: $CYCLE_ID
+Repo: $GH_REPO
+
+## Open issues
+
+$(jq -r '.[] | select(.state == "OPEN") | "- #\(.number) [\((.labels // []) | map(.name) | join(","))] \(.title)"' "$ctx_dir/issues.json" 2>/dev/null || echo "(none)")
+
+## Closed issues (recent)
+
+$(jq -r '.[] | select(.state == "CLOSED") | "- #\(.number) \(.title)"' "$ctx_dir/issues.json" 2>/dev/null | head -20 || echo "(none)")
+
+## Open PRs
+
+$(jq -r '.[] | select(.state == "OPEN") | "- #\(.number) (base: \(.baseRefName), head: \(.headRefName)) \(.title)"' "$ctx_dir/prs.json" 2>/dev/null || echo "(none)")
+
+## Milestones
+
+$(jq -r '.[] | "- \(.title) (open issues: \(.open_issues), closed: \(.closed_issues), due: \(.due_on // "none"))"' "$ctx_dir/milestones.json" 2>/dev/null || echo "(none)")
+
+## Project items
+
+$(jq -r '.items[]? | "- \(.content.title // .title // "?") status=\(.status // "?") priority=\(.priority // "?")"' "$ctx_dir/project.json" 2>/dev/null | head -30 || echo "(none)")
+EOF
+
+  log_msg "context: bundle written to $bundle_dir_repo/CONTEXT_BUNDLE.md"
+}
+
+run_phase_1() {
+  log_msg "phase 1: rendering prompt"
+  local prompt_file
+  prompt_file=$(mktemp -p "$RUNNER_DIR/tmp" "phase1-${CYCLE_ID}.XXXX.md")
+
+  "$RENDER_SH" "$PROMPTS_DIR/phase-1-tpl.md" "$CONTEXT_FILE" > "$prompt_file"
+
+  log_msg "phase 1: codex exec starting (cycle=$CYCLE_ID)"
+
+  cd "$REPO_CHECKOUT"
+
+  if codex exec --sandbox read-only --output-last-message "$PHASE1_FILE.tmp" \
+       "$(cat "$prompt_file")" >> "$LOG_FILE" 2>&1; then
+    mv "$PHASE1_FILE.tmp" "$PHASE1_FILE"
+    log_msg "phase 1: ok, saved $PHASE1_FILE"
+  else
+    local rc=$?
+    log_msg "phase 1: FAILED (codex exit $rc)"
+    rm -f "$PHASE1_FILE.tmp"
+    return 1
+  fi
+
+  rm -f "$prompt_file"
+}
+
+run_phase_2() {
+  local phase1_input="$1"
+
+  if [[ ! -f "$phase1_input" ]]; then
+    log_msg "phase 2: no phase 1 file ($phase1_input), skip"
+    return 1
+  fi
+
+  log_msg "phase 2: rendering prompt (using $phase1_input)"
+  local prompt_file
+  prompt_file=$(mktemp -p "$RUNNER_DIR/tmp" "phase2-${CYCLE_ID}.XXXX.md")
+
+  PHASE1_FILE="$phase1_input" "$RENDER_SH" \
+    "$PROMPTS_DIR/phase-2-tpl.md" "$CONTEXT_FILE" > "$prompt_file"
+
+  {
+    echo
+    echo "## Phase 1 result file content"
+    echo
+    cat "$phase1_input"
+  } >> "$prompt_file"
+
+  log_msg "phase 2: codex exec starting"
+
+  cd "$REPO_CHECKOUT"
+
+  if codex exec --sandbox read-only --output-last-message "$PHASE2_FILE.tmp" \
+       "$(cat "$prompt_file")" >> "$LOG_FILE" 2>&1; then
+    mv "$PHASE2_FILE.tmp" "$PHASE2_FILE"
+    log_msg "phase 2: ok, saved $PHASE2_FILE"
+  else
+    local rc=$?
+    log_msg "phase 2: FAILED (codex exit $rc)"
+    rm -f "$PHASE2_FILE.tmp"
+    return 1
+  fi
+
+  rm -f "$prompt_file"
+}
+
+create_issues_from_json() {
+  local json_file="$1"
+
+  if [[ ! -f "$json_file" ]]; then
+    log_msg "issue: no JSON file"
+    return 1
+  fi
+
+  if ! jq -e . "$json_file" >/dev/null 2>&1; then
+    log_msg "issue: JSON parse failed, skip issue creation"
+    return 1
+  fi
+
+  local count
+  count=$(jq '.issues | length' "$json_file" 2>/dev/null || echo "0")
+  log_msg "issue: $count proposals from phase 2"
+
+  if [[ "$count" == "0" ]]; then
+    return 0
+  fi
+
+  local i=0
+  while [[ $i -lt $count ]]; do
+    local title body milestone priority itype
+    title=$(jq -r ".issues[$i].title // empty" "$json_file")
+    body=$(jq -r ".issues[$i].body // empty" "$json_file")
+    milestone=$(jq -r ".issues[$i].milestone // empty" "$json_file")
+    priority=$(jq -r ".issues[$i].priority // \"P2\"" "$json_file")
+    itype=$(jq -r ".issues[$i].type // \"Task\"" "$json_file")
+    case "$itype" in Bug|Task|Experiment|Chore) ;; *) itype="Task" ;; esac
+
+    if [[ -z "$title" || -z "$body" ]]; then
+      log_msg "issue [$i]: empty title or body, skip"
+      i=$((i+1))
+      continue
+    fi
+
+    local dup
+    dup=$(gh issue list -R "$GH_REPO" --state open --search "$title in:title" --json title --jq '.[].title' \
+      | grep -Fx "$title" || true)
+    if [[ -n "$dup" ]]; then
+      log_msg "issue [$i]: duplicate title found ('$title'), skip"
+      i=$((i+1))
+      continue
+    fi
+
+    local milestone_arg=()
+    if [[ -n "$milestone" && "$milestone" != "null" ]]; then
+      if gh api "repos/$GH_REPO/milestones?state=open" --jq '.[].title' | grep -Fx "$milestone" >/dev/null; then
+        milestone_arg=(--milestone "$milestone")
+      else
+        log_msg "issue [$i]: milestone '$milestone' not found, creating without"
+      fi
+    fi
+
+    log_msg "issue [$i]: creating '$title'"
+
+    # Source label only. Type/priority go to native Issue Type + Issue field
+    # (not labels), set after creation below.
+    local issue_url
+    if issue_url=$(gh issue create -R "$GH_REPO" \
+         --title "$title" \
+         --body "$body" \
+         --label "agent-proposed" \
+         "${milestone_arg[@]}" 2>>"$LOG_FILE"); then
+      log_msg "issue [$i]: created ($issue_url)"
+
+      local issue_number
+      issue_number=$(echo "$issue_url" | grep -oE '[0-9]+$')
+
+      # native Issue Type: 제안 JSON의 type (기본 Task)
+      if gh issue edit "$issue_number" -R "$GH_REPO" --type "$itype" >> "$LOG_FILE" 2>&1; then
+        log_msg "issue [$i]: type=$itype set"
+      else
+        log_msg "issue [$i]: type set FAILED"
+      fi
+
+      # native Priority issue field (P0/P1/P2); value = option name string
+      if [[ -n "${PRIORITY_ISSUE_FIELD_ID:-}" ]]; then
+        if printf '{"issue_field_values":[{"field_id":%s,"value":"%s"}]}' \
+             "$PRIORITY_ISSUE_FIELD_ID" "$priority" \
+             | gh api --method PATCH "repos/$GH_REPO/issues/$issue_number" --input - >> "$LOG_FILE" 2>&1; then
+          log_msg "issue [$i]: priority=$priority set (issue field)"
+        else
+          log_msg "issue [$i]: priority field set FAILED"
+        fi
+      else
+        log_msg "issue [$i]: PRIORITY_ISSUE_FIELD_ID not in env, priority not set"
+      fi
+    else
+      log_msg "issue [$i]: gh issue create FAILED"
+    fi
+
+    i=$((i+1))
+  done
+}
+
+log_msg "wrapper start: mode=$MODE cycle=$CYCLE_ID trigger=$TRIGGER hour=$NOW_HOUR min=$NOW_MIN"
+
+if [[ "$PHASE_2_ONLY" == "false" ]]; then
+  build_context_bundle
+fi
+
+if [[ "$PHASE_2_ONLY" == "true" ]]; then
+  PHASE1_INPUT=$(find_latest_phase1)
+  if [[ -z "$PHASE1_INPUT" ]]; then
+    log_msg "phase-2-only: no previous phase 1 file found, abort"
+    exit 1
+  fi
+  log_msg "phase-2-only: using $PHASE1_INPUT"
+  run_phase_2 "$PHASE1_INPUT" || true
+  create_issues_from_json "$PHASE2_FILE"
+  write_heartbeat "phase=2-only"
+  log_msg "wrapper done (phase-2-only)"
+  exit 0
+fi
+
+run_phase_1 || { write_heartbeat "phase=1-failed"; log_msg "wrapper done (phase 1 failed)"; exit 1; }
+
+if [[ "$PHASE_1_ONLY" == "true" ]]; then
+  write_heartbeat "phase=1-only"
+  log_msg "wrapper done (phase-1-only)"
+  exit 0
+fi
+
+log_msg "sleeping ${PHASE_GAP_SEC}s before phase 2"
+sleep "$PHASE_GAP_SEC"
+
+run_phase_2 "$PHASE1_FILE" || { write_heartbeat "phase=2-failed"; log_msg "wrapper done (phase 2 failed)"; exit 1; }
+
+create_issues_from_json "$PHASE2_FILE"
+
+write_heartbeat "phase=full-cycle"
+log_msg "wrapper done (full cycle, cycle=$CYCLE_ID)"
+exit 0

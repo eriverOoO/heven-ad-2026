@@ -1,0 +1,58 @@
+schema_version: 1
+
+# Vehicle writes require launch drive_enabled:=true and the reviewed
+# closed_loop_pulse profile. Legacy open-loop profiles remain test fixtures and
+# cannot authorize live control. Keep only baseline and the proposed production
+# estimator in motion trials so the comparison remains an explicit A/B.
+drive_enabled: true
+profile: closed_loop_pulse
+
+# Evaluation-controller parameters only.  They never enter either ESKF.  The
+# target and soft guards have explicit margin inside the hard safety limits;
+# feedback removes the observed dependency on one fixed MORAI pedal response.
+closed_loop_pulse:
+  target_speed_mps: 0.15
+  soft_speed_limit_mps: 0.25
+  soft_travel_limit_m: 0.15
+  release_duration_sec: 2.0
+  maximum_tracking_duration_sec: 2.0
+  maximum_throttle: 0.10
+  speed_deadband_mps: 0.01
+  throttle_kp: 0.40
+  throttle_ki: 0.30
+
+shared_inputs:
+  imu_topic: /ad/localization/input/eskf_imu
+  gnss_pose_topic: /ad/localization/input/gnss_pose
+  wheel_speed_topic: /ad/localization/input/wheel_speed
+
+candidates:
+  baseline:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.0
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 0.0
+
+  # A/B-selected provisional production candidate: standard gravity,
+  # conservative initial bias uncertainty, and no MORAI-fitted nominal bias or
+  # bias driving noise. Long mixed-motion and real-sensor validation remain.
+  production_bias:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.01
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 0.0
+
+safety:
+  maximum_start_speed_mps: 0.05
+  maximum_speed_mps: 0.50
+  maximum_travel_m: 0.25
+  truth_stale_timeout_sec: 0.25
+  estimator_stale_timeout_sec: 0.25
+  command_rate_hz: 20.0
+  maximum_command_delta_per_sec: 0.50
+  stopped_speed_mps: 0.02
+  stopped_stable_duration_sec: 1.0

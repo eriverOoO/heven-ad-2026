@@ -1,0 +1,30 @@
+{
+  "cost": 170.2823,
+  "feasible": true,
+  "metrics": {
+    "aborted": false,
+    "completed": true,
+    "disconnected": false,
+    "elapsed_s": 169.82,
+    "max_cte_m": 0.353,
+    "mean_cte_sq_m2": 0.009246,
+    "overspeed_s": 0.0,
+    "progress_m": 1850.363,
+    "reason": "completed",
+    "reset_failed": false
+  },
+  "parameters": {
+    "stanley.cross_track_gain": 3.426293915270319,
+    "stanley.heading_error_gain": 0.728923424566143,
+    "stanley.lateral_acceleration_mps2": 4.0,
+    "stanley.lookahead_m": 2.4032132375330453,
+    "stanley.speed_pid.kd": 0.02059291158421485,
+    "stanley.speed_pid.ki": 0.0,
+    "stanley.speed_pid.kp": 0.8927530200920683,
+    "stanley.speed_softening_mps": 0.9275423513064218,
+    "stanley.target_speed_fall_rate_mps2": 4.0,
+    "stanley.target_speed_mps": 15.277777777777777
+  },
+  "route_digest": "16cf60803ba41505",
+  "trial": 443
+}

@@ -1,0 +1,8 @@
+components:
+  description: true
+  localization: true
+  planner: true
+  lidar_perception: true
+  camera_perception: false
+  bridge: true
+  visualization: true

@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    speed_bins_kph: [0, 10]
+    command_percentages: [0, 10]
+    minimum_valid_trials: 1
+    maximum_attempts: 1
+    discard_sec: 0.15
+    measurement_window_end_sec: 0.55
+    maximum_sample_gap_sec: 0.1
+
+    controller.settle_duration_sec: 0.5
+    controller.test_duration_sec: 0.6
+    controller.maximum_reach_duration_sec: 30.0
+    controller.maximum_speed_mps: 4.16
+    controller.maximum_abs_acceleration_mps2: 8.0
+    controller.maximum_abs_jerk_mps3: 1000.0
+    controller.safe_stop_brake: 0.3

@@ -1,0 +1,5 @@
+std_msgs/Header header
+bool inputs_ready
+string active_behavior
+string failsafe_reason
+string dwa_failure_reason

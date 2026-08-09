@@ -1,0 +1,1 @@
+"""Optional vision debugging visualization."""

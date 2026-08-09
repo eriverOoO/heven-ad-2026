@@ -1,0 +1,63 @@
+ad_planner:
+  ros__parameters:
+    # Safety/vehicle-envelope parameters are fixed during Optuna tuning.
+    dwa.minimum_speed_mps: 0.0
+    dwa.maximum_speed_mps: 16.25
+    dwa.speed_step_mps: 1.0
+    dwa.minimum_steering_rad: -0.52
+    dwa.maximum_steering_rad: 0.52
+    dwa.steering_step_rad: 0.04
+    dwa.simulation_dt: 0.2
+    dwa.horizon_sec: 1.5
+    dwa.dynamic_window_time_sec: 0.50
+    dwa.maximum_acceleration_mps2: 5.0
+    # Conservative floor below the measured 20% MORAI brake result
+    # (about 1.825 m/s^2 at the high-speed end of the stored profile).
+    dwa.maximum_deceleration_mps2: 1.8
+    # Collision-admission envelope. The stored MORAI profile measured about
+    # 7.0 m/s^2 mean deceleration in its high-speed cells at 40% brake.
+    dwa.emergency_deceleration_mps2: 6.0
+    # Permit a short outward recovery from inflated cost only. Lethal and
+    # unknown cells remain forbidden throughout the recovery.
+    dwa.initial_inflation_escape_sec: 0.6
+    dwa.maximum_steering_rate_radps: 2.0943951023931953
+    dwa.maximum_lateral_acceleration_mps2: 6.0
+    # Shared vehicle envelope. Profile Stanley and DWA use the same profiled
+    # IONIQ 5 limits; DWA's 1.8 m/s^2 normal braking policy remains stricter.
+    local_motion.maximum_speed_mps: 16.25
+    local_motion.maximum_acceleration_mps2: 5.0
+    local_motion.maximum_deceleration_mps2: 6.0
+    local_motion.maximum_lateral_acceleration_mps2: 6.0
+    local_motion.footprint_front_m: 3.845
+    local_motion.footprint_rear_m: 0.79
+    local_motion.footprint_half_width_m: 0.945
+    dwa.clearance_saturation_m: 8.0
+    # Allows one adjacent lane while rejecting unrestricted off-road escape.
+    dwa.maximum_path_distance_m: 4.5
+    # Predicted-object OBB inflation. Covariance is converted to an isotropic
+    # sigma margin, with this fixed minimum retained for zero-covariance tracks.
+    dwa.prediction.covariance_sigma: 2.0
+    dwa.prediction.minimum_margin_m: 0.20
+
+    # progress_weight is the fixed score scale. Optuna tunes the ratios below.
+    dwa.progress_weight: 1.0
+    dwa.goal_weight: 0.5
+    dwa.heading_weight: 1.0
+    dwa.clearance_weight: 2.0
+    dwa.smoothness_weight: 0.15
+    dwa.path_distance_weight: 1.5
+    dwa.speed_weight: 0.5
+
+    dwa.speed_pid.kp: 0.30
+    dwa.speed_pid.ki: 0.0
+    dwa.speed_pid.kd: 0.01
+    dwa.speed_pid.integral_limit: 10.0
+    dwa.speed_pid.derivative_limit: 10.0
+    dwa.speed_pid.derivative_filter_time_constant_s: 0.10
+    dwa.speed_pid.brake_deadband_mps: 0.10
+    dwa.brake_pid.kp: 0.25
+    dwa.brake_pid.ki: 0.0
+    dwa.brake_pid.kd: 0.01
+
+    dwa.footprint.occupied_threshold: 20
+    dwa.footprint.maximum_cells_to_check: 8192

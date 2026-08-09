@@ -1,0 +1,17 @@
+std_msgs/Header header
+string sentence
+string utc
+bool valid
+float64 latitude
+float64 longitude
+bool has_speed
+float64 speed_knots
+bool has_track
+float64 track_degrees
+string date
+bool has_magnetic_variation
+float64 magnetic_variation_degrees
+string magnetic_variation_direction
+string mode_indicator
+bool has_checksum
+uint8 checksum

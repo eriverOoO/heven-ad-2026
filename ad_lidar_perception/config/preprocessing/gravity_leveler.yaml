@@ -1,0 +1,12 @@
+/**:
+  ros__parameters:
+    topics:
+      input: /ad/perception/lidar/cropped
+      output: /ad/perception/lidar/leveled
+    odom_frame: odom
+    base_frame: base_link
+    # Launch derives these from the selected profile. Empty standalone defaults
+    # derive the exact child from each valid actual input frame.
+    expected_input_frame: ""
+    output_frame: ""
+    transform_timeout_sec: 0.1

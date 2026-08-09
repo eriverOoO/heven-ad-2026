@@ -1,0 +1,40 @@
+traffic_light_detector:
+  ros__parameters:
+    image_topic: /ad/sensors/camera/traffic_light/compressed
+    detections_topic: /vision/traffic_light/detections
+    image_transport: compressed
+    model_path: models/yolov7_best.pt
+    # Point this at the external YOLOv7 source directory.
+    yolov7_repository_path: ""
+    device: cuda:0
+    image_size: 640
+    confidence_threshold: 0.25
+    iou_threshold: 0.45
+    maximum_inference_rate: 20.0
+    # Full height, excluding the leftmost and rightmost columns of seven.
+    target_roi_normalized: [0.142857, 0.0, 0.857143, 1.0]
+
+traffic_light_evaluator:
+  ros__parameters:
+    detections_topic: /vision/traffic_light/detections
+    status_topic: /vision/traffic_light/status
+    expected_image_width: 1280
+    expected_image_height: 720
+    target_roi_normalized: [0.142857, 0.0, 0.857143, 1.0]
+    confidence_weight: 0.60
+    area_weight: 0.25
+    center_weight: 0.15
+    voting_window_frames: 5
+    minimum_vote_frames: 3
+    stale_timeout_sec: 0.5
+
+traffic_light_visualizer:
+  ros__parameters:
+    image_topic: /ad/sensors/camera/traffic_light/compressed
+    detections_topic: /vision/traffic_light/detections
+    status_topic: /vision/traffic_light/status
+    image_transport: compressed
+    image_buffer_size: 20
+    target_roi_normalized: [0.142857, 0.0, 0.857143, 1.0]
+    show_window: true
+    window_name: mm2025_traffic_light

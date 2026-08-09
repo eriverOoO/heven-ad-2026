@@ -1,0 +1,60 @@
+schema_version: 1
+source:
+  map_id: R_KR_PR_K-city_2025
+  link_set_path_hint: ad_data/map/link_set.json
+  link_set_sha256: 5ce0fd57da07b83221c0a4d117b0606b2d9c094c8de476a7d1176c78a4dc5b0f
+routes:
+  kcity-roundabout-loop:
+    closed: true
+    links:
+      - id: A2256W000133
+        waypoint_idx: 0
+        from_node: A1256W000781
+        to_node: A1256W000674
+        first_point: [-114.96108059945982, 355.3320855018683, 28.31206912103067]
+        initial_heading_deg: -129.6496500827828
+      - id: A2256W000134
+        waypoint_idx: 0
+        from_node: A1256W000674
+        to_node: A1256W000728
+        first_point: [-114.10679894697387, 330.5414558178745, 28.378119476582153]
+        initial_heading_deg: -40.688517404370955
+      - id: A2256W000135
+        waypoint_idx: 0
+        from_node: A1256W000728
+        to_node: A1256W000816
+        first_point: [-88.09874615911394, 332.42220899648964, 28.350338197335294]
+        initial_heading_deg: 54.49412129173701
+      - id: A2256W000132
+        waypoint_idx: 0
+        from_node: A1256W000816
+        to_node: A1256W000781
+        first_point: [-89.70509542344371, 356.1959383855574, 28.33453883865831]
+        initial_heading_deg: 137.7705434246382
+  kcity-highway:
+    closed: false
+    links:
+      - id: A2256W000409
+        waypoint_idx: 0
+        from_node: A1256W000294
+        to_node: A1256W000465
+        first_point: [66.01092960586539, 256.533569091931, 28.310266820696278]
+        initial_heading_deg: -89.84100984805922
+      - id: A2256W000420
+        waypoint_idx: 0
+        from_node: A1256W000465
+        to_node: A1256W000791
+        first_point: [66.88496106746607, 89.19790052389726, 28.29935643790693]
+        initial_heading_deg: -89.42010225947664
+      - id: A2256W000179
+        waypoint_idx: 0
+        from_node: A1256W000791
+        to_node: A1256W000211
+        first_point: [67.34110108809546, 6.6257743942551315, 28.342285220768602]
+        initial_heading_deg: -93.3812284107083
+      - id: A2256W001105
+        waypoint_idx: 0
+        from_node: A1256W000211
+        to_node: A1256W000218
+        first_point: [64.1509195251856, -142.87846954679117, 28.287208995624145]
+        initial_heading_deg: -89.79686867054309

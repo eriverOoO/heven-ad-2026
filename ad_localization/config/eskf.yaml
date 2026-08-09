@@ -1,0 +1,115 @@
+ekf_localization:
+  ros__parameters:
+    reference_frame_id: odom
+    robot_frame_id: base_link
+    initial_pose_topic: /ad/localization/input/initial_pose
+    imu_topic: /ad/localization/input/eskf_imu
+    gnss_pose_topic: /ad/localization/input/gnss_pose
+    gnss_input_type: pose
+    gnss_lever_arm_x: 0.0
+    gnss_lever_arm_y: 0.0
+    gnss_lever_arm_z: 1.5685
+    wheel_speed_topic: /ad/localization/input/wheel_speed
+    output_odometry_topic: /ad/localization/backends/eskf/odometry
+    output_publish_mode: imu
+    publish_tf: false
+    pub_period: 20
+    input_qos_depth: 100
+    propagation_model: fast
+    use_continuous_process_noise_density: true
+    use_second_order_state_transition: true
+    use_second_order_process_noise: true
+    use_gnss: true
+    use_odom: false
+    use_wheel_speed: true
+    wheel_speed_scale_factor: 1.0
+    var_wheel_speed: 0.04
+    wheel_speed_use_nonholonomic_constraints: true
+    wheel_speed_propagate_cross_state: true
+    use_nonholonomic_constraint: false
+    var_wheel_lateral_velocity: 0.05
+    var_wheel_vertical_velocity: 0.02
+    # A normal wheel=0 update is intentionally noisy enough for driving, so it
+    # cannot remove a long-running standstill velocity by itself. Apply ZUPT
+    # only after fresh wheel zero, quiet IMU, and low ESKF speed all remain
+    # continuous for 0.5 s. Missing, stale, future, or moving wheel data resets
+    # the detector; this avoids the low-speed self-lock of IMU/ESKF-only ZUPT.
+    use_zupt: true
+    zupt_require_wheel_speed: true
+    zupt_max_wheel_speed_mps: 0.02
+    zupt_max_wheel_age_sec: 0.1
+    # Admit the bounded 3-D state residual observed after a 3.3 m/s full-brake
+    # pulse. Fresh zero wheel and quiet IMU remain mandatory, so this is not a
+    # standstill decision by filter speed alone.
+    zupt_max_speed_mps: 0.5
+    zupt_min_stationary_duration_sec: 0.5
+    # The 3.3 m/s full-brake run showed an overconfident residual velocity that
+    # made an otherwise valid ZUPT converge too slowly.  Once per independently
+    # confirmed stationary episode, restore sigma=0.5 m/s velocity uncertainty;
+    # the following ordinary Kalman ZUPT performs the correction.  The nominal
+    # velocity is never assigned directly, and motion re-arms this operation.
+    zupt_reinitialize_velocity_covariance: true
+    zupt_reinitialization_max_speed_mps: 0.5
+    var_zupt_reinitialized_velocity: 0.25
+    # sigma = 0.001 m/s.  The first covariance reinitialization fixes the
+    # transient overconfidence; this lower steady-state variance then prevents
+    # repeated ZUPTs from shrinking their own Kalman gain below the IMU-bias
+    # and GNSS cross-state disturbances observed during a long stop.
+    var_zupt_velocity: 0.000001
+    use_imu_orientation: true
+    use_imu_orientation_covariance: true
+    var_imu_orientation_rpy: 0.0001
+    # MORAI coefficients are per sqrt(hour); divide by 60, then square to
+    # obtain the continuous-time density variances consumed by fast propagation.
+    var_imu_w: 2.738777777777778e-9
+    var_imu_acc: 4.669444444444444e-7
+    # The selected simulator profile disables random walk and bias instability.
+    var_imu_gyro_bias: 0.0
+    var_imu_acc_bias: 0.0
+    # The same-input 2x2 A/B selected covariance-mediated bias learning.  Keep
+    # the optional one-pose radial-bias initializer disabled in production;
+    # standard gravity remains unchanged.
+    stationary_initialization_estimate_accel_bias: false
+    # Initial bias-state variance: sigma = 0.1 m/s^2.  This is not process
+    # density and does not introduce an artificial continuous random walk.
+    initial_imu_acc_bias_covariance: 0.01
+    tau_acc_bias_sec: 3600.0
+    var_gnss_xy: 0.25
+    var_gnss_z: 0.25
+    # Reject single-fix jumps before they can update or re-enable localization output.
+    # Keep hard NIS rejection disabled: a skipped moving hiatus intentionally preserves the
+    # pre-gap covariance, so its first legitimate GNSS residual can have a large NIS.
+    max_gnss_position_innovation_m: 30.0
+    max_gnss_position_nis: 0.0
+    gnss_position_robust_loss: huber
+    gnss_position_robust_tuning: 2.5
+    max_gnss_position_robust_variance_scale: 100.0
+    # A single distant fix cannot release a post-gap output gate. Three mutually consistent
+    # fixes may re-anchor position even when skipped displacement exceeds the normal 30 m gate.
+    post_gap_gnss_required_consistent_fixes: 3
+    post_gap_gnss_max_fix_interval_sec: 2.0
+    post_gap_gnss_min_consistency_span_sec: 0.1
+    post_gap_gnss_max_speed_mps: 70.0
+    post_gap_gnss_consistency_tolerance_m: 5.0
+    enable_measurement_replay: true
+    measurement_history_duration_sec: 2.0
+    # Live MORAI scheduling bursts occasionally put GNSS about 0.11 s ahead
+    # of the latest processed IMU. Keep those samples queued while retaining a
+    # tight bound well below the 2 s replay history.
+    max_future_measurement_wait_sec: 0.25
+    input_reorder_window_sec: 0.0
+    enable_stationary_initialization: true
+    # The upstream initializer also enforces 95% of this time span, so sample
+    # count is only a statistical floor, not an implicit sensor-rate gate.
+    # At 20 Hz, 30 received samples span 1.45 s; 25 retains 24 variance degrees
+    # of freedom and tolerates five missing samples. The bridge does not infer
+    # retransmissions from repeated MORAI source stamps, so this threshold must
+    # remain independent of any packet de-duplication policy.
+    stationary_initialization_window_sec: 1.5
+    stationary_initialization_min_samples: 25
+    stationary_initialization_max_gyro_std_radps: 0.01
+    stationary_initialization_max_accel_std_mps2: 0.1
+    stationary_initialization_max_accel_norm_error_mps2: 0.3
+    max_imu_dt_sec: 0.5
+    gravity_mps2: 9.80665
+    publish_debug_topics: false

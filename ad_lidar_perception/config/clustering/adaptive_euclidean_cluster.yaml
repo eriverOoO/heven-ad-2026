@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    input_topic: /ad/perception/lidar/nonground_finite
+    objects_topic: /ad/perception/objects/detected
+    clusters_topic: /ad/perception/lidar/clusters
+
+    # VLP-16 returns become sparse with range. The measured d0 profile
+    # interpolates the neighbor radius and minimum point count independently.
+    near_tolerance_m: 0.45
+    far_tolerance_m: 1.60
+    far_range_m: 45.0
+    minimum_points_far_range_m: 45.0
+    near_min_cluster_size: 5
+    far_min_cluster_size: 2
+    max_cluster_size: 20000
+    maximum_dynamic_object_diagonal_m: 12.0
+    use_height: false
+
+    crop:
+      min_x_m: -4.0
+      max_x_m: 100.0
+      min_y_m: -25.0
+      max_y_m: 25.0
+      min_z_m: -1.0
+      max_z_m: 3.0

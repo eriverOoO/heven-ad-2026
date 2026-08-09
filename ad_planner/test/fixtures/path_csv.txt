@@ -1,0 +1,6 @@
+# Closed CSV route with a three-dimensional point and an inline path comment.
+
+0.0, 0.0, 0.0
+2.0, 0.0, 0.5  # path comments are stripped
+2.0, 2.0, 0.5
+0.0, 0.0, 0.0

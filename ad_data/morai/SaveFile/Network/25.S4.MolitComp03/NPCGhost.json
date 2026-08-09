@@ -1,0 +1,11 @@
+{
+  "commType": "ROS",
+  "messageType": "morai_msgs/NpcGhostCmd",
+  "bridgeip": "127.0.0.1",
+  "topic": "/NpcGhost_Topic",
+  "hostip": "127.0.0.1",
+  "destip": "127.0.0.1",
+  "port": "9090",
+  "hostport": "9101",
+  "destport": "9102"
+}

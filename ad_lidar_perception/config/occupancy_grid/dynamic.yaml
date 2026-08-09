@@ -1,0 +1,21 @@
+ad_dynamic_occupancy_grid:
+  ros__parameters:
+    target_frame: base_link
+    source_frame: odom
+    transform_timeout_sec: 0.05
+    prediction_timeout_sec: 0.50
+    stale_check_period_sec: 0.10
+    x_min: -4.0
+    x_max: 100.0
+    y_min: -10.0
+    y_max: 10.0
+    resolution: 0.1
+    covariance_sigma: 2.0
+    minimum_inflation_m: 0.20
+    occupied_cost: 100
+    maximum_cells_per_object: 20000
+    road_gate.enabled: true
+    road_gate.maximum_pending_messages: 8
+    topics.predicted_objects: "/ad/perception/objects/predicted"
+    topics.drivable_mask: "/ad/planning/drivable_mask"
+    topics.dynamic_grid: "/ad/perception/occupancy/dynamic"

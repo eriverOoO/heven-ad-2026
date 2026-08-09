@@ -1,0 +1,8 @@
+int32 frame_count
+---
+bool success
+int32 grpc_code
+string grpc_status
+uint64 current_frame
+int64 elapsed_time
+string error_message

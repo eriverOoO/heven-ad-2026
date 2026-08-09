@@ -1,0 +1,26 @@
+repositories:
+  patchwork-plusplus:
+    type: git
+    url: https://github.com/url-kaist/patchwork-plusplus.git
+    version: 3e6903a1d5537a4cc2ace897b0bbb98a92d6014c
+  MORAI-DriveExample_GRPC:
+    type: git
+    url: https://github.com/MORAI-Autonomous/MORAI-DriveExample_GRPC.git
+    version: 6eafbeb662ce2ed8928cae21b413c0553aaf9cee
+  kalman-filter-localization-ros2:
+    type: git
+    url: https://github.com/rsasaki0109/kalman_filter_localization_ros2.git
+    # Base for patches/kalman-filter-localization-ros2/0001-large-imu-gap-recovery.patch.
+    version: fc1f4d39c942813ea83dc4f017eb0892756ea94d
+  autoware_universe:
+    type: git
+    url: https://github.com/autowarefoundation/autoware_universe.git
+    version: d4d260983d357e1b2b34291d91933f9f4b53bf94
+  managed_transform_buffer:
+    type: git
+    url: https://github.com/autowarefoundation/managed_transform_buffer.git
+    version: c77fe4e6b04873ba1471e995f081268d5dffa518
+  muSSP:
+    type: git
+    url: https://github.com/tier4/muSSP.git
+    version: c79e98fd5e658f4f90c06d93472faa977bc873b9

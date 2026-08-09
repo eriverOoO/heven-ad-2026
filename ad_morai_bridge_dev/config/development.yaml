@@ -1,0 +1,99 @@
+/**:
+  ros__parameters:
+    queue_capacity: 4096
+    publish_raw_packets: false
+    timestamp_mode: arrival
+    source_stamp_tolerance_sec: 1.0
+
+    camera_bboxes:
+      enabled: false
+
+    extra_raw_streams:
+      names: []
+
+    grpc:
+      enabled: true
+      target: 127.0.0.1:7789
+      timeout_sec: 5.0
+
+    ego_status:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 1911
+      topic: /ad/dev/vehicle/ego_status
+      full_topic: /ad/dev/vehicle/ego_status/full
+      frame_id: map
+      receive_buffer_bytes: 4194304
+    objects:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 7505
+      topic: /ad/dev/objects
+      frame_id: map
+      receive_buffer_bytes: 4194304
+    lidar2d:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 9301
+      topic: /ad/dev/lidar2d/scan
+      full_topic: /ad/dev/lidar2d/full
+      frame_id: lidar2d_link
+      receive_buffer_bytes: 4194304
+    traffic_light_status:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 7502
+      topic: /ad/dev/traffic_light/status
+      frame_id: map
+      receive_buffer_bytes: 4194304
+    intersection_status:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 9102
+      topic: /ad/dev/intersection/status
+      frame_id: map
+      receive_buffer_bytes: 4194304
+    npc_collisions:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 9108
+      topic: /ad/dev/npc/collisions
+      frame_id: map
+      receive_buffer_bytes: 4194304
+
+    ego_ghost:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9095
+    traffic_light:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 7607
+    intersection:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9132
+    sensor_control:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9103
+    lamp_control:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9097
+    scenario_load:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9099
+    save_sensor_data:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9105
+    multi_ego:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 7604
+    npc_ghost:
+      enabled: true
+      target_ip: 127.0.0.1
+      target_port: 9101

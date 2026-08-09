@@ -1,0 +1,2 @@
+PresetName,VehicleMode,ParameterType,VelocityType,LinkValue,MinLinkValue,MaxLinkValue,CustomValue,MinCustomValue,MaxCustomValue,PathOffValue,MinPathOffValue,MaxPathOffValue,CurrentVelocity,DesiredVelocity,InitProperty,CloseLoop,LaneChange,DestinationMode,VehicleModelType
+Default,SurroundVehicle,Variable,CustomVelocity,89.8171,85,100,20,20,20,0,-10,10,20.91,20,True,False,False,DESTROY,VPP

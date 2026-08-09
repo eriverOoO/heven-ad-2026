@@ -1,0 +1,21 @@
+std_msgs/Header header
+int8 CTRL_MODE_KEYBOARD=1
+int8 CTRL_MODE_AUTO=2
+int8 GEAR_MANUAL=0
+int8 GEAR_PARK=1
+int8 GEAR_REVERSE=2
+int8 GEAR_NEUTRAL=3
+int8 GEAR_DRIVE=4
+int8 GEAR_LOW=5
+int8 LONG_CMD_THROTTLE=1
+int8 LONG_CMD_VELOCITY=2
+int8 LONG_CMD_ACCELERATION=3
+int8 ctrl_mode
+int8 gear
+int8 long_cmd_type
+float32 velocity
+float32 acceleration
+float32 accel
+float32 brake
+# MORAI-normalized steering in [-1, 1], not a physical angle in radians.
+float32 steering

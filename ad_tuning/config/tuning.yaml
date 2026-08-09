@@ -1,0 +1,90 @@
+ad_global_path_tuner:
+  ros__parameters:
+    # 0이면 Ctrl+C까지 계속한다. 양수이면 COMPLETE trial 목표이며
+    # 인프라 장애로 FAIL 처리된 trial은 소모하지 않는다. 분산 실행에서는
+    # 종료 시점에 실행 중이던
+    # worker 수만큼 maximum_trials를 소폭 초과할 수 있다.
+    maximum_trials: 30
+    maximum_total_trials: 45
+    minimum_feasible_trials: 6
+    maximum_consecutive_infrastructure_failures: 3
+    maximum_worker_wall_time_sec: 7200.0
+    seed: 20260726
+    # metric이나 runtime artifact가 조금 바뀌어 새 study가 생기면,
+    # 같은 경로/스택에서 충분히 검증된 직전 study의 상위 feasible
+    # 파라미터를 새 metric으로 다시 평가한다. 0이면 해당 기능을 끈다.
+    warm_start.inherit_minimum_complete_trials: 36
+    warm_start.inherit_top_k: 5
+    output_dir: ""
+    # 빈 값이면 AD_TUNING_WORKER_ID, 그것도 없으면 hostname을 사용한다.
+    worker_id: ""
+
+    # OPTUNA_STORAGE_URL이 비어 있으면 단일 worker용 SQLite를 사용한다.
+    # PostgreSQL 예: postgresql+psycopg://user:password@host:5432/db
+    storage.url_env: "OPTUNA_STORAGE_URL"
+    storage.heartbeat_interval_sec: 15
+    storage.heartbeat_grace_period_sec: 90
+    storage.heartbeat_retry_count: 1
+    storage.connect_timeout_sec: 3
+    storage.connection_retry_attempts: 6
+    storage.connection_retry_interval_sec: 5.0
+    storage.health_check_interval_sec: 2.0
+    storage.db_outage_abort_sec: 30.0
+    # 다른 worker의 결과를 같은 study에서 비교할 수 있는 조건들이다.
+    # launch에서는 AD_TUNING_* 환경변수로 덮어쓸 수 있다.
+    experiment.scenario: "unspecified"
+    experiment.weather: "unspecified"
+    experiment.morai_version: "S4.251001"
+    experiment.code_revision: "unspecified"
+    experiment.vehicle_profile_id: "20260727-ioniq5-accelerator40-brake20-v1"
+
+    # 0이면 현재 /ad/planner/path 전체를 사용한다.
+    course_length_m: 0.0
+    completion_margin_m: 5.0
+    startup_timeout_sec: 60.0
+    trial_timeout_sec: 420.0
+    trial_wall_timeout_sec: 600.0
+    sim_clock_stale_timeout_sec: 5.0
+    maximum_sim_step_sec: 0.5
+    timing.require_device_stamp: true
+    timing.require_occupancy_grid: false
+    perception_reset.required: false
+    perception_reset.settle_sim_sec: 1.05
+    perception_reset.minimum_prediction_samples: 5
+    perception_reset.prediction_frame_id: "odom"
+    reset_timeout_sec: 12.0
+    stop_timeout_sec: 8.0
+    start_tolerance_m: 1.0
+    start_heading_tolerance_deg: 3.0
+    start_speed_tolerance_mps: 0.2
+    start_maximum_xy_variance_m2: 1.0
+    start_stable_sample_count: 5
+    completion_position_tolerance_m: 8.0
+    completion_heading_tolerance_deg: 30.0
+    maximum_progress_jump_m: 20.0
+    # launch가 ad_description 차량 YAML의 Stanley 앞축 제어점으로 덮어쓴다.
+    metric_control_point_x_m: 3.0
+    input_stale_timeout_sec: 2.0
+    divergence_cte_m: 12.0
+    maximum_pose_jump_m: 20.0
+    wrong_way_heading_deg: 120.0
+    # 대회 규정 제한속도. 초과 즉시 15초, 이후 매 3초마다 15초가 추가된다.
+    overspeed_kph: 60.0
+    brake_metric_speed_deadband_kph: 1.0
+    brake_saturation_threshold: 0.95
+
+    objective.maximum_cte_m: 0.7
+    objective.elapsed_time_weight: 1.0
+    objective.front_cte_squared_weight: 300.0
+    objective.rear_cte_squared_weight: 300.0
+    objective.competition_overspeed_penalty_s: 15.0
+    objective.competition_overspeed_interval_s: 3.0
+    objective.target_overspeed_squared_weight: 1.0
+    objective.unnecessary_brake_squared_weight: 5.0
+    objective.brake_saturation_time_weight: 1.0
+    objective.maximum_collision_count: 0
+    objective.minimum_local_planner_active_sec: 0.0
+    objective.collision_penalty: 5000.0
+    objective.local_planner_failure_time_weight: 0.0
+    objective.incomplete_penalty: 2000.0
+    objective.incomplete_cte_weight: 0.0

@@ -1,0 +1,47 @@
+imu_quaternion_encoder:
+  ros__parameters:
+    mode: status_pose
+    status_topic: /ad/vehicle/status
+    imu_topic: /ad/sensors/imu/data
+    gnss_seed_topic: /ad/localization/input/gnss_pose
+    output_odometry_topic: /ad/localization/backends/imu_quaternion_encoder/odometry
+    status_frame: map
+    reference_frame: odom
+    base_frame: base_link
+    imu_frame: imu_link
+    # MORAI vehicle/status coordinates and this repository's base_link both use
+    # the rear-axle center at ground as their origin. Keep this explicit and
+    # change it only if a later simulator build or real platform uses a
+    # different actor/status origin.
+    status_origin_to_base_m: [0.0, 0.0, 0.0]
+    # The active MORAI competition stream currently fills every status position
+    # with the exact sentinel (0, 0, 0). Never publish that as an absolute pose.
+    # A platform whose valid map origin is exactly zero may opt out explicitly.
+    # This guard applies only to status_pose; dead_reckoning ignores this field.
+    reject_zero_status_position: true
+    # dead_reckoning consumes the adapter's GNSS antenna pose. The launch
+    # replaces these mount values from ad_description/sensor_mounts.yaml.
+    gnss_lever_arm_m: [0.0, 0.0, 1.5685]
+    imu_mount_rpy_rad: [0.0, 0.0, 0.0]
+    # MORAI IMU yaw is true-north referenced while the projected odom axes
+    # follow the K-City UTM 52N grid, matching the direct GNSS+IMU backend.
+    world_yaw_offset_rad: -0.02350724531030645
+    maximum_imu_age_sec: 0.1
+    maximum_integration_dt_sec: 0.5
+    # About one second at the observed MORAI GNSS rate. The vehicle remains
+    # held during reset, so averaging reduces the initial lateral/z offset
+    # without smearing real motion into the seed.
+    initial_seed.sample_count: 20
+    # MORAI checkpoint teleports are large, persistent GNSS discontinuities.
+    # Ignore ordinary GNSS noise after the initial seed and accept a new seed
+    # only after three mutually consistent samples beyond this XY threshold.
+    # Disable this for a real platform unless its reset orchestration needs it.
+    automatic_reseed.enabled: true
+    automatic_reseed.distance_m: 8.0
+    automatic_reseed.confirmation_samples: 3
+    automatic_reseed.candidate_radius_m: 4.0
+    automatic_reseed.max_interval_sec: 0.5
+    position_variance_m2: 0.01
+    orientation_variance_rad2: 0.0001
+    speed_variance_m2ps2: 0.04
+    publish_tf: false

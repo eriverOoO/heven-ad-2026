@@ -1,0 +1,9 @@
+std_msgs/Header header
+string filename
+bool delete_all
+bool network
+bool ego
+bool npc
+bool pedestrian
+bool object
+bool pause

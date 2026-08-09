@@ -1,0 +1,26 @@
+ad_lidar_perception:
+  ros__parameters:
+    target_frame: base_link
+    x_min: -4.0
+    x_max: 100.0
+    y_min: -10.0
+    y_max: 10.0
+    z_min: 0.1
+    z_max: 2.0
+    resolution: 0.1
+    inflation_radius_m: 1.8
+    inflation_cost_scaling_factor: 2.0
+    ego_clear_x_min: -1.0
+    ego_clear_x_max: 4.05
+    ego_clear_y_min: -1.15
+    ego_clear_y_max: 1.15
+    transform_timeout_sec: 0.05
+    persistence.duration_sec: 0.5
+    persistence.fixed_frame: odom
+    persistence.maximum_clouds: 8
+    road_gate.enabled: true
+    road_gate.maximum_pending_messages: 8
+    topics.points: "/ad/sensors/lidar/points"
+    topics.drivable_mask: "/ad/planning/drivable_mask"
+    topics.occupancy_grid: "/ad/perception/occupancy/static"
+    visualization.topics.static_ungated: "/ad/viz/perception/occupancy/static_ungated"

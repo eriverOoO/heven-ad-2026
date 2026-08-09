@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ad_ioniq5">
+  <xacro:arg name="sensor_config" default="$(find ad_description)/config/sensor_mounts.yaml"/>
+  <xacro:arg name="sensor_profile" default="current_front_sensor_mounts"/>
+  <xacro:property name="sensor_database"
+                  value="${xacro.load_yaml('$(arg sensor_config)')}"/>
+  <xacro:property name="mounts"
+                  value="${sensor_database['profiles']['$(arg sensor_profile)']['sensors']}"/>
+  <xacro:property name="convention"
+                  value="${sensor_database['coordinate_convention']}"/>
+  <xacro:property name="static_frames"
+                  value="${convention['static_frames']}"/>
+
+  <xacro:macro name="fixed_sensor" params="joint_name parent child mount">
+    <joint name="${joint_name}" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${child}"/>
+      <origin
+        xyz="${mount['position_m']['x']} ${mount['position_m']['y']} ${mount['position_m']['z']}"
+        rpy="${mount['rpy_rad']['roll']} ${mount['rpy_rad']['pitch']} ${mount['rpy_rad']['yaw']}"/>
+    </joint>
+    <link name="${child}"/>
+  </xacro:macro>
+
+  <xacro:macro name="fixed_camera" params="joint_name parent mount">
+    <xacro:fixed_sensor joint_name="${joint_name}"
+                        parent="${parent}"
+                        child="${mount['frame_id']}" mount="${mount}"/>
+    <joint name="${mount['frame_id']}_to_optical_frame_joint" type="fixed">
+      <parent link="${mount['frame_id']}"/>
+      <child link="${mount['optical_frame_id']}"/>
+      <!-- REP-103 optical frame: +Z forward, +X right, +Y down. -->
+      <origin xyz="0 0 0" rpy="-${pi / 2.0} 0 -${pi / 2.0}"/>
+    </joint>
+    <link name="${mount['optical_frame_id']}"/>
+  </xacro:macro>
+
+  <!-- base_link is the rear axle center at ground level. -->
+  <link name="base_link">
+    <visual>
+      <!-- The DAE is Y-up. This rotation maps its length/width/height to REP-103. -->
+      <origin xyz="1.5522158204451544 0 0"
+              rpy="1.5707963267948966 0 1.5707963267948966"/>
+      <geometry>
+        <mesh filename="package://ad_description/meshes/ioniq5/hyundai_ioniq5.dae"
+              scale="0.9925888599244829 0.9925888599244829 0.9925888599244829"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="1.5275 0 0.8025" rpy="0 0 0"/>
+      <geometry><box size="4.635 1.890 1.605"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="base_to_rear_axle_joint" type="fixed">
+    <parent link="${static_frames['rear_axle']['parent_frame']}"/>
+    <child link="${static_frames['rear_axle']['frame_id']}"/>
+    <origin
+      xyz="${static_frames['rear_axle']['position_m']['x']} ${static_frames['rear_axle']['position_m']['y']} ${static_frames['rear_axle']['position_m']['z']}"
+      rpy="${static_frames['rear_axle']['rpy_rad']['roll']} ${static_frames['rear_axle']['rpy_rad']['pitch']} ${static_frames['rear_axle']['rpy_rad']['yaw']}"/>
+  </joint>
+  <link name="${static_frames['rear_axle']['frame_id']}"/>
+
+  <joint name="rear_axle_to_front_axle_joint" type="fixed">
+    <parent link="${static_frames['front_axle']['parent_frame']}"/>
+    <child link="${static_frames['front_axle']['frame_id']}"/>
+    <origin
+      xyz="${static_frames['front_axle']['position_m']['x']} ${static_frames['front_axle']['position_m']['y']} ${static_frames['front_axle']['position_m']['z']}"
+      rpy="${static_frames['front_axle']['rpy_rad']['roll']} ${static_frames['front_axle']['rpy_rad']['pitch']} ${static_frames['front_axle']['rpy_rad']['yaw']}"/>
+  </joint>
+  <link name="${static_frames['front_axle']['frame_id']}"/>
+
+  <xacro:fixed_sensor joint_name="rear_axle_to_gps_joint" parent="${convention['sensor_parent_frame']}" child="${mounts['gps']['frame_id']}" mount="${mounts['gps']}"/>
+  <xacro:fixed_sensor joint_name="rear_axle_to_imu_joint" parent="${convention['sensor_parent_frame']}" child="${mounts['imu']['frame_id']}" mount="${mounts['imu']}"/>
+  <xacro:fixed_sensor joint_name="rear_axle_to_lidar_joint" parent="${convention['sensor_parent_frame']}" child="${mounts['lidar']['frame_id']}" mount="${mounts['lidar']}"/>
+
+  <xacro:fixed_camera joint_name="rear_axle_to_camera_front_joint" parent="${convention['sensor_parent_frame']}" mount="${mounts['cameras']['front']}"/>
+  <xacro:fixed_camera joint_name="rear_axle_to_camera_left_joint" parent="${convention['sensor_parent_frame']}" mount="${mounts['cameras']['left']}"/>
+  <xacro:fixed_camera joint_name="rear_axle_to_camera_right_joint" parent="${convention['sensor_parent_frame']}" mount="${mounts['cameras']['right']}"/>
+  <xacro:fixed_camera joint_name="rear_axle_to_camera_traffic_light_joint" parent="${convention['sensor_parent_frame']}" mount="${mounts['cameras']['traffic_light']}"/>
+</robot>

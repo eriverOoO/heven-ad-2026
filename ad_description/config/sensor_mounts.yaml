@@ -1,0 +1,152 @@
+schema_version: 1
+active_profile: current_front_sensor_mounts
+noise_profile_file: noise_SensorInfo_2023_Hyundai_Ioniq5.json
+morai_source:
+  simulator_build: 25.S4.MolitComp03
+  vehicle: 2023_Hyundai_Ioniq5
+  active_file: SensorInfo_2023_Hyundai_Ioniq5.json
+  final_sha256: 8349697afaebe21d3c4bf0f85de961b8ae208a2f83780ae3783120a85fdda1c3
+coordinate_convention:
+  base_frame: base_link
+  origin: rear_axle_center_at_ground
+  axes: {x: forward, y: left, z: up}
+  sensor_parent_frame: rear_axle_link
+  static_frames:
+    rear_axle:
+      frame_id: rear_axle_link
+      parent_frame: base_link
+      position_m: {x: 0.0, y: 0.0, z: 0.3685}
+      rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+    front_axle:
+      frame_id: front_axle_link
+      parent_frame: rear_axle_link
+      position_m: {x: 3.0, y: 0.0, z: 0.0}
+      rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+
+profiles:
+  current_front_sensor_mounts:
+    description: Finalized MORAI MolitComp03 IONIQ 5 sensor profile.
+    sensors:
+      gps:
+        frame_id: gps_link
+        position_m: {x: 0.0, y: 0.0, z: 1.2}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 20.0
+        noise:
+          gaussian_enabled: true
+          gaussian_mean_m: 0.0
+          gaussian_stdev_m: 0.5
+      imu:
+        frame_id: imu_link
+        position_m: {x: 0.0, y: 0.0, z: 1.2}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 50.0
+        noise:
+          white_noise_enabled: true
+          linear_acceleration_stdev_mps2: {x: 0.041, y: 0.041, z: 0.041}
+          angular_velocity_stdev_radps: {roll: 0.003, pitch: 0.003, yaw: 0.00314}
+          random_walk_enabled: false
+          bias_instability_enabled: false
+      lidar:
+        frame_id: lidar_link
+        model: VLP-16
+        position_m: {x: 1.15, y: 0.0, z: 1.4}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 10.0
+      cameras:
+        front:
+          frame_id: camera_front_link
+          optical_frame_id: camera_front_optical_frame
+          position_m: {x: 1.9, y: 0.0, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.03490658503988659, yaw: 0.0}
+          image_size: {width: 1280, height: 720}
+          horizontal_fov_deg: 90.0
+          maximum_rate_hz: 20.0
+        left:
+          frame_id: camera_left_link
+          optical_frame_id: camera_left_optical_frame
+          position_m: {x: 1.15, y: 0.65, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.17453292519943295, yaw: 1.2217304763960306}
+          image_size: {width: 640, height: 480}
+          horizontal_fov_deg: 130.0
+          maximum_rate_hz: 20.0
+        right:
+          frame_id: camera_right_link
+          optical_frame_id: camera_right_optical_frame
+          position_m: {x: 1.15, y: -0.65, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.17453292519943295, yaw: -1.2217304763960306}
+          image_size: {width: 640, height: 480}
+          horizontal_fov_deg: 130.0
+          maximum_rate_hz: 20.0
+        traffic_light:
+          frame_id: camera_traffic_light_link
+          optical_frame_id: camera_traffic_light_optical_frame
+          position_m: {x: 1.9, y: 0.0, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: -0.5235987755982988, yaw: 0.0}
+          image_size: {width: 1280, height: 720}
+          horizontal_fov_deg: 90.0
+          maximum_rate_hz: 20.0
+
+  planned_centered_sensor_mounts:
+    description: Future GPS/IMU rear-axle and single-LiDAR body-center layout.
+    sensors:
+      gps:
+        frame_id: gps_link
+        position_m: {x: 0.0, y: 0.0, z: 0.7}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 20.0
+        noise:
+          gaussian_enabled: true
+          gaussian_mean_m: 0.0
+          gaussian_stdev_m: 0.5
+      imu:
+        frame_id: imu_link
+        position_m: {x: 0.0, y: 0.0, z: 0.7}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 50.0
+        noise:
+          white_noise_enabled: true
+          linear_acceleration_stdev_mps2: {x: 0.041, y: 0.041, z: 0.041}
+          angular_velocity_stdev_radps: {roll: 0.003, pitch: 0.003, yaw: 0.00314}
+          random_walk_enabled: false
+          bias_instability_enabled: false
+      lidar:
+        # Keep the frame name for topic/TF compatibility when the mount moves.
+        frame_id: lidar_link
+        model: VLP-16
+        position_m: {x: 1.5275, y: 0.0, z: 1.0}
+        rpy_rad: {roll: 0.0, pitch: 0.0, yaw: 0.0}
+        maximum_rate_hz: 10.0
+      cameras:
+        front:
+          frame_id: camera_front_link
+          optical_frame_id: camera_front_optical_frame
+          position_m: {x: 1.9, y: 0.0, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.03490658503988659, yaw: 0.0}
+          image_size: {width: 1280, height: 720}
+          horizontal_fov_deg: 90.0
+          maximum_rate_hz: 20.0
+        left:
+          frame_id: camera_left_link
+          optical_frame_id: camera_left_optical_frame
+          position_m: {x: 1.15, y: 0.65, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.17453292519943295, yaw: 1.2217304763960306}
+          image_size: {width: 640, height: 480}
+          horizontal_fov_deg: 130.0
+          maximum_rate_hz: 20.0
+        right:
+          frame_id: camera_right_link
+          optical_frame_id: camera_right_optical_frame
+          position_m: {x: 1.15, y: -0.65, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: 0.17453292519943295, yaw: -1.2217304763960306}
+          image_size: {width: 640, height: 480}
+          horizontal_fov_deg: 130.0
+          maximum_rate_hz: 20.0
+        traffic_light:
+          frame_id: camera_traffic_light_link
+          optical_frame_id: camera_traffic_light_optical_frame
+          position_m: {x: 1.9, y: 0.0, z: 1.2}
+          rpy_rad: {roll: 0.0, pitch: -0.5235987755982988, yaw: 0.0}
+          image_size: {width: 1280, height: 720}
+          horizontal_fov_deg: 90.0
+          maximum_rate_hz: 20.0

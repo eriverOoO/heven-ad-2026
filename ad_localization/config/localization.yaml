@@ -1,0 +1,51 @@
+ad_localization:
+  ros__parameters:
+    gps_topic: /ad/sensors/gps/fix
+    gps_rmc_topic: /ad/sensors/gps/rmc
+    # Raw normalized IMU remains the default. Launch profiles may select the
+    # optional MORAI compatibility stream without changing this base profile.
+    imu_topic: /ad/sensors/imu/data
+    eskf_imu_topic: /ad/localization/input/eskf_imu
+    status_topic: /ad/vehicle/status
+    filtered_odometry_topic: /ad/localization/odometry
+    gnss_pose_topic: /ad/localization/input/gnss_pose
+    initial_pose_topic: /ad/localization/input/initial_pose
+    wheel_speed_topic: /ad/localization/input/wheel_speed
+    pose2d_topic: /ad/localization/pose2d
+    diagnostics_topic: /diagnostics
+    map_frame: map
+    reference_frame: odom
+    base_frame: base_link
+    # The generic localization launch delegates the complete TF chain to
+    # localization_manager; standalone adapter tests may override this true.
+    publish_map_to_odom_tf: true
+    utm_epsg: 32652
+    utm_easting_offset_m: 302595.0
+    utm_northing_offset_m: 4124145.0
+    map_altitude_offset_m: 0.0
+    # MORAI의 GPS 음영 구간 0,0 GGA나 잘못된 UTM 투영이 제어기로 전파되지 않게 한다.
+    maximum_map_radius_m: 100000.0
+    gnss_lever_arm_m: [0.0, 0.0, 1.5685]
+    # Keep low-speed creep observable by the wheel-gated ZUPT. Simulator
+    # standstill noise is about 1e-4 m/s, well below this 5 mm/s deadband.
+    wheel_standstill_threshold_mps: 0.005
+    wheel_speed_variance: 0.04
+    wheel_lateral_speed_variance: 0.04
+    wheel_use_device_timestamp: false
+    gps_course_enabled: false
+    gps_course_maximum_age_sec: 0.25
+    gps_course_yaw_offset_rad: 0.0
+    maximum_abs_sideslip_rad: 0.35
+    initialization_sync_tolerance_sec: 0.25
+    initial_orientation_source: imu
+    initial_orientation_yaw_offset_rad: 0.0
+    # MORAI orientation is true-north referenced; the ESKF internal stream and
+    # its initial pose are rotated once into the UTM 52N grid convention.
+    eskf_world_yaw_offset_rad: -0.02350724531030645
+    initial_position_sample_count: 1
+    initial_pose_retry_period_sec: 0.2
+    input_timeout_sec: 0.5
+    # Allow only small host-clock/dispatch skew against callback-time ROS now.
+    # The separate ESKF 0.25 s queue handles GNSS being ahead of latest IMU.
+    input_future_tolerance_sec: 0.02
+    diagnostics_period_sec: 1.0

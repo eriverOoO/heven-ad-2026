@@ -1,0 +1,11 @@
+int16 unique_id
+int16 object_type
+geometry_msgs/Point position
+float32 heading
+geometry_msgs/Vector3 size
+float32 overhang
+float32 wheelbase
+float32 rear_overhang
+geometry_msgs/Vector3 velocity
+geometry_msgs/Vector3 acceleration
+string link_id

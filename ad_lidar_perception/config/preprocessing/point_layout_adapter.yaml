@@ -1,0 +1,10 @@
+/**:
+  ros__parameters:
+    topics:
+      input: /ad/perception/lidar/cropped
+      output: /ad/perception/lidar/points_xyzirc
+    intensity:
+      scale: 1.0
+      offset: 0.0
+      nonfinite_value: 0
+    return_type: 0

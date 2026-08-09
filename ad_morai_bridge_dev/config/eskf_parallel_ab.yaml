@@ -1,0 +1,75 @@
+schema_version: 1
+
+# Vehicle commands are opt-in twice: this file and the launch argument must both
+# enable them.  The initial discriminator is deliberately stationary.
+drive_enabled: false
+profile: stationary
+
+shared_inputs:
+  imu_topic: /ad/localization/input/eskf_imu
+  gnss_pose_topic: /ad/localization/input/gnss_pose
+  wheel_speed_topic: /ad/localization/input/wheel_speed
+
+candidates:
+  baseline:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.0
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 0.0
+
+  # Historical diagnostic only.  Its MORAI-session mean is retained for
+  # provenance but excluded from the portable comparison matrix.
+  gravity:
+    enabled: false
+    parameters:
+      gravity_mps2: 9.80994
+      initial_imu_acc_bias_covariance: 0.0
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 0.0
+
+  bias_covariance:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.01
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 0.0
+
+  observable_bias:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.0
+      stationary_initialization_estimate_accel_bias: true
+      var_imu_acc_bias: 0.0
+
+  # Fourth cell of the diagnostic 2x2 matrix.  The live result showed no
+  # material benefit over bias_covariance, so this remains diagnostic only.
+  combined_bias:
+    enabled: true
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.01
+      stationary_initialization_estimate_accel_bias: true
+      var_imu_acc_bias: 0.0
+
+  bias_driving:
+    enabled: false
+    parameters:
+      gravity_mps2: 9.80665
+      initial_imu_acc_bias_covariance: 0.0
+      stationary_initialization_estimate_accel_bias: false
+      var_imu_acc_bias: 1.0e-8
+
+safety:
+  maximum_start_speed_mps: 0.05
+  maximum_speed_mps: 0.50
+  maximum_travel_m: 0.25
+  truth_stale_timeout_sec: 0.25
+  estimator_stale_timeout_sec: 0.25
+  command_rate_hz: 20.0
+  maximum_command_delta_per_sec: 0.50
+  stopped_speed_mps: 0.02
+  stopped_stable_duration_sec: 1.0

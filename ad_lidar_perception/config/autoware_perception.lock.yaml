@@ -1,0 +1,141 @@
+schema_version: 1
+autoware:
+  meta_release: "1.8.0"
+  universe: "0.51.0"
+  autoware_msgs: "1.13.0"
+  manifest_url: https://github.com/autowarefoundation/autoware/blob/1.8.0/repositories/autoware.repos
+  artifact_role_url: https://github.com/autowarefoundation/autoware/blob/1.8.0/ansible/roles/artifacts/tasks/main.yaml
+weights_policy:
+  license_status: unresolved_upstream_artifact_license
+  redistribution_allowed_by_project: false
+  required_ack_env: AD_AUTOWARE_MODEL_LICENSE_REVIEWED
+messages:
+  package: autoware_perception_msgs
+  version: "1.13.0"
+detectors:
+  centerpoint_tiny:
+    package: autoware_lidar_centerpoint
+    version: "0.51.0"
+    executable: autoware_lidar_centerpoint_node
+    launch:
+      path: launch/lidar_centerpoint.launch.xml
+      sha256: be57b86ff6f9aa4a70ee77f469f3f9b9e1533f098b186cab3ebd455e66e93797
+    installed_files:
+      - path: config/centerpoint_common.param.yaml
+        sha256: 3a8585a54ec786464a4b601cc6b5ccbf5db51301177d3349368dc63094ea5277
+    model_dir: lidar_centerpoint
+    model_name: centerpoint_tiny
+    ml_package: centerpoint_tiny_ml_package.param.yaml
+    class_remapper: detection_class_remapper.param.yaml
+    artifacts:
+      encoder_onnx:
+        path: pts_voxel_encoder_centerpoint_tiny.onnx
+        sha256: 2c53465715c1fd2e9dc5727ef3fca74f4cdf0538f74286b0946e219d0ca5693b
+      head_onnx:
+        path: pts_backbone_neck_head_centerpoint_tiny.onnx
+        sha256: 9bb0b634f3664bd098ce7d6a3d8a9fb7cc8d9b8252b27f302c71e43316bab551
+      ml_package:
+        path: centerpoint_tiny_ml_package.param.yaml
+        sha256: e0846b08fbd023d6a7c085f5389d0ccaef8ad9cd2c5e1eb7dbc6583618e38424
+      class_remapper:
+        path: detection_class_remapper.param.yaml
+        sha256: c711f8875ece9b527dfe31ffc75f8c0de2e77945ef67860a959a4e04c36772d5
+    engines:
+      - pts_voxel_encoder_centerpoint_tiny.engine
+      - pts_backbone_neck_head_centerpoint_tiny.engine
+  centerpoint:
+    package: autoware_lidar_centerpoint
+    version: "0.51.0"
+    executable: autoware_lidar_centerpoint_node
+    launch:
+      path: launch/lidar_centerpoint.launch.xml
+      sha256: be57b86ff6f9aa4a70ee77f469f3f9b9e1533f098b186cab3ebd455e66e93797
+    installed_files:
+      - path: config/centerpoint_common.param.yaml
+        sha256: 3a8585a54ec786464a4b601cc6b5ccbf5db51301177d3349368dc63094ea5277
+    model_dir: lidar_centerpoint
+    model_name: centerpoint
+    ml_package: centerpoint_ml_package.param.yaml
+    class_remapper: detection_class_remapper.param.yaml
+    artifacts:
+      encoder_onnx:
+        path: pts_voxel_encoder_centerpoint.onnx
+        sha256: dc1a876580d86ee7a341d543f8ade2ede7f43bd032dc5b44155b1f0175405764
+      head_onnx:
+        path: pts_backbone_neck_head_centerpoint.onnx
+        sha256: 3fe7e128955646740c41a25be0c8f141d5a94594fe79d7405fe2a859e391542e
+      ml_package:
+        path: centerpoint_ml_package.param.yaml
+        sha256: 9bbc16e521dd87c91cbadf1cb89c8b81393d1f8e1069af385aaba677576f0e27
+      class_remapper:
+        path: detection_class_remapper.param.yaml
+        sha256: c711f8875ece9b527dfe31ffc75f8c0de2e77945ef67860a959a4e04c36772d5
+    engines:
+      - pts_voxel_encoder_centerpoint.engine
+      - pts_backbone_neck_head_centerpoint.engine
+  transfusion:
+    package: autoware_lidar_transfusion
+    version: "0.51.0"
+    executable: autoware_lidar_transfusion_node
+    launch:
+      path: launch/lidar_transfusion.launch.xml
+      sha256: e7653ea2410491b1121c06122d88534ef945d24f27f9b65b97a9e143b5f72751
+    installed_files:
+      - path: config/transfusion_common.param.yaml
+        sha256: 7f6a6d74e7ac15b3ce09c4b1428fd5e0b4c2dc7e3c50691b2b157c9b8a6d70d8
+    model_dir: lidar_transfusion
+    model_name: transfusion
+    ml_package: transfusion_ml_package.param.yaml
+    class_remapper: detection_class_remapper.param.yaml
+    artifacts:
+      onnx:
+        path: transfusion.onnx
+        sha256: 1d8f0ee6d59ccc3cca914f9892f6ac8f0a9e35082abb91da183c00e3e2c2718a
+      ml_package:
+        path: transfusion_ml_package.param.yaml
+        sha256: 476f7727adc17a823962f2e09ba23d40f3116c50be48361d98179d054cd131b6
+      class_remapper:
+        path: detection_class_remapper.param.yaml
+        sha256: c711f8875ece9b527dfe31ffc75f8c0de2e77945ef67860a959a4e04c36772d5
+    engines:
+      - transfusion.engine
+  bevfusion_lidar:
+    package: autoware_bevfusion
+    version: "0.51.0"
+    executable: autoware_bevfusion_node
+    launch:
+      path: launch/bevfusion.launch.xml
+      sha256: 33e87f8d6adfaca7b3a30da0de7f6ccc7d4df656301167ab885c993ce95d3b60
+    installed_files:
+      - path: config/common_bevfusion.param.yaml
+        sha256: 3a8585a54ec786464a4b601cc6b5ccbf5db51301177d3349368dc63094ea5277
+    model_dir: bevfusion
+    model_name: bevfusion_lidar
+    ml_package: ml_package_bevfusion_lidar.param.yaml
+    class_remapper: detection_class_remapper.param.yaml
+    artifacts:
+      onnx:
+        path: bevfusion_lidar.onnx
+        sha256: 5c29087963bf2c4dc02bf45c29d459303be602d63f9b6adff22a75c9cfb459a6
+      ml_package:
+        path: ml_package_bevfusion_lidar.param.yaml
+        sha256: 866265b9f0fc8c17805c0974339d3c7c4e601c1aa212818971fc650d71782181
+      class_remapper:
+        path: detection_class_remapper.param.yaml
+        sha256: 928f9eb14ac042d725909f12b2be1532c16b09a683485c5936cf04fb04728520
+    engines:
+      - bevfusion_lidar.engine
+tracker:
+  package: autoware_multi_object_tracker
+  version: "0.51.0"
+  executable: multi_object_tracker_node
+  launch:
+    path: launch/multi_object_tracker.launch.xml
+    sha256: 7f0da73e7341aca828d8e2c2bec5ab9c5f823060b8ecbce18dbcdd686b9a50d4
+  installed_files:
+    - path: config/data_association_matrix.param.yaml
+      sha256: fdc0bbb7654fe08f0ab246f7e356de2e93c8205742f2fbad95b65fa8c7af2d65
+    - path: config/input_channels.param.yaml
+      sha256: ecc470f23ba8d42910d0a2bd483c013ec9dfda150e1ca3d76575a1acc2af683a
+  prediction_package: ad_lidar_perception
+  prediction_executable: ad_autoware_prediction_node

@@ -1,0 +1,37 @@
+# Routes and spawn poses were derived from a workstation K-City map snapshot.
+# actor_presets.provenance.yaml pins its identity and content hash.
+schema_version: 1
+client_key: heven-task4-actor-toolkit
+presets:
+  - name: kcity-roundabout-loop
+    map_id: R_KR_PR_K-city_2025
+    actor_type: vehicle
+    behavior: physical_ai
+    request_id: heven-roundabout-npc
+    model_name: "30200003"
+    label: heven-roundabout-npc
+    xyz: [-114.96108059945982, 355.3320855018683, 28.31206912103067]
+    rpy_deg: [0.0, 0.0, -129.6496500827828]
+    velocity: 20.0
+    decision_range: 15.0
+    route_links:
+      - {id: A2256W000133, waypoint_idx: 0}
+      - {id: A2256W000134, waypoint_idx: 0}
+      - {id: A2256W000135, waypoint_idx: 0}
+      - {id: A2256W000132, waypoint_idx: 0}
+  - name: kcity-highway
+    map_id: R_KR_PR_K-city_2025
+    actor_type: vehicle
+    behavior: physical_ai
+    request_id: heven-highway-npc
+    model_name: "30200003"
+    label: heven-highway-npc
+    xyz: [66.01092960586539, 256.533569091931, 28.310266820696278]
+    rpy_deg: [0.0, 0.0, -89.84100984805922]
+    velocity: 50.0
+    decision_range: 50.0
+    route_links:
+      - {id: A2256W000409, waypoint_idx: 0}
+      - {id: A2256W000420, waypoint_idx: 0}
+      - {id: A2256W000179, waypoint_idx: 0}
+      - {id: A2256W001105, waypoint_idx: 0}

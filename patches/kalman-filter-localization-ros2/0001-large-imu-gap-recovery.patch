@@ -1,0 +1,1234 @@
+diff --git a/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp b/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
+index 70f744c..6c0998e 100644
+--- a/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
++++ b/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
+@@ -1211,6 +1211,36 @@ public:
+     x_.segment(STATE::BAX, 3) = state.accel_bias;
+   }
+ 
++  /// Atomically replace the position state and its uncertainty after an
++  /// externally validated absolute-position re-acquisition.
++  bool reanchorPosition(
++    const Eigen::Vector3d & position, const Eigen::Matrix3d & position_covariance)
++  {
++    const Eigen::Matrix3d symmetric_covariance =
++      0.5 * (position_covariance + position_covariance.transpose());
++    const Eigen::LDLT<Eigen::Matrix3d> decomposition(symmetric_covariance);
++    if (!position.allFinite() || !position_covariance.allFinite() ||
++      decomposition.info() != Eigen::Success || !decomposition.isPositive() ||
++      (symmetric_covariance.diagonal().array() <= 0.0).any())
++    {
++      return false;
++    }
++
++    const Snapshot before = getSnapshot();
++    State state = before.state;
++    state.position = position;
++    setState(state);
++    P_.block<3, 3>(ERROR_STATE::DX, ERROR_STATE::DX) = symmetric_covariance;
++    P_.block(0, 3, 3, num_error_state_ - 3).setZero();
++    P_.block(3, 0, num_error_state_ - 3, 3).setZero();
++    P_ = 0.5 * (P_ + P_.transpose());
++    if (!checkNumericalInvariants()) {
++      (void)restoreSnapshot(before);
++      return false;
++    }
++    return true;
++  }
++
+   Pose getPose() const
+   {
+     Pose pose;
+diff --git a/kalman_filter_localization_core/include/kalman_filter_localization/core/eskf_replay.hpp b/kalman_filter_localization_core/include/kalman_filter_localization/core/eskf_replay.hpp
+index b82804a..2c51638 100644
+--- a/kalman_filter_localization_core/include/kalman_filter_localization/core/eskf_replay.hpp
++++ b/kalman_filter_localization_core/include/kalman_filter_localization/core/eskf_replay.hpp
+@@ -69,6 +69,14 @@ public:
+     kInvalidInput,
+     kUpdateRejected,
+     kNumericalFailure,
++    kLargeGap,
++  };
++
++  enum class MeasurementDisposition : std::uint8_t
++  {
++    kUnknown = 0,
++    kPending,
++    kApplied,
+   };
+ 
+   struct Counters
+@@ -87,6 +95,7 @@ public:
+     std::uint64_t measurement_update_rejected{0};
+     std::uint64_t imu_correction_rejected{0};
+     std::uint64_t numerical_failure{0};
++    std::uint64_t large_imu_gap{0};
+   };
+ 
+   struct TimingTrace
+@@ -161,6 +170,10 @@ public:
+     const double dt = sensor_time - imu_samples_.back().time;
+     const auto prediction_status = estimator_.predictionUpdateDt(dt, gyro, acceleration);
+     if (prediction_status != EKFEstimator::PredictionUpdateStatus::kUpdated) {
++      if (prediction_status == EKFEstimator::PredictionUpdateStatus::kDtTooLarge) {
++        ++counters_.large_imu_gap;
++        return Status::kLargeGap;
++      }
+       if (prediction_status == EKFEstimator::PredictionUpdateStatus::kNumericalFailure) {
+         ++counters_.numerical_failure;
+         return Status::kNumericalFailure;
+@@ -268,6 +281,27 @@ public:
+ 
+   std::size_t imuHistorySize() const {return imu_samples_.size();}
+   std::size_t measurementHistorySize() const {return measurements_.size();}
++  bool hasAppliedMeasurement(const std::uint64_t measurement_id) const
++  {
++    return measurementDisposition(measurement_id) == MeasurementDisposition::kApplied;
++  }
++  MeasurementDisposition measurementDisposition(const std::uint64_t measurement_id) const
++  {
++    const bool applied = std::any_of(
++      measurements_.begin(), measurements_.end(),
++      [measurement_id](const auto & event) {
++        return event.id == measurement_id;
++      });
++    if (applied) {
++      return MeasurementDisposition::kApplied;
++    }
++    const bool pending = std::any_of(
++      pending_measurements_.begin(), pending_measurements_.end(),
++      [measurement_id](const auto & event) {
++        return event.id == measurement_id;
++      });
++    return pending ? MeasurementDisposition::kPending : MeasurementDisposition::kUnknown;
++  }
+   std::size_t estimatedHistoryMemoryBytes() const
+   {
+     return imu_samples_.size() * sizeof(ImuSample) +
+diff --git a/kalman_filter_localization_core/test/test_eskf_replay.cpp b/kalman_filter_localization_core/test/test_eskf_replay.cpp
+index dc91e91..d86c28f 100644
+--- a/kalman_filter_localization_core/test/test_eskf_replay.cpp
++++ b/kalman_filter_localization_core/test/test_eskf_replay.cpp
+@@ -205,6 +205,89 @@ TEST(EskfReplay, EnforcesTimestampPoliciesAndBoundedHistory)
+   EXPECT_EQ(replay.counters().measurements_applied, 2U);
+ }
+ 
++TEST(EskfReplay, ClassifiesLargeImuGapWithoutMutatingEstimator)
++{
++  EKFEstimator estimator;
++  configure(estimator);
++  ASSERT_TRUE(estimator.setMaxPredictionDtSec(0.5));
++  EskfReplay replay(estimator, 2.0);
++  const Eigen::Vector3d gyro(0.01, -0.02, 0.03);
++  const Eigen::Vector3d acceleration(0.2, -0.1, 9.80665);
++  ASSERT_EQ(replay.addImu(10.0, gyro, acceleration), EskfReplay::Status::kInitialized);
++
++  const auto state_before_gap = estimator.getX();
++  const auto covariance_before_gap = estimator.getCovariance();
++  const auto status = replay.addImu(11.0, gyro, acceleration);
++
++  EXPECT_EQ(status, EskfReplay::Status::kLargeGap);
++  EXPECT_LT((estimator.getX() - state_before_gap).norm(), 1.0e-15);
++  EXPECT_LT((estimator.getCovariance() - covariance_before_gap).norm(), 1.0e-15);
++  EXPECT_DOUBLE_EQ(replay.latestTime(), 10.0);
++  EXPECT_EQ(replay.imuHistorySize(), 1U);
++  EXPECT_EQ(replay.counters().invalid_input, 0U);
++  EXPECT_EQ(replay.counters().large_imu_gap, 1U);
++}
++
++TEST(EskfReplay, ResetAfterLargeGapStartsIsolatedEpoch)
++{
++  EKFEstimator estimator;
++  configure(estimator);
++  ASSERT_TRUE(estimator.setMaxPredictionDtSec(0.5));
++  EskfReplay replay(estimator, 2.0);
++  const Eigen::Vector3d gyro = Eigen::Vector3d::Zero();
++  const Eigen::Vector3d acceleration(0.0, 0.0, 9.80665);
++  const Eigen::Vector3d variance = Eigen::Vector3d::Constant(0.1);
++  ASSERT_EQ(replay.addImu(10.0, gyro, acceleration), EskfReplay::Status::kInitialized);
++  ASSERT_EQ(
++    replay.applyMeasurement(
++      10.2, 10.0, 77U, positionUpdate(Eigen::Vector3d::Ones(), variance)),
++    EskfReplay::Status::kQueuedFuture);
++  EXPECT_EQ(
++    replay.measurementDisposition(77U), EskfReplay::MeasurementDisposition::kPending);
++
++  const auto state_before_gap = estimator.getX();
++  const auto covariance_before_gap = estimator.getCovariance();
++  const auto gap_status = replay.addImu(11.0, gyro, acceleration);
++  ASSERT_EQ(gap_status, EskfReplay::Status::kLargeGap);
++
++  replay.reset();
++  ASSERT_EQ(replay.addImu(11.0, gyro, acceleration), EskfReplay::Status::kInitialized);
++  EXPECT_EQ(replay.imuHistorySize(), 1U);
++  EXPECT_EQ(replay.measurementHistorySize(), 0U);
++  EXPECT_EQ(
++    replay.measurementDisposition(77U), EskfReplay::MeasurementDisposition::kUnknown);
++  EXPECT_LT((estimator.getX() - state_before_gap).norm(), 1.0e-15);
++  EXPECT_LT((estimator.getCovariance() - covariance_before_gap).norm(), 1.0e-15);
++  EXPECT_EQ(
++    replay.applyMeasurement(
++      10.2, 11.0, 77U, positionUpdate(Eigen::Vector3d::Ones(), variance)),
++    EskfReplay::Status::kTooOld);
++  EXPECT_EQ(replay.addImu(11.01, gyro, acceleration), EskfReplay::Status::kApplied);
++  EXPECT_EQ(
++    replay.applyMeasurement(
++      11.01, 11.01, 78U, positionUpdate(Eigen::Vector3d::Zero(), variance)),
++    EskfReplay::Status::kApplied);
++  EXPECT_EQ(
++    replay.measurementDisposition(78U), EskfReplay::MeasurementDisposition::kApplied);
++}
++
++TEST(EskfReplay, InvalidAndReverseImuAreNotClassifiedAsLargeGap)
++{
++  EKFEstimator estimator;
++  configure(estimator);
++  ASSERT_TRUE(estimator.setMaxPredictionDtSec(0.5));
++  EskfReplay replay(estimator, 2.0);
++  const Eigen::Vector3d gyro = Eigen::Vector3d::Zero();
++  const Eigen::Vector3d acceleration(0.0, 0.0, 9.80665);
++  ASSERT_EQ(replay.addImu(10.0, gyro, acceleration), EskfReplay::Status::kInitialized);
++
++  EXPECT_EQ(replay.addImu(9.0, gyro, acceleration), EskfReplay::Status::kReverseImu);
++  EXPECT_EQ(
++    replay.addImu(
++      std::numeric_limits<double>::quiet_NaN(), gyro, acceleration),
++    EskfReplay::Status::kInvalidInput);
++}
++
+ TEST(EskfReplay, QueuesMeasurementThatArrivesBeforeFirstImu)
+ {
+   EKFEstimator estimator;
+@@ -312,3 +395,34 @@ TEST(EkfSnapshot, InvalidRestoreDoesNotMutateEstimator)
+   EXPECT_LT((estimator.getX() - EKFEstimator().getX()).norm(), 1.0e-15);
+   EXPECT_LT((estimator.getCovariance() - before.covariance).norm(), 1.0e-15);
+ }
++
++TEST(EkfSnapshot, PositionReanchorIsAtomicAndResetsPositionCrossCovariance)
++{
++  EKFEstimator estimator;
++  configure(estimator);
++  const auto before = estimator.getSnapshot();
++  const Eigen::Vector3d position(100.0, -20.0, 3.0);
++  const Eigen::Matrix3d position_covariance =
++    Eigen::Vector3d(0.25, 0.25, 1.0).asDiagonal();
++
++  ASSERT_TRUE(estimator.reanchorPosition(position, position_covariance));
++  EXPECT_LT((estimator.getPosition() - position).norm(), 1.0e-15);
++  const Eigen::MatrixXd covariance = estimator.getCovariance();
++  EXPECT_LT((covariance.block<3, 3>(0, 0) - position_covariance).norm(), 1.0e-15);
++  EXPECT_LT(covariance.block(0, 3, 3, covariance.cols() - 3).norm(), 1.0e-15);
++  EXPECT_LT(covariance.block(3, 0, covariance.rows() - 3, 3).norm(), 1.0e-15);
++  EXPECT_LT(
++    (covariance.block(3, 3, covariance.rows() - 3, covariance.cols() - 3) -
++    before.covariance.block(
++      3, 3, before.covariance.rows() - 3,
++      before.covariance.cols() - 3)).norm(),
++    1.0e-15);
++
++  const auto valid = estimator.getSnapshot();
++  const Eigen::VectorXd valid_x = estimator.getX();
++  Eigen::Matrix3d invalid_covariance = position_covariance;
++  invalid_covariance(0, 0) = -1.0;
++  EXPECT_FALSE(estimator.reanchorPosition(Eigen::Vector3d::Zero(), invalid_covariance));
++  EXPECT_LT((estimator.getX() - valid_x).norm(), 1.0e-15);
++  EXPECT_LT((estimator.getCovariance() - valid.covariance).norm(), 1.0e-15);
++}
+diff --git a/kalman_filter_localization_ros2/CMakeLists.txt b/kalman_filter_localization_ros2/CMakeLists.txt
+index 1575c53..a271b70 100644
+--- a/kalman_filter_localization_ros2/CMakeLists.txt
++++ b/kalman_filter_localization_ros2/CMakeLists.txt
+@@ -36,6 +36,7 @@ find_package(std_srvs REQUIRED)
+ 
+ if(BUILD_TESTING)
+   find_package(ament_lint_auto REQUIRED)
++  find_package(ament_cmake_gtest REQUIRED)
+   find_package(ament_cmake_pytest REQUIRED)
+   # the following line skips the linter which checks for copyrights
+   # uncomment the line when a copyright and license is not present in all source files
+@@ -45,6 +46,7 @@ if(BUILD_TESTING)
+   #set(ament_cmake_cpplint_FOUND TRUE)
+   ament_lint_auto_find_test_dependencies()
+   ament_add_pytest_test(test_evaluate_localization test/test_evaluate_localization.py)
++  ament_add_gtest(test_ekf_large_gap_recovery test/test_ekf_large_gap_recovery.cpp)
+ endif()
+ 
+ add_library(ekf_localization_component SHARED
+@@ -62,6 +64,12 @@ target_link_libraries(ekf_localization_component PUBLIC kalman_filter_localizati
+ ament_target_dependencies(ekf_localization_component PUBLIC
+   rclcpp rclcpp_components geometry_msgs nav_msgs sensor_msgs std_msgs std_srvs tf2 tf2_eigen tf2_geometry_msgs tf2_ros)
+ 
++if(BUILD_TESTING)
++  target_link_libraries(test_ekf_large_gap_recovery ekf_localization_component)
++  ament_target_dependencies(test_ekf_large_gap_recovery
++    rclcpp geometry_msgs nav_msgs sensor_msgs)
++endif()
++
+ add_executable(ekf_localization_node
+ src/ekf_localization_node.cpp
+ )
+diff --git a/kalman_filter_localization_ros2/package.xml b/kalman_filter_localization_ros2/package.xml
+index 2bca380..ceb7e23 100644
+--- a/kalman_filter_localization_ros2/package.xml
++++ b/kalman_filter_localization_ros2/package.xml
+@@ -29,6 +29,7 @@
+ 
+   <test_depend>ament_lint_auto</test_depend>
+   <test_depend>ament_lint_common</test_depend>
++  <test_depend>ament_cmake_gtest</test_depend>
+   <test_depend>ament_cmake_pytest</test_depend>
+ 
+   <export>
+diff --git a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+index dc6873c..3b5d510 100644
+--- a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
++++ b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+@@ -267,13 +267,14 @@ struct EkfLocalizationComponent::Impl
+         " repropagated_imu=%" PRIu64 " too_old=%" PRIu64 " future=%" PRIu64
+         " duplicate=%" PRIu64 " reverse_imu=%" PRIu64 " rejected=%" PRIu64
+         " measurement_rejected=%" PRIu64 " imu_correction_rejected=%" PRIu64
+-        " future_queued=%" PRIu64 " numerical_failure=%" PRIu64,
++        " future_queued=%" PRIu64 " numerical_failure=%" PRIu64
++        " large_imu_gap=%" PRIu64,
+         counters.imu_samples, counters.measurements_applied, counters.rewind_count,
+         counters.repropagated_imu_samples, counters.too_old, counters.future,
+         counters.duplicate, counters.reverse_imu, counters.update_rejected,
+         counters.measurement_update_rejected, counters.imu_correction_rejected,
+         counters.future_queued,
+-        counters.numerical_failure);
++        counters.numerical_failure, counters.large_imu_gap);
+       const double callback_mean_us = imu_callback_count_ > 0U ?
+         imu_callback_total_us_ / static_cast<double>(imu_callback_count_) : 0.0;
+       const double wall_duration_sec = has_imu_wall_start_ ?
+@@ -706,6 +707,21 @@ struct EkfLocalizationComponent::Impl
+       "max_gnss_position_innovation_clip_m", max_gnss_position_innovation_clip_m_);
+     node_.declare_parameter("max_gnss_position_nis", 0.0);
+     node_.get_parameter("max_gnss_position_nis", max_gnss_position_nis_);
++    node_.declare_parameter("post_gap_gnss_required_consistent_fixes", 3);
++    node_.get_parameter(
++      "post_gap_gnss_required_consistent_fixes",
++      post_gap_gnss_required_consistent_fixes_);
++    node_.declare_parameter("post_gap_gnss_max_fix_interval_sec", 2.0);
++    node_.get_parameter(
++      "post_gap_gnss_max_fix_interval_sec", post_gap_gnss_max_fix_interval_sec_);
++    node_.declare_parameter("post_gap_gnss_min_consistency_span_sec", 0.1);
++    node_.get_parameter(
++      "post_gap_gnss_min_consistency_span_sec", post_gap_gnss_min_consistency_span_sec_);
++    node_.declare_parameter("post_gap_gnss_max_speed_mps", 70.0);
++    node_.get_parameter("post_gap_gnss_max_speed_mps", post_gap_gnss_max_speed_mps_);
++    node_.declare_parameter("post_gap_gnss_consistency_tolerance_m", 5.0);
++    node_.get_parameter(
++      "post_gap_gnss_consistency_tolerance_m", post_gap_gnss_consistency_tolerance_m_);
+     node_.declare_parameter("gnss_position_nis_adaptive_threshold", 0.0);
+     node_.get_parameter(
+       "gnss_position_nis_adaptive_threshold", gnss_position_nis_adaptive_threshold_);
+@@ -843,6 +859,11 @@ struct EkfLocalizationComponent::Impl
+         "measurement replay supersedes deprecated GNSS delay extrapolation");
+       compensate_gnss_delay_ = false;
+     }
++    if (enable_measurement_replay_ && gnss_position_reacquisition_dt_sec_ > 0.0) {
++      throw std::invalid_argument(
++              "gnss_position_reacquisition_dt_sec is unsupported with measurement replay; "
++              "the stateful gate cannot be repeated safely during rewind/repropagation");
++    }
+     if (input_reorder_drain_sleep_usec_ < 0) {
+       RCLCPP_WARN(
+         node_.get_logger(),
+@@ -973,8 +994,9 @@ struct EkfLocalizationComponent::Impl
+         !(zupt_max_speed_mps_ >= 0.0) ||
+         !(zupt_min_stationary_duration_sec_ >= 0.0))
+       {
+-        RCLCPP_WARN(node_.get_logger(),
+-            "invalid stationary detector parameters; disabling updates");
++        RCLCPP_WARN(
++          node_.get_logger(),
++          "invalid stationary detector parameters; disabling updates");
+         use_zupt_ = false;
+         use_zihr_ = false;
+       }
+@@ -1153,6 +1175,49 @@ struct EkfLocalizationComponent::Impl
+         max_gnss_position_innovation_clip_m_);
+       max_gnss_position_innovation_clip_m_ = 0.0;
+     }
++    if (post_gap_gnss_required_consistent_fixes_ < 2) {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "invalid parameter post_gap_gnss_required_consistent_fixes=%d. fallback to 3",
++        post_gap_gnss_required_consistent_fixes_);
++      post_gap_gnss_required_consistent_fixes_ = 3;
++    }
++    if (!(post_gap_gnss_max_fix_interval_sec_ > 0.0) ||
++      !std::isfinite(post_gap_gnss_max_fix_interval_sec_))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "invalid parameter post_gap_gnss_max_fix_interval_sec=%f. fallback to 2.0",
++        post_gap_gnss_max_fix_interval_sec_);
++      post_gap_gnss_max_fix_interval_sec_ = 2.0;
++    }
++    if (!(post_gap_gnss_min_consistency_span_sec_ > 0.0) ||
++      !std::isfinite(post_gap_gnss_min_consistency_span_sec_))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "invalid parameter post_gap_gnss_min_consistency_span_sec=%f. fallback to 0.1",
++        post_gap_gnss_min_consistency_span_sec_);
++      post_gap_gnss_min_consistency_span_sec_ = 0.1;
++    }
++    if (!(post_gap_gnss_max_speed_mps_ > 0.0) ||
++      !std::isfinite(post_gap_gnss_max_speed_mps_))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "invalid parameter post_gap_gnss_max_speed_mps=%f. fallback to 70.0",
++        post_gap_gnss_max_speed_mps_);
++      post_gap_gnss_max_speed_mps_ = 70.0;
++    }
++    if (!(post_gap_gnss_consistency_tolerance_m_ >= 0.0) ||
++      !std::isfinite(post_gap_gnss_consistency_tolerance_m_))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "invalid parameter post_gap_gnss_consistency_tolerance_m=%f. fallback to 5.0",
++        post_gap_gnss_consistency_tolerance_m_);
++      post_gap_gnss_consistency_tolerance_m_ = 5.0;
++    }
+     if (
+       !(gnss_position_nis_adaptive_threshold_ >= 0.0) ||
+       !std::isfinite(gnss_position_nis_adaptive_threshold_))
+@@ -1603,6 +1668,11 @@ struct EkfLocalizationComponent::Impl
+         has_previous_time_imu_ = false;
+         previous_time_imu_ = 0.0;
+         replay_->reset();
++        awaiting_post_gap_gnss_ = false;
++        awaiting_post_gap_propagation_ = false;
++        post_gap_gnss_reanchor_pending_ = false;
++        post_gap_gnss_measurement_id_ = 0U;
++        resetPostGapGnssConsistency();
+ 
+         // Reset odom baseline too.
+         current_pose_odom_ = current_pose_;
+@@ -1856,9 +1926,9 @@ struct EkfLocalizationComponent::Impl
+             msg->header.stamp, 2U,
+             [this, velocity, velocity_covariance, variance](core::EKFEstimator & estimator) {
+               return propagate_gnss_velocity_cross_state_ ?
+-                     estimator.observationUpdateWorldVelocityWithCovariance(
++              estimator.observationUpdateWorldVelocityWithCovariance(
+                 velocity, velocity_covariance).status :
+-                     estimator.observationUpdateVelocityWithStatus(velocity, variance, false);
++              estimator.observationUpdateVelocityWithStatus(velocity, variance, false);
+             });
+           return;
+         }
+@@ -2135,13 +2205,17 @@ struct EkfLocalizationComponent::Impl
+ 
+   core::EskfReplay::Status applyReplayMeasurement(
+     const builtin_interfaces::msg::Time & stamp, const std::uint8_t source,
+-    core::EskfReplay::MeasurementFunction update, const double time_offset_sec = 0.0)
++    core::EskfReplay::MeasurementFunction update, const double time_offset_sec = 0.0,
++    std::uint64_t * measurement_id_out = nullptr)
+   {
+     const double sensor_time = stampToSec(stamp) + time_offset_sec;
+     const double arrival_time = node_.now().seconds();
+     const std::uint64_t stamp_bits = static_cast<std::uint64_t>(stampToNanoseconds(stamp));
+     const std::uint64_t measurement_id =
+       (static_cast<std::uint64_t>(source) << 56U) ^ stamp_bits;
++    if (measurement_id_out != nullptr) {
++      *measurement_id_out = measurement_id;
++    }
+     const auto status = replay_->applyMeasurement(
+       sensor_time, arrival_time, measurement_id, std::move(update));
+     if (debug_replay_timing_pub_) {
+@@ -2164,6 +2238,99 @@ struct EkfLocalizationComponent::Impl
+     return status;
+   }
+ 
++  void releasePostGapOutputGateIfTrusted()
++  {
++    if (!awaiting_post_gap_gnss_ || !post_gap_gnss_reanchor_pending_) {
++      return;
++    }
++    const auto disposition = replay_->measurementDisposition(post_gap_gnss_measurement_id_);
++    if (disposition == core::EskfReplay::MeasurementDisposition::kPending) {
++      return;
++    }
++    if (disposition == core::EskfReplay::MeasurementDisposition::kUnknown) {
++      post_gap_gnss_reanchor_pending_ = false;
++      post_gap_gnss_measurement_id_ = 0U;
++      resetPostGapGnssConsistency();
++      return;
++    }
++    awaiting_post_gap_gnss_ = false;
++    post_gap_gnss_reanchor_pending_ = false;
++    post_gap_gnss_measurement_id_ = 0U;
++    resetPostGapGnssConsistency();
++    RCLCPP_INFO(
++      node_.get_logger(),
++      "post-gap GNSS position correction applied; localization output resumed");
++  }
++
++  void rememberPostGapGnssCandidate(const std::uint64_t measurement_id)
++  {
++    post_gap_gnss_measurement_id_ = measurement_id;
++    releasePostGapOutputGateIfTrusted();
++  }
++
++  void resetPostGapGnssConsistency()
++  {
++    has_post_gap_gnss_consistency_base_ = false;
++    post_gap_gnss_consistent_fix_count_ = 0U;
++    post_gap_gnss_consistency_first_time_ = std::numeric_limits<double>::quiet_NaN();
++    post_gap_gnss_consistency_time_ = std::numeric_limits<double>::quiet_NaN();
++    post_gap_gnss_consistency_position_.setZero();
++    post_gap_gnss_consistency_covariance_.setZero();
++  }
++
++  bool postGapGnssFixIsConsistent(
++    const double measurement_time, const Eigen::Vector3d & antenna_position,
++    const Eigen::Matrix3d & position_covariance)
++  {
++    const Eigen::LDLT<Eigen::Matrix3d> covariance_decomposition(position_covariance);
++    if (!std::isfinite(measurement_time) || !antenna_position.allFinite() ||
++      !position_covariance.allFinite() ||
++      covariance_decomposition.info() != Eigen::Success ||
++      !covariance_decomposition.isPositive())
++    {
++      resetPostGapGnssConsistency();
++      return false;
++    }
++
++    if (!has_post_gap_gnss_consistency_base_) {
++      has_post_gap_gnss_consistency_base_ = true;
++      post_gap_gnss_consistency_first_time_ = measurement_time;
++      post_gap_gnss_consistency_time_ = measurement_time;
++      post_gap_gnss_consistency_position_ = antenna_position;
++      post_gap_gnss_consistency_covariance_ = position_covariance;
++      post_gap_gnss_consistent_fix_count_ = 1U;
++      return false;
++    }
++
++    const double dt = measurement_time - post_gap_gnss_consistency_time_;
++    const double displacement =
++      (antenna_position - post_gap_gnss_consistency_position_).norm();
++    const double covariance_tolerance = 3.0 * std::sqrt(
++      std::max(
++        0.0,
++        (post_gap_gnss_consistency_covariance_ + position_covariance).diagonal().maxCoeff()));
++    // A single 3-D bound deliberately covers horizontal and vertical motion together. This is
++    // conservative for normal road motion and prevents an implausible jump on either axis.
++    const bool consistent = dt > 0.0 && dt <= post_gap_gnss_max_fix_interval_sec_ &&
++      displacement <= post_gap_gnss_max_speed_mps_ * dt +
++      post_gap_gnss_consistency_tolerance_m_ + covariance_tolerance;
++    if (!consistent) {
++      post_gap_gnss_consistency_first_time_ = measurement_time;
++      post_gap_gnss_consistent_fix_count_ = 1U;
++    } else {
++      post_gap_gnss_consistent_fix_count_ = std::min(
++        post_gap_gnss_consistent_fix_count_ + 1U,
++        static_cast<std::size_t>(post_gap_gnss_required_consistent_fixes_));
++    }
++    post_gap_gnss_consistency_time_ = measurement_time;
++    post_gap_gnss_consistency_position_ = antenna_position;
++    post_gap_gnss_consistency_covariance_ = position_covariance;
++    return post_gap_gnss_consistent_fix_count_ >=
++           static_cast<std::size_t>(post_gap_gnss_required_consistent_fixes_) &&
++           measurement_time - post_gap_gnss_consistency_first_time_ >=
++           post_gap_gnss_min_consistency_span_sec_;
++  }
++
+   void predictUpdate(const sensor_msgs::msg::Imu & imu_msg)
+   {
+     has_received_input_ = true;
+@@ -2246,6 +2413,44 @@ struct EkfLocalizationComponent::Impl
+       {
+         previous_time_imu_ = current_time_imu;
+         has_previous_time_imu_ = true;
++        if (status == core::EskfReplay::Status::kApplied) {
++          awaiting_post_gap_propagation_ = false;
++        }
++        releasePostGapOutputGateIfTrusted();
++        return;
++      }
++      if (status == core::EskfReplay::Status::kLargeGap) {
++        awaiting_post_gap_gnss_ = use_gnss_;
++        awaiting_post_gap_propagation_ = true;
++        post_gap_epoch_start_time_ = current_time_imu;
++        post_gap_gnss_reanchor_pending_ = false;
++        post_gap_gnss_measurement_id_ = 0U;
++        resetPostGapGnssConsistency();
++        replay_->reset();
++        const auto reanchor_status = replay_->addImu(
++          current_time_imu, gyro, linear_acceleration);
++        if (reanchor_status == core::EskfReplay::Status::kInitialized) {
++          previous_time_imu_ = current_time_imu;
++          has_previous_time_imu_ = true;
++          if (use_gnss_) {
++            RCLCPP_WARN(
++              node_.get_logger(),
++              "large IMU gap detected; replay epoch restarted at %.9f and output gated until "
++              "a post-gap GNSS position correction is applied",
++              current_time_imu);
++          } else {
++            RCLCPP_WARN(
++              node_.get_logger(),
++              "large IMU gap detected with GNSS disabled; replay epoch restarted at %.9f in "
++              "degraded mode and output will resume after the next valid IMU propagation",
++              current_time_imu);
++          }
++          return;
++        }
++        RCLCPP_ERROR(
++          node_.get_logger(),
++          "failed to re-anchor replay after large IMU gap: status=%d",
++          static_cast<int>(reanchor_status));
+         return;
+       }
+       if (status == core::EskfReplay::Status::kReverseImu) {
+@@ -2567,7 +2772,8 @@ struct EkfLocalizationComponent::Impl
+     for (int row = 0; row < 3; ++row) {
+       for (int column = row + 1; column < 3; ++column) {
+         if (candidate(row, row) > 0.0 && candidate(column, column) > 0.0) {
+-          const double correlation = std::max(-0.999, std::min(
++          const double correlation = std::max(
++            -0.999, std::min(
+               0.999, candidate(row, column) /
+               std::sqrt(candidate(row, row) * candidate(column, column))));
+           result(row, column) = correlation * std::sqrt(diagonal(row) * diagonal(column));
+@@ -2595,20 +2801,104 @@ struct EkfLocalizationComponent::Impl
+       body_pose_msg.pose.position.z = body_position.z();
+       if (enable_measurement_replay_) {
+         const Eigen::Vector3d lever_arm = gnss_lever_arm_body_;
++        const double measurement_time = stampToSec(pose_msg.header.stamp) +
++          gnss_time_offset_sec_;
++        const bool post_gap_measurement = awaiting_post_gap_gnss_ &&
++          measurement_time + 1.0e-12 >= post_gap_epoch_start_time_;
++        if (post_gap_measurement && post_gap_gnss_reanchor_pending_) {
++          return;
++        }
++        const bool reset_position_from_consistent_post_gap_gnss = post_gap_measurement &&
++          postGapGnssFixIsConsistent(
++          measurement_time, antenna_position, position_covariance);
++        if (post_gap_measurement && !reset_position_from_consistent_post_gap_gnss) {
++          return;
++        }
++        if (reset_position_from_consistent_post_gap_gnss) {
++          post_gap_gnss_reanchor_pending_ = true;
++        }
++        std::uint64_t measurement_id = 0U;
+         const auto status = applyReplayMeasurement(
+           pose_msg.header.stamp, 1U,
+-          [antenna_position, position_covariance, lever_arm](core::EKFEstimator & estimator) {
+-            return estimator.observationUpdateLeverArmPositionWithCovariance(
+-              antenna_position, lever_arm, position_covariance).status;
++          [this, antenna_position, position_covariance, lever_arm,
++          reset_position_from_consistent_post_gap_gnss](
++            core::EKFEstimator & estimator)
++          {
++            if (reset_position_from_consistent_post_gap_gnss) {
++              const Eigen::Matrix3d rotation =
++              estimator.getOrientation().normalized().toRotationMatrix();
++              const Eigen::Vector3d body_position = antenna_position - rotation * lever_arm;
++              const Eigen::Matrix3d lever_arm_attitude_jacobian =
++              rotation * core::EKFEstimator::skewSymmetric(lever_arm);
++              const Eigen::MatrixXd state_covariance = estimator.getCovariance();
++              const Eigen::Matrix3d body_position_covariance = position_covariance +
++              lever_arm_attitude_jacobian * state_covariance.block<3, 3>(6, 6) *
++              lever_arm_attitude_jacobian.transpose();
++              return estimator.reanchorPosition(body_position, body_position_covariance) ?
++              core::EKFEstimator::ObservationUpdateStatus::kUpdated :
++              core::EKFEstimator::ObservationUpdateStatus::kNumericalFailure;
++            }
++            const Eigen::Vector3d predicted_measurement =
++            estimator.getPosition() + estimator.getOrientation().normalized() * lever_arm;
++            const Eigen::Vector3d innovation = antenna_position - predicted_measurement;
++            core::EKFEstimator::ObservationJacobian3 observation_jacobian;
++            (void)core::EKFEstimator::leverArmPositionObservation(
++              estimator.getState(), lever_arm, &observation_jacobian);
++            const Eigen::MatrixXd covariance = estimator.getCovariance();
++            const double raw_nis = computePositionNis(
++              innovation, position_covariance, covariance, observation_jacobian);
++            const auto quality = evaluateConfiguredGnssPositionQuality(
++              innovation.norm(), raw_nis);
++            if (!quality.accepted) {
++              return core::EKFEstimator::ObservationUpdateStatus::kInvalidMeasurement;
++            }
++
++            const double nis_variance_scale = computeAdaptiveVarianceScale(
++              raw_nis, gnss_position_nis_adaptive_threshold_,
++              max_gnss_position_variance_scale_);
++            const double innovation_variance_scale = computeAdaptiveMagnitudeScale(
++              innovation.norm(), gnss_position_innovation_adaptive_threshold_m_,
++              max_gnss_position_innovation_variance_scale_);
++            const double robust_variance_scale =
++            core::EKFEstimator::computeRobustVarianceScale(
++              std::sqrt(std::max(0.0, raw_nis)), gnss_position_robust_loss_,
++              gnss_position_robust_tuning_, max_gnss_position_robust_variance_scale_);
++            const double variance_scale = std::max(
++              {nis_variance_scale, innovation_variance_scale, robust_variance_scale});
++            Eigen::Vector3d update_innovation = innovation;
++            const double innovation_norm = innovation.norm();
++            if (max_gnss_position_innovation_clip_m_ > 0.0 &&
++            std::isfinite(innovation_norm) &&
++            innovation_norm > max_gnss_position_innovation_clip_m_)
++            {
++              update_innovation *= max_gnss_position_innovation_clip_m_ / innovation_norm;
++            }
++            const Eigen::Vector3d update_position =
++            predicted_measurement + update_innovation;
++            const auto diagnostics = estimator.observationUpdateLeverArmPositionWithCovariance(
++              update_position, lever_arm, position_covariance * variance_scale);
++            if (diagnostics.status != core::EKFEstimator::ObservationUpdateStatus::kUpdated) {
++              return diagnostics.status;
++            }
++            return diagnostics.accepted ?
++            core::EKFEstimator::ObservationUpdateStatus::kUpdated :
++            core::EKFEstimator::ObservationUpdateStatus::kInvalidMeasurement;
+           },
+-          gnss_time_offset_sec_);
++          gnss_time_offset_sec_, &measurement_id);
+         if (status == core::EskfReplay::Status::kApplied ||
+           status == core::EskfReplay::Status::kQueuedFuture)
+         {
+-          const double measurement_time = stampToSec(pose_msg.header.stamp) +
+-            gnss_time_offset_sec_;
+           previous_gnss_position_time_ = measurement_time;
+           has_previous_gnss_position_time_ = true;
++          if (reset_position_from_consistent_post_gap_gnss && awaiting_post_gap_gnss_ &&
++            measurement_time + 1.0e-12 >= post_gap_epoch_start_time_)
++          {
++            rememberPostGapGnssCandidate(measurement_id);
++          }
++        } else if (reset_position_from_consistent_post_gap_gnss) {
++          post_gap_gnss_reanchor_pending_ = false;
++          post_gap_gnss_measurement_id_ = 0U;
++          resetPostGapGnssConsistency();
+         }
+         return;
+       }
+@@ -2672,6 +2962,14 @@ struct EkfLocalizationComponent::Impl
+            innovation.dot(solved_innovation) : std::numeric_limits<double>::quiet_NaN();
+   }
+ 
++  core::MeasurementQualityResult evaluateConfiguredGnssPositionQuality(
++    const double innovation_norm, const double nis) const
++  {
++    return core::evaluateMeasurementQuality(
++      true, innovation_norm, nis,
++      max_gnss_position_innovation_m_, max_gnss_position_nis_);
++  }
++
+   double computeYawNis(
+     const double innovation,
+     const double variance,
+@@ -3068,9 +3366,7 @@ struct EkfLocalizationComponent::Impl
+       }
+     }
+ 
+-    const auto quality = core::evaluateMeasurementQuality(
+-      true, innovation_norm, raw_nis,
+-      max_gnss_position_innovation_m_, max_gnss_position_nis_);
++    const auto quality = evaluateConfiguredGnssPositionQuality(innovation_norm, raw_nis);
+     if (!quality.accepted) {
+       if (publish_gnss_debug) {
+         publishGnssPositionDebug(
+@@ -3128,7 +3424,8 @@ struct EkfLocalizationComponent::Impl
+       gnss_position_robust_tuning_,
+       max_gnss_position_robust_variance_scale_);
+     const double variance_scale =
+-      std::max({
++      std::max(
++      {
+         nis_variance_scale, innovation_variance_scale,
+         reacquisition_variance_scale, robust_variance_scale});
+     Eigen::Vector3d update_innovation = innovation;
+@@ -3191,8 +3488,9 @@ struct EkfLocalizationComponent::Impl
+     if (publish_gnss_debug) {
+       publishGnssPositionDebug(
+         pose_msg, innovation, used_nis, 1, used_variance, covariance, raw_nis, variance_scale);
+-      publishUpdateDeltaDebug(pose_msg.header.stamp, 1, 1, state_before, captureState(),
+-          update_extra);
++      publishUpdateDeltaDebug(
++        pose_msg.header.stamp, 1, 1, state_before, captureState(),
++        update_extra);
+       publishMeasurementQuality(
+         pose_msg.header.stamp, 1, diagnostics.accepted,
+         diagnostics.accepted ? core::MeasurementRejectReason::kNone :
+@@ -3685,7 +3983,9 @@ struct EkfLocalizationComponent::Impl
+ 
+   void broadcastPose()
+   {
+-    if (!initial_pose_received_ || !has_received_input_) {
++    if (!initial_pose_received_ || !has_received_input_ || awaiting_post_gap_gnss_ ||
++      awaiting_post_gap_propagation_)
++    {
+       return;
+     }
+     const auto pose = ekf_.getPose();
+@@ -3907,6 +4207,11 @@ struct EkfLocalizationComponent::Impl
+   double max_gnss_position_innovation_m_{0.0};
+   double max_gnss_position_innovation_clip_m_{0.0};
+   double max_gnss_position_nis_{0.0};
++  int post_gap_gnss_required_consistent_fixes_{3};
++  double post_gap_gnss_max_fix_interval_sec_{2.0};
++  double post_gap_gnss_min_consistency_span_sec_{0.1};
++  double post_gap_gnss_max_speed_mps_{70.0};
++  double post_gap_gnss_consistency_tolerance_m_{5.0};
+   double max_gnss_course_yaw_nis_{0.0};
+   double gnss_position_nis_adaptive_threshold_{0.0};
+   double max_gnss_position_variance_scale_{1.0};
+@@ -3945,6 +4250,17 @@ struct EkfLocalizationComponent::Impl
+   bool initial_pose_received_{false};
+   bool has_received_input_{false};
+   bool has_latest_imu_stamp_{false};
++  bool awaiting_post_gap_gnss_{false};
++  bool awaiting_post_gap_propagation_{false};
++  double post_gap_epoch_start_time_{std::numeric_limits<double>::quiet_NaN()};
++  bool post_gap_gnss_reanchor_pending_{false};
++  std::uint64_t post_gap_gnss_measurement_id_{0U};
++  bool has_post_gap_gnss_consistency_base_{false};
++  std::size_t post_gap_gnss_consistent_fix_count_{0U};
++  double post_gap_gnss_consistency_first_time_{std::numeric_limits<double>::quiet_NaN()};
++  double post_gap_gnss_consistency_time_{std::numeric_limits<double>::quiet_NaN()};
++  Eigen::Vector3d post_gap_gnss_consistency_position_{Eigen::Vector3d::Zero()};
++  Eigen::Matrix3d post_gap_gnss_consistency_covariance_{Eigen::Matrix3d::Zero()};
+ 
+   std::uint64_t received_initial_pose_count_{0};
+   std::uint64_t received_imu_count_{0};
+diff --git a/kalman_filter_localization_ros2/test/test_ekf_large_gap_recovery.cpp b/kalman_filter_localization_ros2/test/test_ekf_large_gap_recovery.cpp
+new file mode 100644
+index 0000000..b17953b
+--- /dev/null
++++ b/kalman_filter_localization_ros2/test/test_ekf_large_gap_recovery.cpp
+@@ -0,0 +1,432 @@
++// Copyright (c) 2026, HEVEN contributors
++// All rights reserved.
++//
++// Software License Agreement (BSD License 2.0)
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++//  * Redistributions of source code must retain the above copyright
++//    notice, this list of conditions and the following disclaimer.
++//  * Redistributions in binary form must reproduce the above
++//    copyright notice, this list of conditions and the following
++//    disclaimer in the documentation and/or other materials provided
++//    with the distribution.
++//  * Neither the name of HEVEN contributors nor the names of its
++//    contributors may be used to endorse or promote products derived
++//    from this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++#include <gtest/gtest.h>
++
++#include <chrono>
++#include <cstddef>
++#include <functional>
++#include <limits>
++#include <memory>
++#include <stdexcept>
++#include <string>
++#include <thread>
++#include <vector>
++
++#include <geometry_msgs/msg/pose_stamped.hpp>
++#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
++#include <nav_msgs/msg/odometry.hpp>
++#include <rclcpp/rclcpp.hpp>
++#include <sensor_msgs/msg/imu.hpp>
++
++#include <kalman_filter_localization/ekf_localization_component.hpp>
++
++namespace
++{
++using namespace std::chrono_literals;
++
++builtin_interfaces::msg::Time stamp(const double seconds)
++{
++  builtin_interfaces::msg::Time result;
++  result.sec = static_cast<std::int32_t>(seconds);
++  result.nanosec = static_cast<std::uint32_t>((seconds - result.sec) * 1.0e9);
++  return result;
++}
++
++bool spinUntil(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  const std::function<bool()> & predicate,
++  const std::chrono::milliseconds timeout = 1000ms)
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  while (std::chrono::steady_clock::now() < deadline) {
++    executor.spin_some();
++    if (predicate()) {
++      return true;
++    }
++    std::this_thread::sleep_for(2ms);
++  }
++  executor.spin_some();
++  return predicate();
++}
++
++class EkfLargeGapRecoveryTest : public ::testing::Test
++{
++protected:
++  bool use_gnss_{true};
++
++  void SetUp() override
++  {
++    const std::vector<rclcpp::Parameter> parameters{
++      rclcpp::Parameter("initial_pose_topic", "/large_gap_test/initial_pose"),
++      rclcpp::Parameter("imu_topic", "/large_gap_test/imu"),
++      rclcpp::Parameter("gnss_pose_topic", "/large_gap_test/gnss_pose"),
++      rclcpp::Parameter("wheel_speed_topic", "/large_gap_test/wheel_speed"),
++      rclcpp::Parameter("enable_measurement_replay", true),
++      rclcpp::Parameter("measurement_history_duration_sec", 2.0),
++      rclcpp::Parameter("max_future_measurement_wait_sec", 0.25),
++      rclcpp::Parameter("max_imu_dt_sec", 0.05),
++      rclcpp::Parameter("output_publish_mode", "imu"),
++      rclcpp::Parameter("output_stamp_source", "imu"),
++      rclcpp::Parameter("publish_tf", false),
++      rclcpp::Parameter("enable_stationary_initialization", false),
++      rclcpp::Parameter("use_gnss", use_gnss_),
++      rclcpp::Parameter("use_wheel_speed", true),
++      rclcpp::Parameter("max_wheel_speed_innovation_mps", 0.0),
++      rclcpp::Parameter("max_gnss_position_innovation_m", 5.0),
++      rclcpp::Parameter("post_gap_gnss_min_consistency_span_sec", 0.015),
++      rclcpp::Parameter("gnss_input_type", "pose"),
++      rclcpp::Parameter("reference_frame_id", "map"),
++      rclcpp::Parameter("robot_frame_id", "base_link")};
++    rclcpp::NodeOptions options;
++    options.arguments({"--ros-args", "-r", "__node:=ekf_large_gap_test"});
++    options.parameter_overrides(parameters);
++    ekf_node_ = std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++    probe_node_ = std::make_shared<rclcpp::Node>("ekf_large_gap_probe");
++    initial_pose_pub_ = probe_node_->create_publisher<geometry_msgs::msg::PoseStamped>(
++      "/large_gap_test/initial_pose", 10);
++    imu_pub_ = probe_node_->create_publisher<sensor_msgs::msg::Imu>(
++      "/large_gap_test/imu", rclcpp::SensorDataQoS());
++    gnss_pub_ = probe_node_->create_publisher<geometry_msgs::msg::PoseStamped>(
++      "/large_gap_test/gnss_pose", 10);
++    wheel_pub_ = probe_node_->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>(
++      "/large_gap_test/wheel_speed", rclcpp::SensorDataQoS());
++    pose_sub_ = probe_node_->create_subscription<geometry_msgs::msg::PoseStamped>(
++      "/ekf_large_gap_test/current_pose", 10,
++      [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr message) {
++        output_stamps_.push_back(message->header.stamp);
++        output_positions_x_.push_back(message->pose.position.x);
++      });
++    odometry_sub_ = probe_node_->create_subscription<nav_msgs::msg::Odometry>(
++      "/ekf_large_gap_test/current_odometry", 10,
++      [this](nav_msgs::msg::Odometry::ConstSharedPtr) {++odometry_output_count_;});
++    executor_.add_node(ekf_node_);
++    executor_.add_node(probe_node_);
++    ASSERT_TRUE(
++      spinUntil(
++        executor_, [this]() {
++          return initial_pose_pub_->get_subscription_count() == 1U &&
++          imu_pub_->get_subscription_count() == 1U &&
++          gnss_pub_->get_subscription_count() == 1U &&
++          wheel_pub_->get_subscription_count() == 1U &&
++          pose_sub_->get_publisher_count() == 1U &&
++          odometry_sub_->get_publisher_count() == 1U;
++        }));
++  }
++
++  void TearDown() override
++  {
++    executor_.remove_node(probe_node_);
++    executor_.remove_node(ekf_node_);
++    pose_sub_.reset();
++    initial_pose_pub_.reset();
++    imu_pub_.reset();
++    gnss_pub_.reset();
++    wheel_pub_.reset();
++    odometry_sub_.reset();
++    probe_node_.reset();
++    ekf_node_.reset();
++  }
++
++  void publishInitialPose(const double time)
++  {
++    geometry_msgs::msg::PoseStamped message;
++    message.header.stamp = stamp(time);
++    message.header.frame_id = "map";
++    message.pose.orientation.w = 1.0;
++    initial_pose_pub_->publish(message);
++  }
++
++  void publishImu(const double time)
++  {
++    sensor_msgs::msg::Imu message;
++    message.header.stamp = stamp(time);
++    message.header.frame_id = "base_link";
++    message.orientation.w = 1.0;
++    message.linear_acceleration.z = 9.80665;
++    imu_pub_->publish(message);
++  }
++
++  void publishGnss(const double time, const double x = 0.0)
++  {
++    geometry_msgs::msg::PoseStamped message;
++    message.header.stamp = stamp(time);
++    message.header.frame_id = "map";
++    message.pose.position.x = x;
++    message.pose.orientation.w = 1.0;
++    gnss_pub_->publish(message);
++  }
++
++  void publishInvalidGnss(const double time)
++  {
++    geometry_msgs::msg::PoseStamped message;
++    message.header.stamp = stamp(time);
++    message.header.frame_id = "map";
++    message.pose.position.x = std::numeric_limits<double>::quiet_NaN();
++    message.pose.orientation.w = 1.0;
++    gnss_pub_->publish(message);
++  }
++
++  void publishWheelSpeed(const double time)
++  {
++    geometry_msgs::msg::TwistWithCovarianceStamped message;
++    message.header.stamp = stamp(time);
++    message.header.frame_id = "base_link";
++    wheel_pub_->publish(message);
++  }
++
++  rclcpp::executors::SingleThreadedExecutor executor_;
++  std::shared_ptr<kalman_filter_localization::EkfLocalizationComponent> ekf_node_;
++  rclcpp::Node::SharedPtr probe_node_;
++  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr initial_pose_pub_;
++  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
++  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr gnss_pub_;
++  rclcpp::Publisher<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr wheel_pub_;
++  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
++  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_sub_;
++  std::vector<builtin_interfaces::msg::Time> output_stamps_;
++  std::vector<double> output_positions_x_;
++  std::size_t odometry_output_count_{0U};
++};
++
++class EkfLargeGapNoGnssTest : public EkfLargeGapRecoveryTest
++{
++protected:
++  EkfLargeGapNoGnssTest() {use_gnss_ = false;}
++};
++
++TEST_F(EkfLargeGapRecoveryTest, SuppressesFreshOutputUntilPostGapGnssIsApplied)
++{
++  publishInitialPose(10.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(10.0);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 1U;}));
++  publishImu(10.01);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 2U;}));
++  const std::size_t output_count_before_gap = output_stamps_.size();
++  const std::size_t odometry_count_before_gap = odometry_output_count_;
++
++  publishImu(11.0);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap);
++  publishWheelSpeed(11.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(11.01);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap);
++
++  publishInvalidGnss(11.01);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  EXPECT_EQ(output_stamps_.size(), output_count_before_gap);
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap);
++
++  // More than the bounded candidate capacity: alternating isolated outliers must never form a
++  // consistent recovery sequence or release the output gate.
++  for (int index = 0; index < 80; ++index) {
++    const double outlier_x = index % 2 == 0 ? 100.0 : -100.0;
++    publishGnss(11.011 + static_cast<double>(index) * 1.0e-5, outlier_x);
++    ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  }
++  // Even a coherent high-rate burst cannot satisfy the independent minimum time span.
++  for (int index = 0; index < 80; ++index) {
++    publishGnss(11.012 + static_cast<double>(index) * 1.0e-5, 20.0 + index * 1.0e-3);
++    ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  }
++  // Duplicate, reverse, and excessively separated stamps each restart consistency collection.
++  publishGnss(11.013, 0.0);
++  publishGnss(11.013, 0.1);
++  publishGnss(11.0129, 0.2);
++  publishGnss(14.0, 0.3);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(11.02);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap);
++
++  publishGnss(11.025, 0.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(11.03);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++
++  publishGnss(11.035, 0.1);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(11.04);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++
++  publishGnss(11.045, 0.2);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  EXPECT_EQ(output_stamps_.size(), output_count_before_gap);
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap);
++  // The trusted third fix is queued in replay. A later fix must not schedule a second re-anchor.
++  publishGnss(11.046, 1000.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(11.05);
++  ASSERT_TRUE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() == output_count_before_gap + 1U;
++      }));
++  EXPECT_EQ(odometry_output_count_, odometry_count_before_gap + 1U);
++  EXPECT_EQ(output_stamps_.back().sec, 11);
++  EXPECT_NEAR(output_stamps_.back().nanosec, 50000000U, 2U);
++  EXPECT_NEAR(output_positions_x_.back(), 0.2, 0.5);
++}
++
++TEST_F(EkfLargeGapRecoveryTest, ConsistentFixesRecoverBeyondNormalInnovationGate)
++{
++  publishInitialPose(30.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(30.0);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 1U;}));
++  publishImu(30.01);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 2U;}));
++  const std::size_t output_count_before_gap = output_stamps_.size();
++
++  publishImu(31.0);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  publishImu(31.01);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++
++  publishGnss(31.015, 100.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(31.02);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  publishGnss(31.025, 101.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(31.03);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  publishGnss(31.035, 102.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(31.04);
++  ASSERT_TRUE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() == output_count_before_gap + 1U;
++      }));
++  EXPECT_NEAR(ekf_node_->get_parameter("max_gnss_position_innovation_m").as_double(), 5.0, 1e-12);
++  ASSERT_FALSE(output_positions_x_.empty());
++  EXPECT_NEAR(output_positions_x_.back(), 102.0, 0.5);
++
++  // After recovery, the ordinary 5 m innovation gate is active again.
++  publishGnss(31.045, 200.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(31.05);
++  ASSERT_TRUE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() == output_count_before_gap + 2U;
++      }));
++  EXPECT_NEAR(output_positions_x_.back(), 102.0, 0.5);
++}
++
++TEST_F(EkfLargeGapNoGnssTest, ResumesOnNextImuWithoutWaitingForUnavailableGnss)
++{
++  publishInitialPose(20.0);
++  ASSERT_TRUE(spinUntil(executor_, []() {return true;}));
++  publishImu(20.0);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 1U;}));
++  publishImu(20.01);
++  ASSERT_TRUE(spinUntil(executor_, [this]() {return output_stamps_.size() >= 2U;}));
++  const std::size_t output_count_before_gap = output_stamps_.size();
++
++  publishImu(21.0);
++  EXPECT_FALSE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() > output_count_before_gap;
++      }, 100ms));
++  publishImu(21.01);
++  ASSERT_TRUE(
++    spinUntil(
++      executor_, [this, output_count_before_gap]() {
++        return output_stamps_.size() == output_count_before_gap + 1U;
++      }));
++  EXPECT_EQ(output_stamps_.back().sec, 21);
++  EXPECT_NEAR(output_stamps_.back().nanosec, 10000000U, 2U);
++}
++
++TEST(EkfConfiguration, RejectsStatefulGnssReacquisitionWithReplay)
++{
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_invalid_reacquisition_test"});
++  options.parameter_overrides(
++    {rclcpp::Parameter("enable_measurement_replay", true),
++      rclcpp::Parameter("gnss_position_reacquisition_dt_sec", 1.0)});
++  EXPECT_THROW(
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options),
++    std::invalid_argument);
++}
++}  // namespace
++
++int main(int argc, char ** argv)
++{
++  ::testing::InitGoogleTest(&argc, argv);
++  rclcpp::init(argc, argv);
++  const int result = RUN_ALL_TESTS();
++  rclcpp::shutdown();
++  return result;
++}

@@ -1,0 +1,229 @@
+schema_version: 1
+
+vehicle:
+  model: 2023_Hyundai_Ioniq5
+  assumed_variant: 77.4_kWh_AWD_20in
+  coordinate_convention:
+    base_frame: base_link
+    origin: rear_axle_center_at_ground
+    axes: {x: forward, y: left, z: up}
+
+  control:
+    lateral_control_point_x_m: 3.000
+
+  geometry:
+    length_m: 4.635
+    width_m: 1.890
+    height_m: 1.605
+    wheelbase_m: 3.000
+    front_track_m: 1.628
+    rear_track_m: 1.637
+    front_overhang_m: 0.845
+    rear_overhang_m: 0.790
+    front_bumper_x_m: 3.845
+    rear_bumper_x_m: -0.790
+    geometric_center_x_m: 1.5275
+
+  mass:
+    curb_mass_kg: 2085.0
+    catalog_curb_mass_range_kg: [1840.0, 2085.0]
+    # These NHTSA values are a different 2022 IONIQ 5 SE test vehicle and are
+    # retained as measured cross-checks, not as the assumed AWD/20-inch mass.
+    nhtsa_test_vehicle_as_delivered_mass_kg: 1940.0
+    nhtsa_test_vehicle_as_tested_mass_kg: 2118.0
+    nhtsa_test_vehicle_fully_loaded_mass_kg: 2132.5
+
+  dynamics:
+    # lf/lr use the common bicycle-model convention: CG to front/rear axle.
+    # The initial nominal split is provisional until MORAI VehicleSpec or a
+    # variant-matched measurement is available.
+    cg_to_front_axle_m: 1.488
+    cg_to_rear_axle_m: 1.512
+    cg_x_from_rear_axle_m: 1.512
+    # Regression estimate for a BEV of this roof height, not a direct IONIQ 5
+    # measurement. The NHTSA test reference below is retained separately.
+    cg_height_m: 0.524
+    yaw_inertia_kg_m2: 3350.0
+    yaw_inertia_sensitivity_range_kg_m2: [2850.0, 3850.0]
+    nhtsa_test_vehicle_cg_aft_front_axle_as_tested_m: 1.585
+    nhtsa_test_vehicle_cg_x_from_rear_axle_as_tested_m: 1.415
+    nhtsa_test_vehicle_accelerometer_reference_height_m: 0.487
+    # These require MORAI VehicleSpec output or physical identification before
+    # use in a dynamic tire model; null prevents false precision.
+    front_cornering_stiffness_n_per_rad: null
+    rear_cornering_stiffness_n_per_rad: null
+    roll_inertia_kg_m2: null
+    pitch_inertia_kg_m2: null
+
+  tires:
+    size: 255/45R20
+    nominal_unloaded_radius_m: 0.36875
+    initial_wheel_radius_m: 0.369
+    effective_rolling_radius_m: null
+
+  steering:
+    overall_ratio: 14.26
+    turns_lock_to_lock: 2.67
+    max_steering_wheel_angle_rad: 8.388
+    initial_bicycle_max_road_wheel_angle_rad: 0.588
+    turning_circle_diameter_m: 11.98
+
+  aerodynamics:
+    drag_coefficient: 0.288
+    frontal_area_m2: 2.619
+    drag_area_m2: 0.754
+    air_density_kg_m3: 1.225
+
+  collision_footprint:
+    center_offset_x_m: 1.5275
+    half_length_m: 2.3175
+    half_width_m: 0.945
+    clearance_m: 0.20
+    occupied_threshold: 100
+    maximum_cells_to_check: 4096
+
+calibration_required:
+  - effective_rolling_radius_m
+  - front_cornering_stiffness_n_per_rad
+  - rear_cornering_stiffness_n_per_rad
+  - roll_inertia_kg_m2
+  - pitch_inertia_kg_m2
+  - morai_max_road_wheel_angle_rad
+
+# Each provenance entry declares the parameter subtrees or scalar paths it
+# covers. Runtime MORAI Actor.VehicleSpec values take precedence for
+# simulator-specific behavior.
+provenance:
+  control_geometry:
+    covers: [vehicle.control]
+    status: derived
+    source: front_axle_control_point_derivation
+  geometry:
+    covers: [vehicle.geometry]
+    status: manufacturer_confirmed
+    source: hyundai_pre_facelift_catalog
+  catalog_mass:
+    covers:
+      - vehicle.mass.curb_mass_kg
+      - vehicle.mass.catalog_curb_mass_range_kg
+    status: manufacturer_confirmed
+    source: hyundai_pre_facelift_catalog
+  nhtsa_test_mass:
+    covers:
+      - vehicle.mass.nhtsa_test_vehicle_as_delivered_mass_kg
+      - vehicle.mass.nhtsa_test_vehicle_as_tested_mass_kg
+      - vehicle.mass.nhtsa_test_vehicle_fully_loaded_mass_kg
+    status: measured
+    source: nhtsa_2022_side_mdb_report
+  nominal_cg_longitudinal:
+    covers:
+      - vehicle.dynamics.cg_to_front_axle_m
+      - vehicle.dynamics.cg_to_rear_axle_m
+      - vehicle.dynamics.cg_x_from_rear_axle_m
+    status: provisional
+    source: initial_near_midpoint_assumption
+  cg_height:
+    covers: [vehicle.dynamics.cg_height_m]
+    status: derived
+    source: peer_reviewed_bev_inertia_regression
+  nhtsa_test_cg:
+    covers:
+      - vehicle.dynamics.nhtsa_test_vehicle_cg_aft_front_axle_as_tested_m
+      - vehicle.dynamics.nhtsa_test_vehicle_cg_x_from_rear_axle_as_tested_m
+      - vehicle.dynamics.nhtsa_test_vehicle_accelerometer_reference_height_m
+    status: measured
+    source: nhtsa_2022_side_mdb_report
+  yaw_inertia:
+    covers:
+      - vehicle.dynamics.yaw_inertia_kg_m2
+      - vehicle.dynamics.yaw_inertia_sensitivity_range_kg_m2
+    status: derived
+    source: peer_reviewed_bev_inertia_regression
+  uncalibrated_dynamics:
+    covers:
+      - vehicle.dynamics.front_cornering_stiffness_n_per_rad
+      - vehicle.dynamics.rear_cornering_stiffness_n_per_rad
+      - vehicle.dynamics.roll_inertia_kg_m2
+      - vehicle.dynamics.pitch_inertia_kg_m2
+    status: provisional
+    source: calibration_required_policy
+  tires:
+    covers: [vehicle.tires]
+    status: derived
+    source: tire_size_geometry
+  steering:
+    covers: [vehicle.steering]
+    status: manufacturer_confirmed
+    source: hyundai_au_and_indonesia_specs
+  drag_coefficient:
+    covers: [vehicle.aerodynamics.drag_coefficient]
+    status: manufacturer_confirmed
+    source: hyundai_ioniq5_brochure
+  frontal_area:
+    covers: [vehicle.aerodynamics.frontal_area_m2]
+    status: provisional
+    source: eu_coc_secondary_report_cross_checked_with_epa_road_load
+  drag_area:
+    covers: [vehicle.aerodynamics.drag_area_m2]
+    status: derived
+    source: drag_area_product
+  air_density:
+    covers: [vehicle.aerodynamics.air_density_kg_m3]
+    status: provisional
+    source: standard_atmosphere_sea_level
+  collision_geometry:
+    covers:
+      - vehicle.collision_footprint.center_offset_x_m
+      - vehicle.collision_footprint.half_length_m
+      - vehicle.collision_footprint.half_width_m
+    status: derived
+    source: vehicle_geometry_derivation
+  collision_policy:
+    covers:
+      - vehicle.collision_footprint.clearance_m
+      - vehicle.collision_footprint.occupied_threshold
+      - vehicle.collision_footprint.maximum_cells_to_check
+    status: provisional
+    source: project_initial_collision_policy
+
+sources:
+  hyundai_pre_facelift_catalog:
+    url: https://www.hyundai.com/sg/static/fo-brand/assets/etc/ioniq5-catalog.pdf
+    pages: [23]
+  hyundai_au_and_indonesia_specs:
+    urls:
+      - https://www.hyundai.com/content/dam/hyundai/au/en/models/ioniq5/images/IONIQ5_Spec-Table_Oct_2022.pdf
+      - https://www.hyundai.com/content/dam/hyundai/id/en/data/marketing/brochure/product/ioniq5/BROCHURE_IONIQ-5_BLUELINK.pdf
+  nhtsa_2022_side_mdb_report:
+    url: https://downloads.regulations.gov/NHTSA-2021-0049-0035/attachment_1.pdf
+    report_number: SINCAP-CAL-22-003
+    pages: [3-4, 3-13]
+  peer_reviewed_bev_inertia_regression:
+    url: https://www.mdpi.com/2032-6653/15/6/266
+    equations: [1, 3]
+  hyundai_ioniq5_brochure:
+    url: https://www.hyundai.com/content/dam/hyundai/hk/en/data/marketing/brochure/product/ioniq5/Hyundai-IONIQ-5-Brochure.pdf
+  epa_road_load:
+    url: https://dis.epa.gov/otaqpub/display_file.jsp?docid=54043&flag=1
+  eu_coc_secondary_report:
+    url: https://www.goingelectric.de/forum/viewtopic.php?p=1913401
+  eu_coc_secondary_report_cross_checked_with_epa_road_load:
+    references: [eu_coc_secondary_report, epa_road_load]
+    note: Frontal area remains provisional because the primary CoC is not public.
+  initial_near_midpoint_assumption:
+    note: Initial bicycle-model value only; replace after variant-matched identification.
+  calibration_required_policy:
+    note: Unknown values remain null instead of receiving false precision.
+  tire_size_geometry:
+    note: Nominal unloaded radius derived from the 255/45R20 size geometry.
+  drag_area_product:
+    note: Product of drag_coefficient and frontal_area_m2.
+  standard_atmosphere_sea_level:
+    url: https://www.grc.nasa.gov/www/k-12/airplane/atmosmet.html
+    note: Conventional dry-air density at 15 C and sea level.
+  vehicle_geometry_derivation:
+    note: Rectangle derived from official body length and width about the rear axle.
+  front_axle_control_point_derivation:
+    note: Nominal Stanley control point placed at the front axle, one wheelbase ahead of the rear-axle base_link.
+  project_initial_collision_policy:
+    note: Conservative initial DWA policy; validate with MORAI obstacle scenarios.

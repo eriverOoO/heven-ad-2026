@@ -1,0 +1,22 @@
+ad_planner:
+  ros__parameters:
+    profile_stanley.cross_track_gain: 1.2590347192291622
+    profile_stanley.speed_softening_mps: 1.8151037682456395
+    profile_stanley.heading_error_gain: 0.8204460682192964
+    profile_stanley.lookahead_time_s: 0.0829957038411917
+    profile_stanley.curvature_lookahead_m: 2.818227339182336
+    profile_stanley.speed_pid.kp: 0.35523299734554153
+    profile_stanley.speed_pid.kd: 0.007949498723771662
+    profile_stanley.brake_pid.kp: 0.1869594609763207
+    profile_stanley.brake_pid.kd: 0.014300904664999885
+    profile_stanley.lookahead_min_m: 1.5
+    profile_stanley.lookahead_max_m: 5.0
+    profile_stanley.target_speed_mps: 16.25
+    profile_stanley.maximum_speed_mps: 16.666666666666668
+    profile_stanley.lateral_acceleration_mps2: 6.0
+    profile_stanley.acceleration_mps2: 5.0
+    profile_stanley.deceleration_mps2: 2.0
+    profile_stanley.speed_pid.ki: 0.0
+    profile_stanley.speed_pid.derivative_limit: 10.0
+    profile_stanley.speed_pid.derivative_filter_time_constant_s: 0.1
+    profile_stanley.brake_pid.ki: 0.0

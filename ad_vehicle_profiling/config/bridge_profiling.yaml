@@ -1,0 +1,40 @@
+/**:
+  ros__parameters:
+    queue_capacity: 256
+    timestamp_mode: source_preferred
+    source_stamp_tolerance_sec: 1.0
+    publish_raw_packets: false
+
+    competition_status:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 1909
+      topic: /ad/vehicle/status
+      frame_id: map
+      receive_buffer_bytes: 4194304
+      stale_after_sec: 1.0
+
+    collisions:
+      enabled: true
+      bind_ip: 127.0.0.1
+      port: 9092
+      topic: /ad/safety/collisions
+      frame_id: map
+      receive_buffer_bytes: 4194304
+      stale_after_sec: 1.0
+
+    camera_front.enabled: false
+    camera_left.enabled: false
+    camera_right.enabled: false
+    camera_traffic_light.enabled: false
+    gps.enabled: false
+    imu.enabled: false
+    velodyne.enabled: false
+
+    control:
+      enabled: false
+      target_ip: 127.0.0.1
+      target_port: 9093
+      topic: /ad/control/command
+      watchdog_timeout_sec: 0.2
+      fallback_interval_sec: 0.1

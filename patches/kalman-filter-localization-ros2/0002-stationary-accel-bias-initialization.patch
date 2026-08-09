@@ -1,0 +1,535 @@
+diff --git a/docs/eskf_math.md b/docs/eskf_math.md
+index 1db3201..539f0c3 100644
+--- a/docs/eskf_math.md
++++ b/docs/eskf_math.md
+@@ -209,6 +209,28 @@ sub-block is a named `decoupled` ablation, not the normative ESKF update.
+ h_{bg}=b_g,\qquad H_{bg}=[0\;0\;0\;I\;0].
+ \]
+ 
++### Accelerometer bias during stationary initialization
++
++For a stationary IMU, the mean measured specific force obeys
++
++\[
++\bar f_m^b=R(q_{wb})^Tg^w+b_a^b,\qquad g^w=[0,0,g]^T.
++\]
++
++When roll and pitch are initialized from the same acceleration mean, only the
++bias component parallel to body-frame gravity is observable. With
++\(n^b=\bar f_m^b/\lVert\bar f_m^b\rVert\), the initializer reports
++
++\[
++b_{a,\parallel}^b=(\lVert\bar f_m^b\rVert-g)n^b
++=\bar f_m^b-R(q_{wb})^Tg^w.
++\]
++
++Bias perpendicular to gravity is indistinguishable from roll/pitch error in a
++single stationary pose and is not initialized. The ROS component injects this
++observable component only when `stationary_initialization_estimate_accel_bias`
++is enabled; it is disabled by default for compatibility.
++
+ ### Absolute orientation and course yaw
+ 
+ For quaternion measurement \(q_z\), the innovation is the shortest-arc log map
+diff --git a/kalman_filter_localization_core/include/kalman_filter_localization/core/imu_initializer.hpp b/kalman_filter_localization_core/include/kalman_filter_localization/core/imu_initializer.hpp
+index 624d211..cad79ec 100644
+--- a/kalman_filter_localization_core/include/kalman_filter_localization/core/imu_initializer.hpp
++++ b/kalman_filter_localization_core/include/kalman_filter_localization/core/imu_initializer.hpp
+@@ -74,6 +74,7 @@ public:
+   {
+     Status status{Status::kCollecting};
+     Eigen::Vector3d gyro_bias{Eigen::Vector3d::Zero()};
++    Eigen::Vector3d observable_accel_bias{Eigen::Vector3d::Zero()};
+     Eigen::Quaterniond roll_pitch_orientation{Eigen::Quaterniond::Identity()};
+     double confidence{0.0};
+     double gyro_std_radps{std::numeric_limits<double>::quiet_NaN()};
+@@ -189,8 +190,11 @@ private:
+       return result_.status;
+     }
+     result_.gyro_bias = gyro_mean;
++    const Eigen::Vector3d gravity_direction_body = accel_mean.normalized();
++    result_.observable_accel_bias =
++      (accel_mean.norm() - config_.gravity_mps2) * gravity_direction_body;
+     result_.roll_pitch_orientation = Eigen::Quaterniond::FromTwoVectors(
+-      accel_mean.normalized(), Eigen::Vector3d::UnitZ()).normalized();
++      gravity_direction_body, Eigen::Vector3d::UnitZ()).normalized();
+     result_.status = Status::kInitialized;
+     return result_.status;
+   }
+diff --git a/kalman_filter_localization_core/test/test_imu_initializer.cpp b/kalman_filter_localization_core/test/test_imu_initializer.cpp
+index e648e11..14798a8 100644
+--- a/kalman_filter_localization_core/test/test_imu_initializer.cpp
++++ b/kalman_filter_localization_core/test/test_imu_initializer.cpp
+@@ -74,6 +74,85 @@ TEST(ImuStationaryInitializer, EstimatesGyroBiasAndRollPitchFromStationaryWindow
+   EXPECT_GT(result.confidence, 0.95);
+ }
+ 
++TEST(ImuStationaryInitializer, EstimatesGravityObservableAccelBiasWithCorrectSign)
++{
++  ImuStationaryInitializer::Config config;
++  config.window_duration_sec = 0.1;
++  config.minimum_samples = 10U;
++  ImuStationaryInitializer initializer(config);
++  for (int index = 0; index <= 10; ++index) {
++    initializer.addSample(
++      index * 0.01, Eigen::Vector3d::Zero(),
++      Eigen::Vector3d(0.0, 0.0, config.gravity_mps2 + 0.1));
++  }
++
++  const auto & result = initializer.result();
++  ASSERT_EQ(result.status, ImuStationaryInitializer::Status::kInitialized);
++  EXPECT_TRUE(result.observable_accel_bias.isApprox(Eigen::Vector3d(0.0, 0.0, 0.1), 1.0e-12));
++}
++
++TEST(ImuStationaryInitializer, EstimatesNegativeGravityObservableAccelBias)
++{
++  ImuStationaryInitializer::Config config;
++  config.window_duration_sec = 0.1;
++  config.minimum_samples = 10U;
++  ImuStationaryInitializer initializer(config);
++  for (int index = 0; index <= 10; ++index) {
++    initializer.addSample(
++      index * 0.01, Eigen::Vector3d::Zero(),
++      Eigen::Vector3d(0.0, 0.0, config.gravity_mps2 - 0.1));
++  }
++
++  const auto & result = initializer.result();
++  ASSERT_EQ(result.status, ImuStationaryInitializer::Status::kInitialized);
++  EXPECT_TRUE(
++    result.observable_accel_bias.isApprox(Eigen::Vector3d(0.0, 0.0, -0.1), 1.0e-12));
++}
++
++TEST(ImuStationaryInitializer, ProjectsTiltedResidualOntoBodyGravityDirection)
++{
++  ImuStationaryInitializer::Config config;
++  config.window_duration_sec = 0.1;
++  config.minimum_samples = 10U;
++  ImuStationaryInitializer initializer(config);
++  const Eigen::Vector3d gravity_direction_body(-0.5, 0.0, std::sqrt(3.0) / 2.0);
++  const Eigen::Vector3d acceleration =
++    (config.gravity_mps2 + 0.2) * gravity_direction_body;
++  for (int index = 0; index <= 10; ++index) {
++    initializer.addSample(index * 0.01, Eigen::Vector3d::Zero(), acceleration);
++  }
++
++  const auto & result = initializer.result();
++  ASSERT_EQ(result.status, ImuStationaryInitializer::Status::kInitialized);
++  const Eigen::Vector3d expected_bias(-0.1, 0.0, 0.17320508075688773);
++  EXPECT_TRUE(result.observable_accel_bias.isApprox(expected_bias, 1.0e-12));
++  EXPECT_TRUE(
++    (result.roll_pitch_orientation * (acceleration - result.observable_accel_bias)).isApprox(
++      Eigen::Vector3d(0.0, 0.0, config.gravity_mps2), 1.0e-12));
++}
++
++TEST(ImuStationaryInitializer, DoesNotClaimTransverseBiasIsObservable)
++{
++  ImuStationaryInitializer::Config config;
++  config.window_duration_sec = 0.1;
++  config.minimum_samples = 10U;
++  ImuStationaryInitializer initializer(config);
++  const Eigen::Vector3d acceleration(0.1, 0.0, config.gravity_mps2);
++  for (int index = 0; index <= 10; ++index) {
++    initializer.addSample(index * 0.01, Eigen::Vector3d::Zero(), acceleration);
++  }
++
++  const auto & result = initializer.result();
++  ASSERT_EQ(result.status, ImuStationaryInitializer::Status::kInitialized);
++  const Eigen::Vector3d expected_bias(
++    5.198700349665612e-06, 0.0, 5.098183478404828e-04);
++  EXPECT_NEAR(result.observable_accel_bias.x(), expected_bias.x(), 1.0e-12);
++  EXPECT_NEAR(result.observable_accel_bias.y(), expected_bias.y(), 1.0e-12);
++  EXPECT_NEAR(result.observable_accel_bias.z(), expected_bias.z(), 1.0e-12);
++  EXPECT_LT(result.observable_accel_bias.cross(acceleration).norm(), 1.0e-12);
++  EXPECT_LT(result.observable_accel_bias.x(), 1.0e-05);
++}
++
+ TEST(ImuStationaryInitializer, ReportsMovingAndInvalidTimestampReasons)
+ {
+   ImuStationaryInitializer::Config config;
+diff --git a/kalman_filter_localization_ros2/CMakeLists.txt b/kalman_filter_localization_ros2/CMakeLists.txt
+index a271b70..aa6b956 100644
+--- a/kalman_filter_localization_ros2/CMakeLists.txt
++++ b/kalman_filter_localization_ros2/CMakeLists.txt
+@@ -47,6 +47,8 @@ if(BUILD_TESTING)
+   ament_lint_auto_find_test_dependencies()
+   ament_add_pytest_test(test_evaluate_localization test/test_evaluate_localization.py)
+   ament_add_gtest(test_ekf_large_gap_recovery test/test_ekf_large_gap_recovery.cpp)
++  ament_add_gtest(
++    test_ekf_stationary_initialization test/test_ekf_stationary_initialization.cpp)
+ endif()
+ 
+ add_library(ekf_localization_component SHARED
+@@ -68,6 +70,9 @@ if(BUILD_TESTING)
+   target_link_libraries(test_ekf_large_gap_recovery ekf_localization_component)
+   ament_target_dependencies(test_ekf_large_gap_recovery
+     rclcpp geometry_msgs nav_msgs sensor_msgs)
++  target_link_libraries(test_ekf_stationary_initialization ekf_localization_component)
++  ament_target_dependencies(test_ekf_stationary_initialization
++    rclcpp geometry_msgs sensor_msgs std_msgs)
+ endif()
+ 
+ add_executable(ekf_localization_node
+diff --git a/kalman_filter_localization_ros2/param/ekf.yaml b/kalman_filter_localization_ros2/param/ekf.yaml
+index 84ca553..8ae0fbe 100644
+--- a/kalman_filter_localization_ros2/param/ekf.yaml
++++ b/kalman_filter_localization_ros2/param/ekf.yaml
+@@ -47,6 +47,7 @@ ekf_localization:
+       initial_attitude_variance_rp: 100.0
+       initial_attitude_variance_yaw: 100.0
+       enable_stationary_initialization: false
++      stationary_initialization_estimate_accel_bias: false
+       stationary_initialization_window_sec: 1.0
+       stationary_initialization_min_samples: 50
+       stationary_initialization_max_gyro_std_radps: 0.01
+diff --git a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+index 3b5d510..16860de 100644
+--- a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
++++ b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+@@ -510,6 +510,10 @@ struct EkfLocalizationComponent::Impl
+     node_.get_parameter("initial_attitude_variance_yaw", initial_attitude_variance_yaw_);
+     node_.declare_parameter("enable_stationary_initialization", false);
+     node_.get_parameter("enable_stationary_initialization", enable_stationary_initialization_);
++    node_.declare_parameter("stationary_initialization_estimate_accel_bias", false);
++    node_.get_parameter(
++      "stationary_initialization_estimate_accel_bias",
++      stationary_initialization_estimate_accel_bias_);
+     node_.declare_parameter("stationary_initialization_window_sec", 1.0);
+     node_.get_parameter(
+       "stationary_initialization_window_sec", stationary_initialization_window_sec_);
+@@ -1444,6 +1448,14 @@ struct EkfLocalizationComponent::Impl
+         initial_imu_acc_bias_covariance_);
+       initial_imu_acc_bias_covariance_ = 0.0;
+     }
++    if (enable_stationary_initialization_ && stationary_initialization_estimate_accel_bias_ &&
++      initial_imu_acc_bias_covariance_ == 0.0 && var_imu_acc_bias_ == 0.0)
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "stationary accelerometer-bias initialization has zero initial covariance and "
++        "zero process variance; the initialized bias will be treated as deterministic");
++    }
+     const double initial_variances[] = {
+       initial_position_variance_xy_, initial_position_variance_z_,
+       initial_velocity_variance_xy_, initial_velocity_variance_z_,
+@@ -2362,7 +2374,8 @@ struct EkfLocalizationComponent::Impl
+           static_cast<double>(initialization_status), result.confidence,
+           result.gyro_std_radps, result.accel_std_mps2, result.accel_norm_error_mps2,
+           static_cast<double>(result.sample_count), result.gyro_bias.x(),
+-          result.gyro_bias.y(), result.gyro_bias.z()};
++          result.gyro_bias.y(), result.gyro_bias.z(), result.observable_accel_bias.x(),
++          result.observable_accel_bias.y(), result.observable_accel_bias.z()};
+         debug_initialization_pub_->publish(message);
+       }
+       if (initialization_status == core::ImuStationaryInitializer::Status::kInitialized) {
+@@ -2375,6 +2388,9 @@ struct EkfLocalizationComponent::Impl
+           result.roll_pitch_orientation).normalized();
+         state.velocity.setZero();
+         state.gyro_bias = result.gyro_bias;
++        if (stationary_initialization_estimate_accel_bias_) {
++          state.accel_bias = result.observable_accel_bias;
++        }
+         ekf_.setState(state);
+         has_previous_time_imu_ = false;
+         previous_time_imu_ = 0.0;
+@@ -2383,9 +2399,10 @@ struct EkfLocalizationComponent::Impl
+         RCLCPP_INFO(
+           node_.get_logger(),
+           "stationary initialization complete: samples=%zu confidence=%.3f "
+-          "gyro_bias=[%.6f %.6f %.6f] yaw_source=%d",
++          "gyro_bias=[%.6f %.6f %.6f] accel_bias=[%.6f %.6f %.6f] yaw_source=%d",
+           result.sample_count, result.confidence, result.gyro_bias.x(), result.gyro_bias.y(),
+-          result.gyro_bias.z(), static_cast<int>(yaw_result.source));
++          result.gyro_bias.z(), state.accel_bias.x(), state.accel_bias.y(), state.accel_bias.z(),
++          static_cast<int>(yaw_result.source));
+       } else if (initialization_status == core::ImuStationaryInitializer::Status::kMoving) {
+         RCLCPP_WARN_THROTTLE(
+           node_.get_logger(), clock_, 5000,
+@@ -4119,6 +4136,7 @@ struct EkfLocalizationComponent::Impl
+   double initial_attitude_variance_rp_{100.0};
+   double initial_attitude_variance_yaw_{100.0};
+   bool enable_stationary_initialization_{false};
++  bool stationary_initialization_estimate_accel_bias_{false};
+   double stationary_initialization_window_sec_{1.0};
+   int stationary_initialization_min_samples_{50};
+   double stationary_initialization_max_gyro_std_radps_{0.01};
+diff --git a/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp b/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp
+new file mode 100644
+index 0000000..1bdd247
+--- /dev/null
++++ b/kalman_filter_localization_ros2/test/test_ekf_stationary_initialization.cpp
+@@ -0,0 +1,275 @@
++// Copyright (c) 2026, HEVEN contributors
++// All rights reserved.
++//
++// Software License Agreement (BSD License 2.0)
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++//  * Redistributions of source code must retain the above copyright
++//    notice, this list of conditions and the following disclaimer.
++//  * Redistributions in binary form must reproduce the above
++//    copyright notice, this list of conditions and the following
++//    disclaimer in the documentation and/or other materials provided
++//    with the distribution.
++//  * Neither the name of HEVEN contributors nor the names of its
++//    contributors may be used to endorse or promote products derived
++//    from this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++#include <gtest/gtest.h>
++
++#include <chrono>
++#include <cmath>
++#include <cstdint>
++#include <functional>
++#include <memory>
++#include <thread>
++#include <vector>
++
++#include <geometry_msgs/msg/pose_stamped.hpp>
++#include <geometry_msgs/msg/vector3_stamped.hpp>
++#include <rclcpp/rclcpp.hpp>
++#include <sensor_msgs/msg/imu.hpp>
++#include <std_msgs/msg/float64_multi_array.hpp>
++
++#include <kalman_filter_localization/core/imu_initializer.hpp>
++#include <kalman_filter_localization/ekf_localization_component.hpp>
++
++namespace
++{
++using namespace std::chrono_literals;
++
++builtin_interfaces::msg::Time stamp(const double seconds)
++{
++  builtin_interfaces::msg::Time result;
++  result.sec = static_cast<std::int32_t>(seconds);
++  result.nanosec = static_cast<std::uint32_t>((seconds - result.sec) * 1.0e9);
++  return result;
++}
++
++bool spinUntil(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  const std::function<bool()> & predicate,
++  const std::chrono::milliseconds timeout = 1000ms)
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  while (std::chrono::steady_clock::now() < deadline) {
++    executor.spin_some();
++    if (predicate()) {
++      return true;
++    }
++    std::this_thread::sleep_for(2ms);
++  }
++  executor.spin_some();
++  return predicate();
++}
++
++void spinFor(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  const std::chrono::milliseconds duration)
++{
++  const auto deadline = std::chrono::steady_clock::now() + duration;
++  while (std::chrono::steady_clock::now() < deadline) {
++    executor.spin_some();
++    std::this_thread::sleep_for(2ms);
++  }
++}
++
++TEST(EkfStationaryInitialization, AccelBiasInitializationIsDisabledByDefault)
++{
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_stationary_default_test"});
++  const auto node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  EXPECT_FALSE(node->get_parameter("stationary_initialization_estimate_accel_bias").as_bool());
++}
++
++TEST(EkfStationaryInitialization, WarnsWhenAccelBiasStartsWithZeroUncertaintyAndProcessNoise)
++{
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_stationary_zero_covariance_test"});
++  options.parameter_overrides(
++    {rclcpp::Parameter("propagation_model", "legacy"),
++      rclcpp::Parameter("enable_stationary_initialization", true),
++      rclcpp::Parameter("stationary_initialization_estimate_accel_bias", true),
++      rclcpp::Parameter("initial_imu_acc_bias_covariance", 0.0),
++      rclcpp::Parameter("var_imu_acc_bias", 0.0)});
++
++  testing::internal::CaptureStderr();
++  {
++    const auto node =
++      std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  }
++  const std::string logs = testing::internal::GetCapturedStderr();
++  EXPECT_NE(
++    logs.find(
++      "stationary accelerometer-bias initialization has zero initial covariance and "
++      "zero process variance"),
++    std::string::npos);
++}
++
++TEST(EkfStationaryInitialization, OptInPublishesGravityObservableAccelBias)
++{
++  const std::vector<rclcpp::Parameter> parameters{
++    rclcpp::Parameter("initial_pose_topic", "/stationary_bias_test/initial_pose"),
++    rclcpp::Parameter("imu_topic", "/stationary_bias_test/imu"),
++    rclcpp::Parameter("output_publish_mode", "imu"),
++    rclcpp::Parameter("publish_tf", false),
++    rclcpp::Parameter("use_gnss", false),
++    rclcpp::Parameter("propagation_model", "legacy"),
++    rclcpp::Parameter("enable_measurement_replay", true),
++    rclcpp::Parameter("measurement_history_duration_sec", 2.0),
++    rclcpp::Parameter("max_future_measurement_wait_sec", 0.25),
++    rclcpp::Parameter("enable_stationary_initialization", true),
++    rclcpp::Parameter("stationary_initialization_estimate_accel_bias", true),
++    rclcpp::Parameter("stationary_initialization_window_sec", 0.1),
++    rclcpp::Parameter("stationary_initialization_min_samples", 10),
++    rclcpp::Parameter("initial_imu_acc_bias_covariance", 0.01),
++    rclcpp::Parameter("tau_acc_bias_sec", 1.0e12),
++    rclcpp::Parameter("gravity_mps2", 9.80665),
++    rclcpp::Parameter("publish_debug_topics", true)};
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_stationary_bias_test"});
++  options.parameter_overrides(parameters);
++  const auto ekf_node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  const auto probe_node = std::make_shared<rclcpp::Node>("ekf_stationary_bias_probe");
++  const auto initial_pose_pub =
++    probe_node->create_publisher<geometry_msgs::msg::PoseStamped>(
++    "/stationary_bias_test/initial_pose", 10);
++  const auto imu_pub = probe_node->create_publisher<sensor_msgs::msg::Imu>(
++    "/stationary_bias_test/imu", rclcpp::SensorDataQoS());
++  std::vector<geometry_msgs::msg::Vector3Stamped> accel_biases;
++  std::vector<std_msgs::msg::Float64MultiArray> initialization_diagnostics;
++  const auto accel_bias_sub =
++    probe_node->create_subscription<geometry_msgs::msg::Vector3Stamped>(
++    "/ekf_stationary_bias_test/current_accel_bias", 10,
++    [&accel_biases](geometry_msgs::msg::Vector3Stamped::ConstSharedPtr message) {
++      accel_biases.push_back(*message);
++    });
++  const auto initialization_sub =
++    probe_node->create_subscription<std_msgs::msg::Float64MultiArray>(
++    "/ekf_stationary_bias_test/debug/initialization", 10,
++    [&initialization_diagnostics](std_msgs::msg::Float64MultiArray::ConstSharedPtr message) {
++      initialization_diagnostics.push_back(*message);
++    });
++
++  rclcpp::executors::SingleThreadedExecutor executor;
++  executor.add_node(ekf_node);
++  executor.add_node(probe_node);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return initial_pose_pub->get_subscription_count() == 1U &&
++        imu_pub->get_subscription_count() == 1U &&
++        accel_bias_sub->get_publisher_count() == 1U &&
++        initialization_sub->get_publisher_count() == 1U;
++      }));
++
++  const auto publish_initial_pose = [&](const double time) {
++      geometry_msgs::msg::PoseStamped message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "map";
++      message.pose.orientation.w = 1.0;
++      initial_pose_pub->publish(message);
++      spinFor(executor, 20ms);
++    };
++  const auto publish_imu = [&](const double time, const double acceleration_z) {
++      sensor_msgs::msg::Imu message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "base_link";
++      message.orientation.w = 1.0;
++      message.linear_acceleration.z = acceleration_z;
++      imu_pub->publish(message);
++    };
++  const auto publish_initialization_sample = [&initialization_diagnostics, &executor, &publish_imu](
++    const double time, const double acceleration_z, const std::size_t expected_sample_count)
++    {
++      publish_imu(time, acceleration_z);
++      return spinUntil(
++        executor,
++        [&]() {
++          return !initialization_diagnostics.empty() &&
++          initialization_diagnostics.back().data.size() >= 6U &&
++          initialization_diagnostics.back().data[5] ==
++          static_cast<double>(expected_sample_count);
++        });
++    };
++
++  publish_initial_pose(10.0);
++  for (int index = 0; index <= 10; ++index) {
++    ASSERT_TRUE(
++      publish_initialization_sample(
++        10.0 + index * 0.0099, 9.90665, static_cast<std::size_t>(index + 1)));
++  }
++  ASSERT_GE(initialization_diagnostics.back().data.size(), 12U);
++  EXPECT_DOUBLE_EQ(
++    initialization_diagnostics.back().data[0],
++    static_cast<double>(
++      kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
++  const std::size_t bias_count_before_replay = accel_biases.size();
++  publish_imu(10.11, 9.90665);
++  ASSERT_TRUE(
++    spinUntil(executor, [&]() {return accel_biases.size() > bias_count_before_replay;}));
++  const std::size_t bias_count_before_propagation = accel_biases.size();
++  publish_imu(10.12, 9.90665);
++  ASSERT_TRUE(
++    spinUntil(executor, [&]() {return accel_biases.size() > bias_count_before_propagation;}));
++
++  EXPECT_NEAR(accel_biases.back().vector.x, 0.0, 1.0e-10);
++  EXPECT_NEAR(accel_biases.back().vector.y, 0.0, 1.0e-10);
++  EXPECT_NEAR(accel_biases.back().vector.z, 0.1, 1.0e-10);
++
++  publish_initial_pose(20.0);
++  for (int index = 0; index <= 10; ++index) {
++    ASSERT_TRUE(
++      publish_initialization_sample(
++        20.0 + index * 0.0099, 9.70665, static_cast<std::size_t>(index + 1)));
++  }
++  EXPECT_DOUBLE_EQ(
++    initialization_diagnostics.back().data[0],
++    static_cast<double>(
++      kalman_filter_localization::core::ImuStationaryInitializer::Status::kInitialized));
++  const std::size_t bias_count_before_reinitialized_replay = accel_biases.size();
++  publish_imu(20.11, 9.70665);
++  ASSERT_TRUE(
++    spinUntil(
++      executor,
++      [&]() {return accel_biases.size() > bias_count_before_reinitialized_replay;}));
++  const std::size_t bias_count_before_reinitialized_propagation = accel_biases.size();
++  publish_imu(20.12, 9.70665);
++  ASSERT_TRUE(
++    spinUntil(
++      executor,
++      [&]() {return accel_biases.size() > bias_count_before_reinitialized_propagation;}));
++  EXPECT_NEAR(accel_biases.back().vector.x, 0.0, 1.0e-10);
++  EXPECT_NEAR(accel_biases.back().vector.y, 0.0, 1.0e-10);
++  EXPECT_NEAR(accel_biases.back().vector.z, -0.1, 1.0e-10);
++
++  executor.remove_node(probe_node);
++  executor.remove_node(ekf_node);
++}
++}  // namespace
++
++int main(int argc, char ** argv)
++{
++  ::testing::InitGoogleTest(&argc, argv);
++  rclcpp::init(argc, argv);
++  const int result = RUN_ALL_TESTS();
++  rclcpp::shutdown();
++  return result;
++}

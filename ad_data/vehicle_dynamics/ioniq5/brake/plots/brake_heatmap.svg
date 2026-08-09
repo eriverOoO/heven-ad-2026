@@ -1,0 +1,1344 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1768" height="402" viewBox="0 0 1768 402">
+<rect width="100%" height="100%" fill="white"/>
+<text x="884.0" y="28" text-anchor="middle" font-size="18">Brake mean deceleration (m/s²)</text>
+<text x="82" y="86" text-anchor="end" font-size="10">0</text>
+<rect x="90" y="70" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="70" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="174" y="70" width="42" height="22" fill="#55e955" stroke="#ffffff" stroke-width="1">
+<title>0.12 m/s²</title>
+</rect>
+<rect x="216" y="70" width="42" height="22" fill="#55e755" stroke="#ffffff" stroke-width="1">
+<title>0.23 m/s²</title>
+</rect>
+<rect x="258" y="70" width="42" height="22" fill="#55e555" stroke="#ffffff" stroke-width="1">
+<title>0.35 m/s²</title>
+</rect>
+<rect x="300" y="70" width="42" height="22" fill="#55e755" stroke="#ffffff" stroke-width="1">
+<title>0.27 m/s²</title>
+</rect>
+<rect x="342" y="70" width="42" height="22" fill="#55e655" stroke="#ffffff" stroke-width="1">
+<title>0.32 m/s²</title>
+</rect>
+<rect x="384" y="70" width="42" height="22" fill="#55e555" stroke="#ffffff" stroke-width="1">
+<title>0.35 m/s²</title>
+</rect>
+<rect x="426" y="70" width="42" height="22" fill="#55e555" stroke="#ffffff" stroke-width="1">
+<title>0.37 m/s²</title>
+</rect>
+<rect x="468" y="70" width="42" height="22" fill="#55e555" stroke="#ffffff" stroke-width="1">
+<title>0.38 m/s²</title>
+</rect>
+<rect x="510" y="70" width="42" height="22" fill="#55e555" stroke="#ffffff" stroke-width="1">
+<title>0.40 m/s²</title>
+</rect>
+<rect x="552" y="70" width="42" height="22" fill="#55e455" stroke="#ffffff" stroke-width="1">
+<title>0.41 m/s²</title>
+</rect>
+<rect x="594" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="70" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="108" text-anchor="end" font-size="10">10</text>
+<rect x="90" y="92" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="92" width="42" height="22" fill="#55cf55" stroke="#ffffff" stroke-width="1">
+<title>1.85 m/s²</title>
+</rect>
+<rect x="174" y="92" width="42" height="22" fill="#55ce55" stroke="#ffffff" stroke-width="1">
+<title>1.91 m/s²</title>
+</rect>
+<rect x="216" y="92" width="42" height="22" fill="#55cd55" stroke="#ffffff" stroke-width="1">
+<title>1.98 m/s²</title>
+</rect>
+<rect x="258" y="92" width="42" height="22" fill="#55cb55" stroke="#ffffff" stroke-width="1">
+<title>2.09 m/s²</title>
+</rect>
+<rect x="300" y="92" width="42" height="22" fill="#55d255" stroke="#ffffff" stroke-width="1">
+<title>1.62 m/s²</title>
+</rect>
+<rect x="342" y="92" width="42" height="22" fill="#55d855" stroke="#ffffff" stroke-width="1">
+<title>1.21 m/s²</title>
+</rect>
+<rect x="384" y="92" width="42" height="22" fill="#55d855" stroke="#ffffff" stroke-width="1">
+<title>1.26 m/s²</title>
+</rect>
+<rect x="426" y="92" width="42" height="22" fill="#55d755" stroke="#ffffff" stroke-width="1">
+<title>1.28 m/s²</title>
+</rect>
+<rect x="468" y="92" width="42" height="22" fill="#55d755" stroke="#ffffff" stroke-width="1">
+<title>1.29 m/s²</title>
+</rect>
+<rect x="510" y="92" width="42" height="22" fill="#55d755" stroke="#ffffff" stroke-width="1">
+<title>1.30 m/s²</title>
+</rect>
+<rect x="552" y="92" width="42" height="22" fill="#55d755" stroke="#ffffff" stroke-width="1">
+<title>1.32 m/s²</title>
+</rect>
+<rect x="594" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="92" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="130" text-anchor="end" font-size="10">20</text>
+<rect x="90" y="114" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="114" width="42" height="22" fill="#55b355" stroke="#ffffff" stroke-width="1">
+<title>3.67 m/s²</title>
+</rect>
+<rect x="174" y="114" width="42" height="22" fill="#55b255" stroke="#ffffff" stroke-width="1">
+<title>3.74 m/s²</title>
+</rect>
+<rect x="216" y="114" width="42" height="22" fill="#55b155" stroke="#ffffff" stroke-width="1">
+<title>3.82 m/s²</title>
+</rect>
+<rect x="258" y="114" width="42" height="22" fill="#55b155" stroke="#ffffff" stroke-width="1">
+<title>3.81 m/s²</title>
+</rect>
+<rect x="300" y="114" width="42" height="22" fill="#55c755" stroke="#ffffff" stroke-width="1">
+<title>2.38 m/s²</title>
+</rect>
+<rect x="342" y="114" width="42" height="22" fill="#55ca55" stroke="#ffffff" stroke-width="1">
+<title>2.15 m/s²</title>
+</rect>
+<rect x="384" y="114" width="42" height="22" fill="#55ca55" stroke="#ffffff" stroke-width="1">
+<title>2.18 m/s²</title>
+</rect>
+<rect x="426" y="114" width="42" height="22" fill="#55c955" stroke="#ffffff" stroke-width="1">
+<title>2.20 m/s²</title>
+</rect>
+<rect x="468" y="114" width="42" height="22" fill="#55c955" stroke="#ffffff" stroke-width="1">
+<title>2.22 m/s²</title>
+</rect>
+<rect x="510" y="114" width="42" height="22" fill="#55c955" stroke="#ffffff" stroke-width="1">
+<title>2.25 m/s²</title>
+</rect>
+<rect x="552" y="114" width="42" height="22" fill="#55c955" stroke="#ffffff" stroke-width="1">
+<title>2.24 m/s²</title>
+</rect>
+<rect x="594" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="114" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="152" text-anchor="end" font-size="10">30</text>
+<rect x="90" y="136" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="136" width="42" height="22" fill="#559755" stroke="#ffffff" stroke-width="1">
+<title>5.58 m/s²</title>
+</rect>
+<rect x="174" y="136" width="42" height="22" fill="#559555" stroke="#ffffff" stroke-width="1">
+<title>5.67 m/s²</title>
+</rect>
+<rect x="216" y="136" width="42" height="22" fill="#559655" stroke="#ffffff" stroke-width="1">
+<title>5.64 m/s²</title>
+</rect>
+<rect x="258" y="136" width="42" height="22" fill="#559b55" stroke="#ffffff" stroke-width="1">
+<title>5.28 m/s²</title>
+</rect>
+<rect x="300" y="136" width="42" height="22" fill="#55a955" stroke="#ffffff" stroke-width="1">
+<title>4.36 m/s²</title>
+</rect>
+<rect x="342" y="136" width="42" height="22" fill="#55a655" stroke="#ffffff" stroke-width="1">
+<title>4.57 m/s²</title>
+</rect>
+<rect x="384" y="136" width="42" height="22" fill="#55a455" stroke="#ffffff" stroke-width="1">
+<title>4.68 m/s²</title>
+</rect>
+<rect x="426" y="136" width="42" height="22" fill="#55a355" stroke="#ffffff" stroke-width="1">
+<title>4.75 m/s²</title>
+</rect>
+<rect x="468" y="136" width="42" height="22" fill="#55a255" stroke="#ffffff" stroke-width="1">
+<title>4.82 m/s²</title>
+</rect>
+<rect x="510" y="136" width="42" height="22" fill="#55a355" stroke="#ffffff" stroke-width="1">
+<title>4.79 m/s²</title>
+</rect>
+<rect x="552" y="136" width="42" height="22" fill="#55a255" stroke="#ffffff" stroke-width="1">
+<title>4.86 m/s²</title>
+</rect>
+<rect x="594" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="136" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="174" text-anchor="end" font-size="10">40</text>
+<rect x="90" y="158" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="158" width="42" height="22" fill="#558c55" stroke="#ffffff" stroke-width="1">
+<title>6.31 m/s²</title>
+</rect>
+<rect x="174" y="158" width="42" height="22" fill="#557d55" stroke="#ffffff" stroke-width="1">
+<title>7.31 m/s²</title>
+</rect>
+<rect x="216" y="158" width="42" height="22" fill="#557c55" stroke="#ffffff" stroke-width="1">
+<title>7.37 m/s²</title>
+</rect>
+<rect x="258" y="158" width="42" height="22" fill="#557e55" stroke="#ffffff" stroke-width="1">
+<title>7.23 m/s²</title>
+</rect>
+<rect x="300" y="158" width="42" height="22" fill="#558255" stroke="#ffffff" stroke-width="1">
+<title>6.93 m/s²</title>
+</rect>
+<rect x="342" y="158" width="42" height="22" fill="#557e55" stroke="#ffffff" stroke-width="1">
+<title>7.21 m/s²</title>
+</rect>
+<rect x="384" y="158" width="42" height="22" fill="#557c55" stroke="#ffffff" stroke-width="1">
+<title>7.34 m/s²</title>
+</rect>
+<rect x="426" y="158" width="42" height="22" fill="#557b55" stroke="#ffffff" stroke-width="1">
+<title>7.47 m/s²</title>
+</rect>
+<rect x="468" y="158" width="42" height="22" fill="#557b55" stroke="#ffffff" stroke-width="1">
+<title>7.42 m/s²</title>
+</rect>
+<rect x="510" y="158" width="42" height="22" fill="#557955" stroke="#ffffff" stroke-width="1">
+<title>7.55 m/s²</title>
+</rect>
+<rect x="552" y="158" width="42" height="22" fill="#557c55" stroke="#ffffff" stroke-width="1">
+<title>7.39 m/s²</title>
+</rect>
+<rect x="594" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="158" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="196" text-anchor="end" font-size="10">50</text>
+<rect x="90" y="180" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="180" width="42" height="22" fill="#558655" stroke="#ffffff" stroke-width="1">
+<title>6.72 m/s²</title>
+</rect>
+<rect x="174" y="180" width="42" height="22" fill="#556855" stroke="#ffffff" stroke-width="1">
+<title>8.71 m/s²</title>
+</rect>
+<rect x="216" y="180" width="42" height="22" fill="#556655" stroke="#ffffff" stroke-width="1">
+<title>8.84 m/s²</title>
+</rect>
+<rect x="258" y="180" width="42" height="22" fill="#556855" stroke="#ffffff" stroke-width="1">
+<title>8.72 m/s²</title>
+</rect>
+<rect x="300" y="180" width="42" height="22" fill="#556655" stroke="#ffffff" stroke-width="1">
+<title>8.86 m/s²</title>
+</rect>
+<rect x="342" y="180" width="42" height="22" fill="#556755" stroke="#ffffff" stroke-width="1">
+<title>8.75 m/s²</title>
+</rect>
+<rect x="384" y="180" width="42" height="22" fill="#556555" stroke="#ffffff" stroke-width="1">
+<title>8.91 m/s²</title>
+</rect>
+<rect x="426" y="180" width="42" height="22" fill="#556355" stroke="#ffffff" stroke-width="1">
+<title>9.00 m/s²</title>
+</rect>
+<rect x="468" y="180" width="42" height="22" fill="#556555" stroke="#ffffff" stroke-width="1">
+<title>8.92 m/s²</title>
+</rect>
+<rect x="510" y="180" width="42" height="22" fill="#556255" stroke="#ffffff" stroke-width="1">
+<title>9.10 m/s²</title>
+</rect>
+<rect x="552" y="180" width="42" height="22" fill="#556755" stroke="#ffffff" stroke-width="1">
+<title>8.75 m/s²</title>
+</rect>
+<rect x="594" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="180" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="218" text-anchor="end" font-size="10">60</text>
+<rect x="90" y="202" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="202" width="42" height="22" fill="#557c55" stroke="#ffffff" stroke-width="1">
+<title>7.36 m/s²</title>
+</rect>
+<rect x="174" y="202" width="42" height="22" fill="#555a55" stroke="#ffffff" stroke-width="1">
+<title>9.64 m/s²</title>
+</rect>
+<rect x="216" y="202" width="42" height="22" fill="#555b55" stroke="#ffffff" stroke-width="1">
+<title>9.55 m/s²</title>
+</rect>
+<rect x="258" y="202" width="42" height="22" fill="#555b55" stroke="#ffffff" stroke-width="1">
+<title>9.55 m/s²</title>
+</rect>
+<rect x="300" y="202" width="42" height="22" fill="#555a55" stroke="#ffffff" stroke-width="1">
+<title>9.66 m/s²</title>
+</rect>
+<rect x="342" y="202" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.78 m/s²</title>
+</rect>
+<rect x="384" y="202" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.75 m/s²</title>
+</rect>
+<rect x="426" y="202" width="42" height="22" fill="#555555" stroke="#ffffff" stroke-width="1">
+<title>9.99 m/s²</title>
+</rect>
+<rect x="468" y="202" width="42" height="22" fill="#555555" stroke="#ffffff" stroke-width="1">
+<title>10.19 m/s²</title>
+</rect>
+<rect x="510" y="202" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.77 m/s²</title>
+</rect>
+<rect x="552" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="594" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="202" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="240" text-anchor="end" font-size="10">70</text>
+<rect x="90" y="224" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="224" width="42" height="22" fill="#557855" stroke="#ffffff" stroke-width="1">
+<title>7.61 m/s²</title>
+</rect>
+<rect x="174" y="224" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.77 m/s²</title>
+</rect>
+<rect x="216" y="224" width="42" height="22" fill="#555655" stroke="#ffffff" stroke-width="1">
+<title>9.93 m/s²</title>
+</rect>
+<rect x="258" y="224" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.76 m/s²</title>
+</rect>
+<rect x="300" y="224" width="42" height="22" fill="#555955" stroke="#ffffff" stroke-width="1">
+<title>9.68 m/s²</title>
+</rect>
+<rect x="342" y="224" width="42" height="22" fill="#555a55" stroke="#ffffff" stroke-width="1">
+<title>9.63 m/s²</title>
+</rect>
+<rect x="384" y="224" width="42" height="22" fill="#555a55" stroke="#ffffff" stroke-width="1">
+<title>9.66 m/s²</title>
+</rect>
+<rect x="426" y="224" width="42" height="22" fill="#555b55" stroke="#ffffff" stroke-width="1">
+<title>9.54 m/s²</title>
+</rect>
+<rect x="468" y="224" width="42" height="22" fill="#556355" stroke="#ffffff" stroke-width="1">
+<title>9.06 m/s²</title>
+</rect>
+<rect x="510" y="224" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.78 m/s²</title>
+</rect>
+<rect x="552" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="594" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="224" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="262" text-anchor="end" font-size="10">80</text>
+<rect x="90" y="246" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="246" width="42" height="22" fill="#557155" stroke="#ffffff" stroke-width="1">
+<title>8.12 m/s²</title>
+</rect>
+<rect x="174" y="246" width="42" height="22" fill="#555755" stroke="#ffffff" stroke-width="1">
+<title>9.80 m/s²</title>
+</rect>
+<rect x="216" y="246" width="42" height="22" fill="#555855" stroke="#ffffff" stroke-width="1">
+<title>9.79 m/s²</title>
+</rect>
+<rect x="258" y="246" width="42" height="22" fill="#555b55" stroke="#ffffff" stroke-width="1">
+<title>9.55 m/s²</title>
+</rect>
+<rect x="300" y="246" width="42" height="22" fill="#555e55" stroke="#ffffff" stroke-width="1">
+<title>9.37 m/s²</title>
+</rect>
+<rect x="342" y="246" width="42" height="22" fill="#556255" stroke="#ffffff" stroke-width="1">
+<title>9.09 m/s²</title>
+</rect>
+<rect x="384" y="246" width="42" height="22" fill="#556255" stroke="#ffffff" stroke-width="1">
+<title>9.12 m/s²</title>
+</rect>
+<rect x="426" y="246" width="42" height="22" fill="#555f55" stroke="#ffffff" stroke-width="1">
+<title>9.27 m/s²</title>
+</rect>
+<rect x="468" y="246" width="42" height="22" fill="#555f55" stroke="#ffffff" stroke-width="1">
+<title>9.27 m/s²</title>
+</rect>
+<rect x="510" y="246" width="42" height="22" fill="#556055" stroke="#ffffff" stroke-width="1">
+<title>9.22 m/s²</title>
+</rect>
+<rect x="552" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="594" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="246" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="284" text-anchor="end" font-size="10">90</text>
+<rect x="90" y="268" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="268" width="42" height="22" fill="#557b55" stroke="#ffffff" stroke-width="1">
+<title>7.43 m/s²</title>
+</rect>
+<rect x="174" y="268" width="42" height="22" fill="#555755" stroke="#ffffff" stroke-width="1">
+<title>9.84 m/s²</title>
+</rect>
+<rect x="216" y="268" width="42" height="22" fill="#555655" stroke="#ffffff" stroke-width="1">
+<title>9.87 m/s²</title>
+</rect>
+<rect x="258" y="268" width="42" height="22" fill="#555c55" stroke="#ffffff" stroke-width="1">
+<title>9.53 m/s²</title>
+</rect>
+<rect x="300" y="268" width="42" height="22" fill="#556455" stroke="#ffffff" stroke-width="1">
+<title>9.00 m/s²</title>
+</rect>
+<rect x="342" y="268" width="42" height="22" fill="#556355" stroke="#ffffff" stroke-width="1">
+<title>9.04 m/s²</title>
+</rect>
+<rect x="384" y="268" width="42" height="22" fill="#556255" stroke="#ffffff" stroke-width="1">
+<title>9.12 m/s²</title>
+</rect>
+<rect x="426" y="268" width="42" height="22" fill="#556155" stroke="#ffffff" stroke-width="1">
+<title>9.14 m/s²</title>
+</rect>
+<rect x="468" y="268" width="42" height="22" fill="#556155" stroke="#ffffff" stroke-width="1">
+<title>9.14 m/s²</title>
+</rect>
+<rect x="510" y="268" width="42" height="22" fill="#556755" stroke="#ffffff" stroke-width="1">
+<title>8.75 m/s²</title>
+</rect>
+<rect x="552" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="594" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="268" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="82" y="306" text-anchor="end" font-size="10">100</text>
+<rect x="90" y="290" width="42" height="22" fill="#55eb55" stroke="#ffffff" stroke-width="1">
+<title>0.00 m/s²</title>
+</rect>
+<rect x="132" y="290" width="42" height="22" fill="#555a55" stroke="#ffffff" stroke-width="1">
+<title>9.65 m/s²</title>
+</rect>
+<rect x="174" y="290" width="42" height="22" fill="#555555" stroke="#ffffff" stroke-width="1">
+<title>10.19 m/s²</title>
+</rect>
+<rect x="216" y="290" width="42" height="22" fill="#555555" stroke="#ffffff" stroke-width="1">
+<title>10.07 m/s²</title>
+</rect>
+<rect x="258" y="290" width="42" height="22" fill="#555955" stroke="#ffffff" stroke-width="1">
+<title>9.70 m/s²</title>
+</rect>
+<rect x="300" y="290" width="42" height="22" fill="#556255" stroke="#ffffff" stroke-width="1">
+<title>9.10 m/s²</title>
+</rect>
+<rect x="342" y="290" width="42" height="22" fill="#556655" stroke="#ffffff" stroke-width="1">
+<title>8.84 m/s²</title>
+</rect>
+<rect x="384" y="290" width="42" height="22" fill="#556755" stroke="#ffffff" stroke-width="1">
+<title>8.78 m/s²</title>
+</rect>
+<rect x="426" y="290" width="42" height="22" fill="#556655" stroke="#ffffff" stroke-width="1">
+<title>8.86 m/s²</title>
+</rect>
+<rect x="468" y="290" width="42" height="22" fill="#556555" stroke="#ffffff" stroke-width="1">
+<title>8.92 m/s²</title>
+</rect>
+<rect x="510" y="290" width="42" height="22" fill="#556355" stroke="#ffffff" stroke-width="1">
+<title>9.06 m/s²</title>
+</rect>
+<rect x="552" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="594" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="636" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="678" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="720" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="762" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="804" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="846" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="888" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="930" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="972" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1014" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1056" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1098" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1140" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1182" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1224" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1266" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1308" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1350" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1392" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1434" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1476" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1518" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1560" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1602" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1644" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<rect x="1686" y="290" width="42" height="22" fill="#d1d5db" stroke="#ffffff" stroke-width="1">
+<title>no data</title>
+</rect>
+<text x="111.0" y="330" text-anchor="middle" font-size="9">0</text>
+<text x="153.0" y="330" text-anchor="middle" font-size="9">5</text>
+<text x="195.0" y="330" text-anchor="middle" font-size="9">10</text>
+<text x="237.0" y="330" text-anchor="middle" font-size="9">15</text>
+<text x="279.0" y="330" text-anchor="middle" font-size="9">20</text>
+<text x="321.0" y="330" text-anchor="middle" font-size="9">25</text>
+<text x="363.0" y="330" text-anchor="middle" font-size="9">30</text>
+<text x="405.0" y="330" text-anchor="middle" font-size="9">35</text>
+<text x="447.0" y="330" text-anchor="middle" font-size="9">40</text>
+<text x="489.0" y="330" text-anchor="middle" font-size="9">45</text>
+<text x="531.0" y="330" text-anchor="middle" font-size="9">50</text>
+<text x="573.0" y="330" text-anchor="middle" font-size="9">55</text>
+<text x="615.0" y="330" text-anchor="middle" font-size="9">57</text>
+<text x="657.0" y="330" text-anchor="middle" font-size="9">60</text>
+<text x="699.0" y="330" text-anchor="middle" font-size="9">65</text>
+<text x="741.0" y="330" text-anchor="middle" font-size="9">70</text>
+<text x="783.0" y="330" text-anchor="middle" font-size="9">75</text>
+<text x="825.0" y="330" text-anchor="middle" font-size="9">80</text>
+<text x="867.0" y="330" text-anchor="middle" font-size="9">85</text>
+<text x="909.0" y="330" text-anchor="middle" font-size="9">90</text>
+<text x="951.0" y="330" text-anchor="middle" font-size="9">95</text>
+<text x="993.0" y="330" text-anchor="middle" font-size="9">100</text>
+<text x="1035.0" y="330" text-anchor="middle" font-size="9">105</text>
+<text x="1077.0" y="330" text-anchor="middle" font-size="9">110</text>
+<text x="1119.0" y="330" text-anchor="middle" font-size="9">115</text>
+<text x="1161.0" y="330" text-anchor="middle" font-size="9">120</text>
+<text x="1203.0" y="330" text-anchor="middle" font-size="9">125</text>
+<text x="1245.0" y="330" text-anchor="middle" font-size="9">130</text>
+<text x="1287.0" y="330" text-anchor="middle" font-size="9">135</text>
+<text x="1329.0" y="330" text-anchor="middle" font-size="9">140</text>
+<text x="1371.0" y="330" text-anchor="middle" font-size="9">145</text>
+<text x="1413.0" y="330" text-anchor="middle" font-size="9">150</text>
+<text x="1455.0" y="330" text-anchor="middle" font-size="9">155</text>
+<text x="1497.0" y="330" text-anchor="middle" font-size="9">160</text>
+<text x="1539.0" y="330" text-anchor="middle" font-size="9">165</text>
+<text x="1581.0" y="330" text-anchor="middle" font-size="9">170</text>
+<text x="1623.0" y="330" text-anchor="middle" font-size="9">175</text>
+<text x="1665.0" y="330" text-anchor="middle" font-size="9">180</text>
+<text x="1707.0" y="330" text-anchor="middle" font-size="9">185</text>
+<text x="909.0" y="377" text-anchor="middle" font-size="13">Initial speed (km/h)</text>
+<text x="18" y="191.0" text-anchor="middle" font-size="13" transform="rotate(-90 18 191.0)">Brake command (%)</text>
+</svg>

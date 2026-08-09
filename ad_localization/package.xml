@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ad_localization</name>
+  <version>0.1.0</version>
+  <description>Backend-selectable GNSS, IMU, and wheel localization for HEVEN AD.</description>
+  <maintainer email="taeyeong@users.noreply.github.com">Taeyeong</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <build_depend>proj</build_depend>
+  <build_depend>pkg-config</build_depend>
+  <build_export_depend>proj</build_export_depend>
+
+  <depend>ad_morai_interfaces</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>ad_description</exec_depend>
+  <exec_depend>fast_lio</exec_depend>
+  <exec_depend>kalman_filter_localization</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>ad_description</test_depend>
+  <test_depend>kalman_filter_localization_core</test_depend>
+  <test_depend>python3-yaml</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>tf2_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

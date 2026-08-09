@@ -1,0 +1,50 @@
+name: stale agent-proposed
+
+# agent-proposed 이슈가 오래 방치되면 자동 정리한다.
+# planner가 사람 triage보다 빨리 이슈를 찍어내 백로그가 무한 증식하는 걸 막는 장치.
+#   7일 무활동  → 'agent-stale' 라벨 (경고)
+#   +7일(총 14일) 무활동 → not planned 로 자동 close
+# 보호(자동 close 면제): 사람이 코멘트(→ stale 자동 해제) / 담당자 지정 / 'agent-keep' 라벨.
+# 대상은 agent-proposed 라벨 이슈만. PR은 건드리지 않는다.
+on:
+  schedule:
+    - cron: "0 16 * * *"   # 매일 01:00 KST
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "dry-run (아무것도 안 바꾸고 로그만)"
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@v9
+        with:
+          only-labels: agent-proposed
+          days-before-stale: 7
+          days-before-close: 7
+          stale-issue-label: agent-stale
+          close-issue-reason: not_planned
+          exempt-issue-labels: agent-keep
+          exempt-all-assignees: true
+          remove-stale-when-updated: true
+          ascending: true
+          operations-per-run: 200
+          enable-statistics: true
+          debug-only: ${{ github.event.inputs.debug == 'true' }}
+          stale-issue-message: >
+            이 agent-proposed 이슈가 7일간 활동이 없어 **agent-stale**로 표시됩니다.
+            7일 더 방치되면 자동으로 닫힙니다 (not planned).
+            계속 두려면 코멘트를 남기거나, 담당자를 지정하거나, `agent-keep` 라벨을 붙이세요.
+          close-issue-message: >
+            14일간 활동이 없어 자동으로 닫습니다 (not planned).
+            여전히 필요하면 다시 열고 triage(Ready로 이동 / 담당 지정)하세요.
+          # PR은 대상 아님
+          days-before-pr-stale: -1
+          days-before-pr-close: -1

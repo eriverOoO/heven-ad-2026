@@ -1,0 +1,96 @@
+# Local agent/runtime state inside repo
+.agent/
+RUN_RESULT.md
+BLOCKED.md
+
+# Local data/artifacts if accidentally created inside repo
+data/
+# The development bridge installs this generated, pinned descriptor set.
+!ad_morai_bridge_dev/data/
+results/
+/runner/
+worktrees/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets/env
+.env
+*.env
+*.pem
+*.key
+*.token
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Eval artifacts
+*.jsonl
+*.log
+
+# ROS1 catkin workspace generated dirs
+build/
+devel/
+install/
+logs/
+log/
+.catkin_workspace
+.catkin_tools/
+
+# ROS bags
+*.bag
+*.bag.active
+*.mcap
+*.pcap
+*.db3
+
+# Generated maps and MORAI-local data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+# FAST-LIO map snapshots and captures are runtime artifacts.
+third_party/fast_lio/PCD/
+*.pcd
+!ad_localization/maps/cp14_to_cp15.pcd
+*.ply
+*.scene
+heven_maps/
+# Curated static assets below ad_data are versioned. Runtime outputs are not.
+/ad_data/local_archive/
+/ad_data/backups/
+/ad_data/experiments/
+/ad_data/logs/
+/ad_data/**/backups/
+/ad_data/**/workers/
+/ad_data/**/raw_samples.csv
+/ad_data/**/events.csv
+/ad_data/**/trials.csv
+/ad_data/**/run_state.json
+/ad_data/morai/SaveFile/SensorData/
+/ad_data/tuning/*
+!/ad_data/tuning/best_parameters/
+!/ad_data/tuning/best_parameters/**
+route_corridor.json
+!ad_data/map/route_corridor.json
+
+# Model weights and optimized runtimes
+/models/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Local data / external clones
+external/

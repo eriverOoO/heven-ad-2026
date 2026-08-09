@@ -1,0 +1,87 @@
+/**:
+  ros__parameters:
+    # The leaf launches override frame transforms from sensor_mounts.yaml.
+    feature_extract_enable: false
+    point_filter_num: 4
+    max_iteration: 3
+    filter_size_surf: 0.5
+    filter_size_map: 0.5
+    cube_side_length: 1000.0
+    runtime_pos_log_enable: false
+
+    common:
+      lid_topic: /ad/sensors/lidar/points
+      imu_topic: /ad/sensors/imu/data
+      time_sync_en: false
+      time_offset_lidar_to_imu: 0.0
+
+    preprocess:
+      lidar_type: 2  # Velodyne
+      scan_line: 16  # VLP-16
+      scan_rate: 10  # Hz
+      timestamp_unit: 0  # PointCloud2 time field is seconds.
+      # MORAI renders the whole revolution at one vehicle pose.
+      scan_timing_mode: instantaneous
+
+    initial_pose_topic: /ad/localization/input/initial_pose
+    wheel_velocity:
+      topic: /ad/localization/input/wheel_speed
+      enabled: true
+      header_stamp_is_device_time: false
+      use_nonholonomic_constraints: true
+      maximum_age_sec: 0.25
+      maximum_future_sec: 0.03
+      maximum_abs_speed_mps: 20.0
+      lateral_variance: 0.04
+      vertical_variance: 0.04
+      preserve_predicted_longitudinal_position: true
+      # Leaf launches keep this disabled so scan-to-map lateral observations
+      # are not overwritten by a longitudinal-only competition status packet.
+      preserve_predicted_lateral_position_in_mapping: false
+      position_integration_period_sec: 0.0
+      longitudinal_position_variance_floor: 0.04
+    odometry_topic: /ad/localization/odometry
+    map_topic: /ad/localization/fastlio/map
+    registered_points_topic: /ad/localization/fastlio/registered_points
+    path_topic: /ad/localization/fastlio/path
+    status_topic: /ad/localization/fastlio/status
+    save_map_service: /ad/localization/fastlio/save_map
+    odom_frame: odom
+    base_frame: base_link
+    imu_frame: imu_link
+    lidar_frame: lidar_link
+
+    # Fixed-map output is withheld until scan matching is consistently valid,
+    # and suppressed again after a short unhealthy window.
+    localization:
+      minimum_effective_points: 20
+      maximum_mean_residual_m: 0.5
+      healthy_scan_count: 3
+      lost_scan_count: 3
+      sensor_timeout_sec: 0.5
+
+    # Active profile defaults; leaf launches replace these for every profile.
+    base_to_imu_T: [0.0, 0.0, 1.5685]
+    base_to_imu_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0
+      det_range: 100.0
+      extrinsic_est_en: false
+      # LiDAR pose expressed in the IMU frame (imu_T_lidar).
+      extrinsic_T: [1.15, 0.0, 0.2]
+      extrinsic_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+    publish:
+      path_en: true
+      scan_publish_en: true
+      dense_publish_en: true
+      scan_bodyframe_pub_en: true
+
+    pcd_save:
+      pcd_save_en: false
+      interval: -1

@@ -1,0 +1,11 @@
+schema_version: 1
+detector:
+  backend: euclidean_cluster
+  model_subdir: models/autoware
+  build_only: false
+tracker:
+  backend: autoware
+occupancy:
+  static_enabled: true
+  dynamic_enabled: true
+  publish_combined: true

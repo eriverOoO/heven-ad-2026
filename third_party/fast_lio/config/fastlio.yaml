@@ -1,0 +1,78 @@
+fastlio_node:
+  ros__parameters:
+    # Restart in the selected mode.  localization loads map_path once and never mutates it.
+    mode: mapping
+    map_path: ""
+    odom_frame: odom
+    base_frame: base_link
+    imu_frame: imu_link
+    lidar_frame: lidar_link
+
+    # Current IONIQ5 fixed transforms.  FastLIO's state is imu; outputs use base_link.
+    base_to_imu_T: [0.0, 0.0, 1.5685]
+    base_to_imu_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+    initial_pose_topic: /ad/localization/input/initial_pose
+    wheel_velocity:
+      topic: /ad/localization/input/wheel_speed
+      enabled: true
+      use_nonholonomic_constraints: true
+      maximum_age_sec: 0.25
+      maximum_future_sec: 0.03
+      maximum_abs_speed_mps: 20.0
+      lateral_variance: 0.04
+      vertical_variance: 0.04
+      preserve_predicted_longitudinal_position: true
+      preserve_predicted_lateral_position_in_mapping: true
+      longitudinal_position_variance_floor: 0.04
+    odometry_topic: /ad/localization/odometry
+    map_topic: /ad/localization/fastlio/map
+    registered_points_topic: /ad/localization/fastlio/registered_points
+    path_topic: /ad/localization/fastlio/path
+    status_topic: /ad/localization/fastlio/status
+    save_map_service: /ad/localization/fastlio/save_map
+    common:
+      lid_topic: /ad/sensors/lidar/points
+      imu_topic: /ad/sensors/imu/data
+      time_sync_en: false
+      time_offset_lidar_to_imu: 0.0
+
+    # MORAI PointCloud2 contract: x/y/z/intensity/ring/time with time in seconds.
+    preprocess:
+      lidar_type: 2  # upstream VELO16
+      timestamp_unit: 0  # upstream SEC
+      required_fields: ["x", "y", "z", "intensity", "ring", "time"]
+      blind: 0.1
+      scan_line: 16
+      scan_rate: 10
+      # rolling: real spinning LiDAR; instantaneous: snapshot simulator cloud.
+      scan_timing_mode: rolling
+
+    feature_extract_enable: false
+    point_filter_num: 2
+    max_iteration: 4
+    filter_size_surf: 0.5
+    filter_size_map: 0.5
+    localization:
+      minimum_effective_points: 20
+      maximum_mean_residual_m: 0.5
+      healthy_scan_count: 3
+      lost_scan_count: 3
+      sensor_timeout_sec: 0.5
+    mapping:
+      extrinsic_est_en: false
+      extrinsic_T: [1.15, 0.0, 0.2]
+      extrinsic_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+      det_range: 300.0
+      fov_degree: 180.0
+      gyr_cov: 0.1
+      acc_cov: 0.1
+      b_gyr_cov: 0.0001
+      b_acc_cov: 0.0001
+    publish:
+      path_en: true
+      map_en: true
+      map_period_sec: 5.0
+      scan_publish_en: true
+      dense_publish_en: false
+      scan_bodyframe_pub_en: false

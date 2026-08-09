@@ -1,0 +1,10 @@
+{
+  "names": {
+    "kalman_filter_localization": {
+      "ctest-args": ["-LE", "linter"]
+    },
+    "kalman_filter_localization_core": {
+      "ctest-args": ["-LE", "linter"]
+    }
+  }
+}

@@ -1,0 +1,2259 @@
+{
+  "cell_count": 429,
+  "cells": [
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 0
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 5
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 10
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 15
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 20
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 25
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 30
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 35
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 40
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 45
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 50
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 55
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 57
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 60
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 65
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 70
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 75
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 80
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 85
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 90
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 95
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 100
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 105
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 110
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 115
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 120
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 125
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 130
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 135
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 140
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 145
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 150
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 155
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 160
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 165
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 170
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 175
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 180
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 0,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 10,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 20,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 30,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 40,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 50,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 60,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 70,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 80,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 90,
+      "speed_kph": 185
+    },
+    {
+      "command_kind": "accelerator",
+      "command_percent": 100,
+      "speed_kph": 185
+    }
+  ],
+  "command_kinds": [
+    "accelerator"
+  ],
+  "command_percentages": [
+    0,
+    10,
+    20,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100
+  ],
+  "controller": {
+    "brake_duration_reference_command": 0.1,
+    "maximum_abs_acceleration_mps2": 12.0,
+    "maximum_abs_jerk_mps3": 1000.0,
+    "maximum_lateral_displacement_m": 1.5,
+    "maximum_reach_accelerator": 1.0,
+    "maximum_reach_duration_sec": 120.0,
+    "maximum_recovery_brake": 0.35,
+    "maximum_speed_mps": 52.777778,
+    "maximum_yaw_deviation_rad": 0.2,
+    "minimum_test_duration_sec": 0.35,
+    "safe_stop_brake": 0.4,
+    "safe_stop_hold_sec": 1.0,
+    "scale_brake_duration_by_command": true,
+    "settle_acceleration_mps2": 0.2,
+    "settle_duration_sec": 1.0,
+    "speed_control_integral_limit": 12.5,
+    "speed_control_ki": 0.08,
+    "speed_control_kp": 0.25,
+    "speed_control_maximum_dt_sec": 0.1,
+    "speed_tolerance_mps": 0.15,
+    "stale_status_sec": 1.0,
+    "stopped_speed_mps": 0.1,
+    "test_duration_sec": 1.5,
+    "test_end_speed_mps": 0.3
+  },
+  "created_unix_sec": 1785122790.3150823,
+  "created_utc": "2026-07-27T03:26:30.315088+00:00",
+  "cross_check_limit_mps2": 0.2,
+  "format_version": 2,
+  "hostname": "heven-Z790-UD",
+  "mad_limit_mps2": 0.15,
+  "maximum_attempts": 7,
+  "measurement": {
+    "baseline_duration_sec": 0.75,
+    "command_echo_fraction": 0.8,
+    "discard_sec": 0.08,
+    "maximum_sample_gap_sec": 0.1,
+    "measurement_window_end_sec": 1.45,
+    "minimum_braking_speed_mps": 0.5,
+    "minimum_measurement_samples": 2,
+    "onset_minimum_deceleration_mps2": 0.15,
+    "onset_sigma_multiplier": 3.0,
+    "onset_sustain_samples": 2
+  },
+  "minimum_valid_trials": 3,
+  "platform": "Linux-6.8.0-101-generic-x86_64-with-glibc2.35",
+  "repeatability_mad_limit_mps2": 0.5,
+  "ros_domain_id": "0",
+  "run_id": "20260727-ioniq5-accelerator-map-v1",
+  "simulator_build": "S4.251001.MolitComp03",
+  "speed_bins_kph": [
+    0,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    57,
+    60,
+    65,
+    70,
+    75,
+    80,
+    85,
+    90,
+    95,
+    100,
+    105,
+    110,
+    115,
+    120,
+    125,
+    130,
+    135,
+    140,
+    145,
+    150,
+    155,
+    160,
+    165,
+    170,
+    175,
+    180,
+    185
+  ],
+  "vehicle_model": "2023_Hyundai_Ioniq5"
+}

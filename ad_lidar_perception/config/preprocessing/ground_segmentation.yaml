@@ -1,0 +1,16 @@
+/**:
+  ros__parameters:
+    algorithm: patchwork  #patchworkpp
+    # Launch supplies base_frame and sensor_height from the selected sensor
+    # profile and the real enabled/bypass input frame.
+    num_iter: 3
+    num_lpr: 20
+    num_min_pts: 5 #10
+    th_seeds: 0.35 #0.3
+    th_dist: 0.18 # 0.125
+    th_seeds_v: 0.25
+    th_dist_v: 0.1
+    max_range: 80.0
+    min_range: 3.0 #1.0
+    uprightness_thr: 0.707
+    verbose: false

@@ -1,0 +1,2 @@
+builtin_interfaces/Duration time_from_start
+geometry_msgs/PoseWithCovariance pose

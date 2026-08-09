@@ -1,0 +1,759 @@
+diff --git a/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp b/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
+index 6c0998eeb46fc4062c43370457ecaa2d24afcdb4..33e9be4572eda2eb4238a5a18c4b251244ac465f 100644
+--- a/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
++++ b/kalman_filter_localization_core/include/kalman_filter_localization/core/ekf_estimator.hpp
+@@ -1241,6 +1241,28 @@ public:
+     return true;
+   }
+ 
++  /// Reinitialize only the velocity error-state uncertainty before an externally
++  /// validated standstill observation. The nominal state is deliberately left
++  /// unchanged so the following ZUPT remains a normal Kalman measurement update.
++  ObservationUpdateStatus resetVelocityCovarianceForStandstill(
++    const Eigen::Vector3d & velocity_variance)
++  {
++    if (!velocity_variance.allFinite() || (velocity_variance.array() <= 0.0).any()) {
++      return ObservationUpdateStatus::kInvalidVariance;
++    }
++
++    const Snapshot before = getSnapshot();
++    P_.block(ERROR_STATE::DVX, 0, 3, num_error_state_).setZero();
++    P_.block(0, ERROR_STATE::DVX, num_error_state_, 3).setZero();
++    P_.block<3, 3>(ERROR_STATE::DVX, ERROR_STATE::DVX).diagonal() = velocity_variance;
++    P_ = 0.5 * (P_ + P_.transpose());
++    if (!checkNumericalInvariants()) {
++      (void)restoreSnapshot(before);
++      return ObservationUpdateStatus::kNumericalFailure;
++    }
++    return ObservationUpdateStatus::kUpdated;
++  }
++
+   Pose getPose() const
+   {
+     Pose pose;
+diff --git a/kalman_filter_localization_core/include/kalman_filter_localization/core/vehicle_observability.hpp b/kalman_filter_localization_core/include/kalman_filter_localization/core/vehicle_observability.hpp
+index f70f50b703103e0cc9086901df5df2ebaa9e8d8a..2dbc58947bddc407a9ceb54cfda12288db85b17c 100644
+--- a/kalman_filter_localization_core/include/kalman_filter_localization/core/vehicle_observability.hpp
++++ b/kalman_filter_localization_core/include/kalman_filter_localization/core/vehicle_observability.hpp
+@@ -43,6 +43,23 @@ namespace kalman_filter_localization
+ namespace core
+ {
+ 
++inline bool hasFreshStationaryWheelEvidence(
++  const double sensor_time_sec, const double wheel_time_sec,
++  const double wheel_speed_mps, const double maximum_age_sec,
++  const double maximum_abs_speed_mps)
++{
++  if (!std::isfinite(sensor_time_sec) || !std::isfinite(wheel_time_sec) ||
++    !std::isfinite(wheel_speed_mps) || !std::isfinite(maximum_age_sec) ||
++    !std::isfinite(maximum_abs_speed_mps) || maximum_age_sec < 0.0 ||
++    maximum_abs_speed_mps < 0.0)
++  {
++    return false;
++  }
++  const double age_sec = sensor_time_sec - wheel_time_sec;
++  return age_sec >= 0.0 && age_sec <= maximum_age_sec &&
++         std::fabs(wheel_speed_mps) <= maximum_abs_speed_mps;
++}
++
+ class StationaryDetector
+ {
+ public:
+@@ -62,7 +79,8 @@ public:
+ 
+   State update(
+     const double time_sec, const Eigen::Vector3d & angular_velocity,
+-    const Eigen::Vector3d & acceleration, const double speed_mps, const double gravity_mps2)
++    const Eigen::Vector3d & acceleration, const double speed_mps, const double gravity_mps2,
++    const bool external_stationary_confirmed = true)
+   {
+     if (!std::isfinite(time_sec) || !angular_velocity.allFinite() ||
+       !acceleration.allFinite() || !std::isfinite(speed_mps) ||
+@@ -76,7 +94,7 @@ public:
+       angular_velocity.norm() <= config_.max_angular_velocity_radps &&
+       std::fabs(acceleration.norm() - gravity_mps2) <=
+       config_.max_acceleration_norm_error_mps2 &&
+-      std::fabs(speed_mps) <= config_.max_speed_mps;
++      std::fabs(speed_mps) <= config_.max_speed_mps && external_stationary_confirmed;
+     if (!stationary_sample) {
+       state_ = State::kMoving;
+       has_candidate_start_ = false;
+diff --git a/kalman_filter_localization_core/test/test_ekf_core.cpp b/kalman_filter_localization_core/test/test_ekf_core.cpp
+index 4cf61622ec9ede661221b705b6c483883ad11dbb..381a82f785c3dd0cd4752a8369e84b6a109be520 100644
+--- a/kalman_filter_localization_core/test/test_ekf_core.cpp
++++ b/kalman_filter_localization_core/test/test_ekf_core.cpp
+@@ -217,7 +217,8 @@ TEST(EKFEstimatorCore, NisGateRejectsWithoutMutatingEstimator)
+   EXPECT_TRUE(after.covariance.isApprox(before.covariance, 0.0));
+   EXPECT_TRUE(after.state.position.isApprox(before.state.position, 0.0));
+   EXPECT_TRUE(after.state.velocity.isApprox(before.state.velocity, 0.0));
+-  EXPECT_TRUE(after.state.orientation.coeffs().isApprox(
++  EXPECT_TRUE(
++    after.state.orientation.coeffs().isApprox(
+       before.state.orientation.coeffs(), 0.0));
+ }
+ 
+@@ -352,6 +353,71 @@ TEST(EKFEstimatorCore, ObservationUpdateVelocityKeepsOrientationWhenDecoupled)
+   EXPECT_LT(angle_err, 1e-10);
+ }
+ 
++TEST(EKFEstimatorCore, StandstillVelocityCovarianceResetIsAtomicAndKeepsNominalState)
++{
++  EKFEstimator estimator;
++  auto initial = estimator.getSnapshot();
++  initial.state.position = Eigen::Vector3d(12.0, -4.0, 1.5);
++  initial.state.velocity = Eigen::Vector3d(0.42, -0.17, 0.31);
++  initial.state.orientation = Eigen::Quaterniond(
++    Eigen::AngleAxisd(0.3, Eigen::Vector3d::UnitZ()));
++  initial.state.gyro_bias = Eigen::Vector3d(0.01, -0.02, 0.03);
++  initial.state.accel_bias = Eigen::Vector3d(0.1, -0.05, 0.02);
++  initial.covariance.setIdentity();
++  initial.covariance.block<3, 3>(0, 3) = 0.2 * Eigen::Matrix3d::Identity();
++  initial.covariance.block<3, 3>(3, 0) = 0.2 * Eigen::Matrix3d::Identity();
++  initial.covariance.block<3, 3>(3, 6) = 0.1 * Eigen::Matrix3d::Identity();
++  initial.covariance.block<3, 3>(6, 3) = 0.1 * Eigen::Matrix3d::Identity();
++  ASSERT_TRUE(estimator.restoreSnapshot(initial));
++
++  const auto before = estimator.getSnapshot();
++  const Eigen::Vector3d reset_variance(1.0e-4, 2.0e-4, 3.0e-4);
++  ASSERT_EQ(
++    estimator.resetVelocityCovarianceForStandstill(reset_variance),
++    EKFEstimator::ObservationUpdateStatus::kUpdated);
++
++  const auto after = estimator.getSnapshot();
++  const Eigen::Matrix3d reset_covariance = reset_variance.asDiagonal();
++  EXPECT_TRUE(after.state.velocity.isApprox(before.state.velocity, 0.0));
++  EXPECT_TRUE(after.state.position.isApprox(before.state.position, 0.0));
++  EXPECT_TRUE(after.state.orientation.coeffs().isApprox(
++      before.state.orientation.coeffs(), 0.0));
++  EXPECT_TRUE(after.state.gyro_bias.isApprox(before.state.gyro_bias, 0.0));
++  EXPECT_TRUE(after.state.accel_bias.isApprox(before.state.accel_bias, 0.0));
++  EXPECT_TRUE(
++    (after.covariance.block<3, 3>(3, 3).isApprox(
++      reset_covariance, 0.0)));
++  EXPECT_TRUE(after.covariance.block(3, 0, 3, 3).isZero(0.0));
++  EXPECT_TRUE(after.covariance.block(3, 6, 3, 9).isZero(0.0));
++  EXPECT_TRUE(after.covariance.block(0, 3, 3, 3).isZero(0.0));
++  EXPECT_TRUE(after.covariance.block(6, 3, 9, 3).isZero(0.0));
++  EXPECT_TRUE(
++    (after.covariance.block<3, 3>(0, 0).isApprox(
++      before.covariance.block<3, 3>(0, 0), 0.0)));
++  EXPECT_TRUE(
++    after.covariance.block(6, 6, 9, 9).isApprox(
++      before.covariance.block(6, 6, 9, 9), 0.0));
++  EXPECT_TRUE(estimator.checkNumericalInvariants());
++
++  const auto valid = estimator.getSnapshot();
++  const Eigen::VectorXd valid_x = estimator.getX();
++  EXPECT_EQ(
++    estimator.resetVelocityCovarianceForStandstill(
++      Eigen::Vector3d(0.0, 1.0e-4, 1.0e-4)),
++    EKFEstimator::ObservationUpdateStatus::kInvalidVariance);
++  EXPECT_TRUE(estimator.getX().isApprox(valid_x, 0.0));
++  EXPECT_TRUE(estimator.getSnapshot().state.velocity.isApprox(valid.state.velocity, 0.0));
++  EXPECT_TRUE(estimator.getCovariance().isApprox(valid.covariance, 0.0));
++
++  Eigen::Vector3d nonfinite_variance = reset_variance;
++  nonfinite_variance.z() = std::numeric_limits<double>::quiet_NaN();
++  EXPECT_EQ(
++    estimator.resetVelocityCovarianceForStandstill(nonfinite_variance),
++    EKFEstimator::ObservationUpdateStatus::kInvalidVariance);
++  EXPECT_TRUE(estimator.getX().isApprox(valid_x, 0.0));
++  EXPECT_TRUE(estimator.getCovariance().isApprox(valid.covariance, 0.0));
++}
++
+ TEST(EKFEstimatorCore, BodyVelocityConstraintReducesLateralAndVerticalVelocity)
+ {
+   EKFEstimator ekf;
+diff --git a/kalman_filter_localization_core/test/test_vehicle_observability.cpp b/kalman_filter_localization_core/test/test_vehicle_observability.cpp
+index 649a4b050537a996e95c9dcff71d6e553c194075..ca58db87b224b2485681784565ab943873100477 100644
+--- a/kalman_filter_localization_core/test/test_vehicle_observability.cpp
++++ b/kalman_filter_localization_core/test/test_vehicle_observability.cpp
+@@ -35,6 +35,7 @@
+ 
+ using kalman_filter_localization::core::SlipTurnDetector;
+ using kalman_filter_localization::core::StationaryDetector;
++using kalman_filter_localization::core::hasFreshStationaryWheelEvidence;
+ 
+ TEST(VehicleObservability, StationaryDetectorRequiresContinuousDuration)
+ {
+@@ -54,6 +55,36 @@ TEST(VehicleObservability, StationaryDetectorRequiresContinuousDuration)
+     StationaryDetector::State::kMoving);
+ }
+ 
++TEST(VehicleObservability, StationaryDetectorRequiresContinuousExternalEvidence)
++{
++  StationaryDetector::Config config;
++  config.minimum_duration_sec = 0.5;
++  StationaryDetector detector(config);
++  const Eigen::Vector3d gyro = Eigen::Vector3d::Zero();
++  const Eigen::Vector3d accel(0.0, 0.0, 9.80665);
++
++  EXPECT_EQ(detector.update(0.0, gyro, accel, 0.0, 9.80665, true),
++    StationaryDetector::State::kCandidate);
++  EXPECT_EQ(detector.update(0.49, gyro, accel, 0.0, 9.80665, false),
++    StationaryDetector::State::kMoving);
++  EXPECT_EQ(detector.update(0.50, gyro, accel, 0.0, 9.80665, true),
++    StationaryDetector::State::kCandidate);
++  EXPECT_EQ(detector.update(0.99, gyro, accel, 0.0, 9.80665, true),
++    StationaryDetector::State::kCandidate);
++  EXPECT_EQ(detector.update(1.00, gyro, accel, 0.0, 9.80665, true),
++    StationaryDetector::State::kStationary);
++}
++
++TEST(VehicleObservability, WheelStationaryEvidenceFailsClosed)
++{
++  EXPECT_TRUE(hasFreshStationaryWheelEvidence(10.0, 9.95, 0.0, 0.1, 0.01));
++  EXPECT_FALSE(hasFreshStationaryWheelEvidence(10.0, 9.95, 0.02, 0.1, 0.01));
++  EXPECT_FALSE(hasFreshStationaryWheelEvidence(10.0, 9.8, 0.0, 0.1, 0.01));
++  EXPECT_FALSE(hasFreshStationaryWheelEvidence(10.0, 10.01, 0.0, 0.1, 0.01));
++  EXPECT_FALSE(hasFreshStationaryWheelEvidence(
++    10.0, std::numeric_limits<double>::quiet_NaN(), 0.0, 0.1, 0.01));
++}
++
+ TEST(VehicleObservability, SlipInjectionReducesNhcGainAndRecovers)
+ {
+   SlipTurnDetector::Config config;
+diff --git a/kalman_filter_localization_ros2/CMakeLists.txt b/kalman_filter_localization_ros2/CMakeLists.txt
+index aa6b956101bab68e0dad00964631677b55905cae..1b171a13550d457c75fd24f0d37ecd84740bff6f 100644
+--- a/kalman_filter_localization_ros2/CMakeLists.txt
++++ b/kalman_filter_localization_ros2/CMakeLists.txt
+@@ -49,6 +49,7 @@ if(BUILD_TESTING)
+   ament_add_gtest(test_ekf_large_gap_recovery test/test_ekf_large_gap_recovery.cpp)
+   ament_add_gtest(
+     test_ekf_stationary_initialization test/test_ekf_stationary_initialization.cpp)
++  ament_add_gtest(test_ekf_wheel_confirmed_zupt test/test_ekf_wheel_confirmed_zupt.cpp)
+ endif()
+ 
+ add_library(ekf_localization_component SHARED
+@@ -73,6 +74,9 @@ if(BUILD_TESTING)
+   target_link_libraries(test_ekf_stationary_initialization ekf_localization_component)
+   ament_target_dependencies(test_ekf_stationary_initialization
+     rclcpp geometry_msgs sensor_msgs std_msgs)
++  target_link_libraries(test_ekf_wheel_confirmed_zupt ekf_localization_component)
++  ament_target_dependencies(test_ekf_wheel_confirmed_zupt
++    rclcpp geometry_msgs sensor_msgs std_msgs)
+ endif()
+ 
+ add_executable(ekf_localization_node
+diff --git a/kalman_filter_localization_ros2/param/ekf.yaml b/kalman_filter_localization_ros2/param/ekf.yaml
+index 8ae0fbeee7b306ba244fcb5b8325a158320f1572..909b19f33c8091e3c454b13a1a4d523b8e7658c3 100644
+--- a/kalman_filter_localization_ros2/param/ekf.yaml
++++ b/kalman_filter_localization_ros2/param/ekf.yaml
+@@ -92,7 +92,13 @@ ekf_localization:
+       zupt_max_angular_velocity_radps: 0.02
+       zupt_max_acceleration_error_mps2: 0.2
+       zupt_max_speed_mps: 0.3
++      zupt_require_wheel_speed: false
++      zupt_max_wheel_speed_mps: 0.02
++      zupt_max_wheel_age_sec: 0.1
+       zupt_min_stationary_duration_sec: 0.5
++      zupt_reinitialize_velocity_covariance: false
++      zupt_reinitialization_max_speed_mps: 0.3
++      var_zupt_reinitialized_velocity: 0.25
+       var_zupt_velocity: 0.01
+       use_zihr: false
+       var_zihr_gyro: 1.0e-5
+diff --git a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+index 16860de6bd25aca91993530bf3bf1fc3c14e708b..f1ea740bfbf4ac37d278f151d295f0291db92309 100644
+--- a/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
++++ b/kalman_filter_localization_ros2/src/ekf_localization_component.cpp
+@@ -209,6 +209,7 @@ struct EkfLocalizationComponent::Impl
+   {
+     bool initialized{false};
+     bool apply_zupt{false};
++    bool reinitialize_zupt_velocity_covariance{false};
+     bool apply_zihr{false};
+     double nhc_variance_scale{1.0};
+     bool learn_gyro_bias{true};
+@@ -627,8 +628,23 @@ struct EkfLocalizationComponent::Impl
+     node_.get_parameter("zupt_max_acceleration_error_mps2", zupt_max_acceleration_error_mps2_);
+     node_.declare_parameter("zupt_max_speed_mps", 0.3);
+     node_.get_parameter("zupt_max_speed_mps", zupt_max_speed_mps_);
++    node_.declare_parameter("zupt_require_wheel_speed", false);
++    node_.get_parameter("zupt_require_wheel_speed", zupt_require_wheel_speed_);
++    node_.declare_parameter("zupt_max_wheel_speed_mps", 0.02);
++    node_.get_parameter("zupt_max_wheel_speed_mps", zupt_max_wheel_speed_mps_);
++    node_.declare_parameter("zupt_max_wheel_age_sec", 0.1);
++    node_.get_parameter("zupt_max_wheel_age_sec", zupt_max_wheel_age_sec_);
+     node_.declare_parameter("zupt_min_stationary_duration_sec", 0.5);
+     node_.get_parameter("zupt_min_stationary_duration_sec", zupt_min_stationary_duration_sec_);
++    node_.declare_parameter("zupt_reinitialize_velocity_covariance", false);
++    node_.get_parameter(
++      "zupt_reinitialize_velocity_covariance", zupt_reinitialize_velocity_covariance_);
++    node_.declare_parameter("zupt_reinitialization_max_speed_mps", 0.3);
++    node_.get_parameter(
++      "zupt_reinitialization_max_speed_mps", zupt_reinitialization_max_speed_mps_);
++    node_.declare_parameter("var_zupt_reinitialized_velocity", 0.25);
++    node_.get_parameter(
++      "var_zupt_reinitialized_velocity", var_zupt_reinitialized_velocity_);
+     node_.declare_parameter("var_zupt_velocity", 0.01);
+     node_.get_parameter("var_zupt_velocity", var_zupt_velocity_);
+     node_.declare_parameter("use_zihr", false);
+@@ -1009,6 +1025,29 @@ struct EkfLocalizationComponent::Impl
+       RCLCPP_WARN(node_.get_logger(), "invalid var_zupt_velocity; disabling ZUPT");
+       use_zupt_ = false;
+     }
++    if (zupt_reinitialize_velocity_covariance_ &&
++      (!use_zupt_ || !use_wheel_speed_ || !zupt_require_wheel_speed_ ||
++      !(zupt_reinitialization_max_speed_mps_ >= 0.0) ||
++      !std::isfinite(zupt_reinitialization_max_speed_mps_) ||
++      !(var_zupt_reinitialized_velocity_ > 0.0) ||
++      !std::isfinite(var_zupt_reinitialized_velocity_)))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "velocity-covariance reinitialization requires enabled wheel-gated ZUPT and valid "
++        "speed/variance parameters; disabling reinitialization");
++      zupt_reinitialize_velocity_covariance_ = false;
++    }
++    if (use_zupt_ && zupt_require_wheel_speed_ &&
++      (!use_wheel_speed_ || !(zupt_max_wheel_speed_mps_ >= 0.0) ||
++      !std::isfinite(zupt_max_wheel_speed_mps_) || !(zupt_max_wheel_age_sec_ >= 0.0) ||
++      !std::isfinite(zupt_max_wheel_age_sec_)))
++    {
++      RCLCPP_WARN(
++        node_.get_logger(),
++        "wheel-gated ZUPT requires valid wheel-speed input and thresholds; disabling ZUPT");
++      use_zupt_ = false;
++    }
+     if (use_zihr_ && (!(var_zihr_gyro_ > 0.0) || !std::isfinite(var_zihr_gyro_))) {
+       RCLCPP_WARN(node_.get_logger(), "invalid var_zihr_gyro; disabling ZIHR");
+       use_zihr_ = false;
+@@ -1697,6 +1736,10 @@ struct EkfLocalizationComponent::Impl
+         has_latest_gnss_doppler_ = false;
+         has_reacquisition_previous_position_ = false;
+         has_stationary_start_time_ = false;
++        zupt_velocity_reinitialization_armed_ = true;
++        has_latest_zupt_wheel_speed_ = false;
++        latest_zupt_raw_wheel_speed_mps_ = 0.0;
++        latest_zupt_wheel_speed_time_ = 0.0;
+       };
+     auto initial_pose_callback =
+       [this, process_initial_pose](
+@@ -1977,6 +2020,19 @@ struct EkfLocalizationComponent::Impl
+           msg->header.stamp.sec + msg->header.stamp.nanosec * 1.0e-9;
+         has_latest_wheel_speed_ = std::isfinite(latest_raw_wheel_speed_mps_) &&
+           std::isfinite(latest_wheel_speed_time_);
++        const bool newer_zupt_wheel_sample = !has_latest_zupt_wheel_speed_ ||
++          latest_wheel_speed_time_ > latest_zupt_wheel_speed_time_;
++        const bool same_stamp_with_more_motion = has_latest_zupt_wheel_speed_ &&
++          latest_wheel_speed_time_ == latest_zupt_wheel_speed_time_ &&
++          std::fabs(latest_raw_wheel_speed_mps_) >
++          std::fabs(latest_zupt_raw_wheel_speed_mps_);
++        if (has_latest_wheel_speed_ &&
++          (newer_zupt_wheel_sample || same_stamp_with_more_motion))
++        {
++          latest_zupt_raw_wheel_speed_mps_ = latest_raw_wheel_speed_mps_;
++          latest_zupt_wheel_speed_time_ = latest_wheel_speed_time_;
++          has_latest_zupt_wheel_speed_ = true;
++        }
+         const bool gnss_outage = has_previous_gnss_position_time_ &&
+           latest_wheel_speed_time_ - previous_gnss_position_time_ >
+           wheel_speed_gnss_outage_threshold_sec_;
+@@ -2117,6 +2173,58 @@ struct EkfLocalizationComponent::Impl
+     }
+   }
+ 
++  bool hasStationaryWheelEvidence(const double sensor_time_sec) const
++  {
++    if (!zupt_require_wheel_speed_) {
++      return true;
++    }
++    return has_latest_zupt_wheel_speed_ && core::hasFreshStationaryWheelEvidence(
++      sensor_time_sec, latest_zupt_wheel_speed_time_,
++      latest_zupt_raw_wheel_speed_mps_ * wheel_speed_scale_factor_,
++      zupt_max_wheel_age_sec_, zupt_max_wheel_speed_mps_);
++  }
++
++  bool shouldReinitializeZuptVelocityCovariance(
++    const core::StationaryDetector::State stationary_state,
++    const double estimated_speed_mps)
++  {
++    if (stationary_state != core::StationaryDetector::State::kStationary) {
++      zupt_velocity_reinitialization_armed_ = true;
++      return false;
++    }
++    if (!use_zupt_ || !zupt_reinitialize_velocity_covariance_ ||
++      !zupt_velocity_reinitialization_armed_ || !std::isfinite(estimated_speed_mps) ||
++      estimated_speed_mps > zupt_reinitialization_max_speed_mps_)
++    {
++      return false;
++    }
++    zupt_velocity_reinitialization_armed_ = false;
++    return true;
++  }
++
++  core::EKFEstimator::ObservationUpdateStatus applyZeroVelocityUpdate(
++    core::EKFEstimator & estimator, const bool reinitialize_velocity_covariance)
++  {
++    using UpdateStatus = core::EKFEstimator::ObservationUpdateStatus;
++    const auto before = estimator.getSnapshot();
++    if (reinitialize_velocity_covariance) {
++      const auto reset_status = estimator.resetVelocityCovarianceForStandstill(
++        Eigen::Vector3d::Constant(var_zupt_reinitialized_velocity_));
++      if (reset_status != UpdateStatus::kUpdated) {
++        return reset_status;
++      }
++    }
++
++    const auto update_status = estimator.observationUpdateVelocityWithStatus(
++      Eigen::Vector3d::Zero(), Eigen::Vector3d::Constant(var_zupt_velocity_), true);
++    if (update_status != UpdateStatus::kUpdated && reinitialize_velocity_covariance) {
++      if (!estimator.restoreSnapshot(before)) {
++        return UpdateStatus::kNumericalFailure;
++      }
++    }
++    return update_status;
++  }
++
+   core::EskfReplay::MeasurementFunction makeImuReplayCorrection(
+     const sensor_msgs::msg::Imu & imu_msg, const double sensor_time)
+   {
+@@ -2133,9 +2241,13 @@ struct EkfLocalizationComponent::Impl
+              if (!plan->initialized) {
+                const auto stationary_state = stationary_detector_.update(
+                  sensor_time, angular_velocity, acceleration,
+-                 estimator.getVelocity().norm(), gravity_mps2_);
++                 estimator.getVelocity().norm(), gravity_mps2_,
++                 hasStationaryWheelEvidence(sensor_time));
+                plan->apply_zupt = use_zupt_ &&
+                  stationary_state == core::StationaryDetector::State::kStationary;
++               plan->reinitialize_zupt_velocity_covariance = plan->apply_zupt &&
++                 shouldReinitializeZuptVelocityCovariance(
++                 stationary_state, estimator.getVelocity().norm());
+                plan->apply_zihr = use_zihr_ &&
+                  stationary_state == core::StationaryDetector::State::kStationary;
+                const auto slip = slip_turn_detector_.update(
+@@ -2201,8 +2313,8 @@ struct EkfLocalizationComponent::Impl
+              }
+ 
+              if (plan->apply_zupt) {
+-               status = estimator.observationUpdateVelocityWithStatus(
+-                 Eigen::Vector3d::Zero(), Eigen::Vector3d::Constant(var_zupt_velocity_), true);
++               status = applyZeroVelocityUpdate(
++                 estimator, plan->reinitialize_zupt_velocity_covariance);
+                if (status != UpdateStatus::kUpdated) {
+                  return status;
+                }
+@@ -2443,6 +2555,8 @@ struct EkfLocalizationComponent::Impl
+         post_gap_gnss_reanchor_pending_ = false;
+         post_gap_gnss_measurement_id_ = 0U;
+         resetPostGapGnssConsistency();
++        stationary_detector_.reset();
++        zupt_velocity_reinitialization_armed_ = true;
+         replay_->reset();
+         const auto reanchor_status = replay_->addImu(
+           current_time_imu, gyro, linear_acceleration);
+@@ -2511,6 +2625,8 @@ struct EkfLocalizationComponent::Impl
+       RCLCPP_WARN_THROTTLE(
+         node_.get_logger(), clock_, 5000,
+         "skip EKF prediction update due to too large IMU dt: %f [sec]", dt_imu);
++      stationary_detector_.reset();
++      zupt_velocity_reinitialization_armed_ = true;
+       return;
+     }
+     if (status != core::EKFEstimator::PredictionUpdateStatus::kUpdated) {
+@@ -2522,7 +2638,11 @@ struct EkfLocalizationComponent::Impl
+ 
+     const auto stationary_state = stationary_detector_.update(
+       current_time_imu, gyro, linear_acceleration,
+-      ekf_.getVelocity().norm(), gravity_mps2_);
++      ekf_.getVelocity().norm(), gravity_mps2_,
++      hasStationaryWheelEvidence(current_time_imu));
++    const bool reinitialize_zupt_velocity_covariance =
++      shouldReinitializeZuptVelocityCovariance(
++      stationary_state, ekf_.getVelocity().norm());
+     bool learn_gyro_bias = true;
+     bool learn_accel_bias = true;
+     if (enable_bias_observability_gate_) {
+@@ -2600,11 +2720,14 @@ struct EkfLocalizationComponent::Impl
+       updateNonholonomicConstraint(imu_msg);
+     }
+     if (use_zupt_ || use_zihr_) {
+-      updateZeroVelocity(imu_msg, current_time_imu);
++      updateZeroVelocity(
++        imu_msg, current_time_imu, reinitialize_zupt_velocity_covariance);
+     }
+   }
+ 
+-  void updateZeroVelocity(const sensor_msgs::msg::Imu & imu_msg, const double time_sec)
++  void updateZeroVelocity(
++    const sensor_msgs::msg::Imu & imu_msg, const double time_sec,
++    const bool reinitialize_zupt_velocity_covariance)
+   {
+     const Eigen::Vector3d angular_velocity(
+       imu_msg.angular_velocity.x, imu_msg.angular_velocity.y, imu_msg.angular_velocity.z);
+@@ -2621,10 +2744,9 @@ struct EkfLocalizationComponent::Impl
+ 
+     if (use_zupt_) {
+       const StateSnapshot state_before = captureState();
+-      const Eigen::Vector3d variance = Eigen::Vector3d::Constant(var_zupt_velocity_);
+-      const auto status = ekf_.observationUpdateVelocityWithStatus(
+-        Eigen::Vector3d::Zero(), variance, true);
+-      int status_code = 1;
++      const auto status = applyZeroVelocityUpdate(
++        ekf_, reinitialize_zupt_velocity_covariance);
++      int status_code = reinitialize_zupt_velocity_covariance ? 2 : 1;
+       if (status == core::EKFEstimator::ObservationUpdateStatus::kInvalidMeasurement) {
+         status_code = -1;
+       } else if (status == core::EKFEstimator::ObservationUpdateStatus::kInvalidVariance) {
+@@ -4188,7 +4310,17 @@ struct EkfLocalizationComponent::Impl
+   double zupt_max_angular_velocity_radps_{0.02};
+   double zupt_max_acceleration_error_mps2_{0.2};
+   double zupt_max_speed_mps_{0.3};
++  bool zupt_require_wheel_speed_{false};
++  double zupt_max_wheel_speed_mps_{0.02};
++  double zupt_max_wheel_age_sec_{0.1};
++  bool has_latest_zupt_wheel_speed_{false};
++  double latest_zupt_raw_wheel_speed_mps_{0.0};
++  double latest_zupt_wheel_speed_time_{0.0};
+   double zupt_min_stationary_duration_sec_{0.5};
++  bool zupt_reinitialize_velocity_covariance_{false};
++  double zupt_reinitialization_max_speed_mps_{0.3};
++  double var_zupt_reinitialized_velocity_{0.25};
++  bool zupt_velocity_reinitialization_armed_{true};
+   double var_zupt_velocity_{0.01};
+   bool use_zihr_{false};
+   double var_zihr_gyro_{1.0e-5};
+diff --git a/kalman_filter_localization_ros2/test/test_ekf_wheel_confirmed_zupt.cpp b/kalman_filter_localization_ros2/test/test_ekf_wheel_confirmed_zupt.cpp
+new file mode 100644
+index 0000000000000000000000000000000000000000..de6d4afe937d7b7d9759ef3e9619c594cbaad20e
+--- /dev/null
++++ b/kalman_filter_localization_ros2/test/test_ekf_wheel_confirmed_zupt.cpp
+@@ -0,0 +1,236 @@
++// Copyright (c) 2026, HEVEN contributors
++// All rights reserved.
++//
++// Software License Agreement (BSD License 2.0)
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions
++// are met:
++//
++//  * Redistributions of source code must retain the above copyright
++//    notice, this list of conditions and the following disclaimer.
++//  * Redistributions in binary form must reproduce the above
++//    copyright notice, this list of conditions and the following
++//    disclaimer in the documentation and/or other materials provided
++//    with the distribution.
++//  * Neither the name of HEVEN contributors nor the names of its
++//    contributors may be used to endorse or promote products derived
++//    from this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
++// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++#include <gtest/gtest.h>
++
++#include <chrono>
++#include <cstdint>
++#include <functional>
++#include <memory>
++#include <thread>
++#include <vector>
++
++#include <geometry_msgs/msg/pose_stamped.hpp>
++#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
++#include <rclcpp/rclcpp.hpp>
++#include <sensor_msgs/msg/imu.hpp>
++#include <std_msgs/msg/float64_multi_array.hpp>
++
++#include <kalman_filter_localization/ekf_localization_component.hpp>
++
++namespace
++{
++using namespace std::chrono_literals;
++
++builtin_interfaces::msg::Time stamp(const double seconds)
++{
++  builtin_interfaces::msg::Time result;
++  result.sec = static_cast<std::int32_t>(seconds);
++  result.nanosec = static_cast<std::uint32_t>((seconds - result.sec) * 1.0e9);
++  return result;
++}
++
++bool spinUntil(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  const std::function<bool()> & predicate,
++  const std::chrono::milliseconds timeout = 1000ms)
++{
++  const auto deadline = std::chrono::steady_clock::now() + timeout;
++  while (std::chrono::steady_clock::now() < deadline) {
++    executor.spin_some();
++    if (predicate()) {
++      return true;
++    }
++    std::this_thread::sleep_for(2ms);
++  }
++  executor.spin_some();
++  return predicate();
++}
++
++void spinFor(
++  rclcpp::executors::SingleThreadedExecutor & executor,
++  const std::chrono::milliseconds duration)
++{
++  const auto deadline = std::chrono::steady_clock::now() + duration;
++  while (std::chrono::steady_clock::now() < deadline) {
++    executor.spin_some();
++    std::this_thread::sleep_for(2ms);
++  }
++}
++
++TEST(EkfWheelConfirmedZupt, RequiresContinuousFreshZeroWheelEvidence)
++{
++  const std::vector<rclcpp::Parameter> parameters{
++    rclcpp::Parameter("initial_pose_topic", "/wheel_zupt_test/initial_pose"),
++    rclcpp::Parameter("imu_topic", "/wheel_zupt_test/imu"),
++    rclcpp::Parameter("wheel_speed_topic", "/wheel_zupt_test/wheel_speed"),
++    rclcpp::Parameter("output_publish_mode", "imu"),
++    rclcpp::Parameter("publish_tf", false),
++    rclcpp::Parameter("publish_debug_topics", true),
++    rclcpp::Parameter("use_gnss", false),
++    rclcpp::Parameter("use_wheel_speed", true),
++    rclcpp::Parameter("enable_stationary_initialization", false),
++    rclcpp::Parameter("enable_measurement_replay", false),
++    rclcpp::Parameter("use_zupt", true),
++    rclcpp::Parameter("zupt_require_wheel_speed", true),
++    rclcpp::Parameter("zupt_max_wheel_speed_mps", 0.02),
++    rclcpp::Parameter("zupt_max_wheel_age_sec", 0.1),
++    rclcpp::Parameter("zupt_max_speed_mps", 0.1),
++    rclcpp::Parameter("zupt_min_stationary_duration_sec", 0.05),
++    rclcpp::Parameter("zupt_reinitialize_velocity_covariance", true),
++    rclcpp::Parameter("zupt_reinitialization_max_speed_mps", 0.1),
++    rclcpp::Parameter("var_zupt_reinitialized_velocity", 0.25),
++    rclcpp::Parameter("var_zupt_velocity", 0.01)};
++  rclcpp::NodeOptions options;
++  options.arguments({"--ros-args", "-r", "__node:=ekf_wheel_zupt_test"});
++  options.parameter_overrides(parameters);
++
++  const auto ekf_node =
++    std::make_shared<kalman_filter_localization::EkfLocalizationComponent>(options);
++  const auto probe_node = std::make_shared<rclcpp::Node>("ekf_wheel_zupt_probe");
++  const auto initial_pose_pub =
++    probe_node->create_publisher<geometry_msgs::msg::PoseStamped>(
++    "/wheel_zupt_test/initial_pose", 10);
++  const auto imu_pub = probe_node->create_publisher<sensor_msgs::msg::Imu>(
++    "/wheel_zupt_test/imu", rclcpp::SensorDataQoS());
++  const auto wheel_pub =
++    probe_node->create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>(
++    "/wheel_zupt_test/wheel_speed", rclcpp::SensorDataQoS());
++  std::size_t zupt_update_count = 0U;
++  std::size_t velocity_covariance_reinitialization_count = 0U;
++  const auto debug_sub = probe_node->create_subscription<std_msgs::msg::Float64MultiArray>(
++    "/ekf_wheel_zupt_test/debug/update_delta", 10,
++    [&zupt_update_count, &velocity_covariance_reinitialization_count](
++      std_msgs::msg::Float64MultiArray::ConstSharedPtr message)
++    {
++      if (message->data.size() >= 3U && message->data[1] == 6.0 &&
++      message->data[2] > 0.0)
++      {
++        ++zupt_update_count;
++        if (message->data[2] == 2.0) {
++          ++velocity_covariance_reinitialization_count;
++        }
++      }
++    });
++
++  rclcpp::executors::SingleThreadedExecutor executor;
++  executor.add_node(ekf_node);
++  executor.add_node(probe_node);
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {
++        return initial_pose_pub->get_subscription_count() == 1U &&
++        imu_pub->get_subscription_count() == 1U &&
++        wheel_pub->get_subscription_count() == 1U &&
++        debug_sub->get_publisher_count() == 1U;
++      }));
++
++  geometry_msgs::msg::PoseStamped initial_pose;
++  initial_pose.header.stamp = stamp(10.0);
++  initial_pose.header.frame_id = "map";
++  initial_pose.pose.orientation.w = 1.0;
++  initial_pose_pub->publish(initial_pose);
++  spinFor(executor, 20ms);
++
++  const auto publish_imu = [&](const double time) {
++      sensor_msgs::msg::Imu message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "base_link";
++      message.orientation.w = 1.0;
++      message.linear_acceleration.z = 9.80665;
++      imu_pub->publish(message);
++      spinFor(executor, 5ms);
++    };
++  const auto publish_wheel = [&](const double time, const double speed) {
++      geometry_msgs::msg::TwistWithCovarianceStamped message;
++      message.header.stamp = stamp(time);
++      message.header.frame_id = "base_link";
++      message.twist.twist.linear.x = speed;
++      wheel_pub->publish(message);
++      spinFor(executor, 5ms);
++    };
++
++  for (int index = 1; index <= 6; ++index) {
++    publish_imu(10.0 + index * 0.02);
++  }
++  EXPECT_EQ(zupt_update_count, 0U);
++
++  for (int index = 7; index <= 12; ++index) {
++    const double time = 10.0 + index * 0.02;
++    publish_wheel(time, 0.03);
++    publish_imu(time);
++  }
++  EXPECT_EQ(zupt_update_count, 0U);
++
++  for (int index = 13; index <= 15; ++index) {
++    const double time = 10.0 + index * 0.02;
++    publish_wheel(time, 0.0);
++    publish_imu(time);
++  }
++  EXPECT_EQ(zupt_update_count, 0U);
++
++  publish_wheel(10.32, 0.0);
++  publish_imu(10.32);
++  ASSERT_TRUE(spinUntil(executor, [&]() {return zupt_update_count > 0U;}));
++  EXPECT_EQ(velocity_covariance_reinitialization_count, 1U);
++
++  publish_wheel(10.33, 0.0);
++  publish_imu(10.33);
++  EXPECT_EQ(velocity_covariance_reinitialization_count, 1U);
++
++  const std::size_t before_motion = zupt_update_count;
++  publish_wheel(10.34, -0.03);
++  publish_imu(10.34);
++  spinFor(executor, 20ms);
++  EXPECT_EQ(zupt_update_count, before_motion);
++
++  for (int index = 18; index <= 21; ++index) {
++    const double time = 10.0 + index * 0.02;
++    publish_wheel(time, 0.0);
++    publish_imu(time);
++  }
++  ASSERT_TRUE(
++    spinUntil(
++      executor, [&]() {return velocity_covariance_reinitialization_count == 2U;}));
++  EXPECT_EQ(velocity_covariance_reinitialization_count, 2U);
++}
++
++}  // namespace
++
++int main(int argc, char ** argv)
++{
++  rclcpp::init(argc, argv);
++  testing::InitGoogleTest(&argc, argv);
++  const int result = RUN_ALL_TESTS();
++  rclcpp::shutdown();
++  return result;
++}

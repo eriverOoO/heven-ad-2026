@@ -1,0 +1,12 @@
+[Unit]
+Description=agent-tick planner (single wrapper for full cycle)
+Documentation=https://app.notion.com/p/39c3bf068300807c9e5bcf6b469f94ee
+
+[Service]
+Type=oneshot
+# 경로는 머신 워크스페이스에 맞게 수정해서 설치 (env 파일은 스크립트도 자체 로드함)
+EnvironmentFile=-%h/.config/heven-agent/heven-agent.env
+ExecStart=%h/heven_common_test_ws/runner/bin/agent-tick
+TimeoutStartSec=45min
+KillMode=control-group
+Nice=10

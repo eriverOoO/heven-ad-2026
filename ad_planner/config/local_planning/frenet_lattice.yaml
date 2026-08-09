@@ -1,0 +1,29 @@
+ad_planner:
+  ros__parameters:
+    frenet_lattice.lateral_targets_m: [-1.0, 0.0, 1.0]
+    frenet_lattice.target_speeds_mps: [2.0, 4.0, 6.0]
+    frenet_lattice.durations_s: [2.0, 3.0, 4.0]
+    frenet_lattice.sample_dt_s: 0.1
+    frenet_lattice.maximum_curvature_inv_m: 0.2
+    frenet_lattice.maximum_acceleration_mps2: 3.0
+    frenet_lattice.maximum_lateral_acceleration_mps2: 3.0
+    frenet_lattice.maximum_jerk_mps3: 5.0
+    frenet_lattice.maximum_lateral_transition_m: 5.0
+    frenet_lattice.footprint_clearance_m: 0.2
+    frenet_lattice.occupied_threshold: 100
+    frenet_lattice.maximum_cells_to_check: 4096
+    frenet_lattice.progress_weight: 1.0
+    frenet_lattice.clearance_weight: 1.0
+    frenet_lattice.jerk_weight: 0.1
+    frenet_lattice.lateral_offset_weight: 0.2
+    frenet_lattice.lane_change_weight: 1.0
+    frenet_lattice.continuity_weight: 1.0
+    frenet_lattice.maximum_candidates: 512
+    local_motion.maximum_speed_mps: 16.25
+    local_motion.maximum_acceleration_mps2: 5.0
+    local_motion.maximum_deceleration_mps2: 6.0
+    local_motion.maximum_lateral_acceleration_mps2: 6.0
+    local_motion.maximum_jerk_mps3: 5.0
+    local_motion.footprint_front_m: 3.845
+    local_motion.footprint_rear_m: 0.79
+    local_motion.footprint_half_width_m: 0.945

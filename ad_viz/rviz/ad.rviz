@@ -1,0 +1,1117 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Scene1
+        - /Localization1
+        - /LiDAR Preprocessing1
+      Splitter Ratio: 0.5
+    Tree Height: 671
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded: null
+    Name: Tool Properties
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ''
+  Displays:
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.3499999940395355
+          Cell Size: 1
+          Class: rviz_default_plugins/Grid
+          Color: 160; 160; 164
+          Enabled: true
+          Line Style:
+            Line Width: 0.029999999329447746
+            Value: Lines
+          Name: Grid
+          Normal Cell Count: 0
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Plane: XY
+          Plane Cell Count: 200
+          Reference Frame: <Fixed Frame>
+          Value: true
+        - Class: rviz_default_plugins/TF
+          Enabled: true
+          Frame Timeout: 15
+          Frames:
+            All Enabled: true
+            base_link:
+              Value: true
+            camera_front_link:
+              Value: true
+            camera_front_optical_frame:
+              Value: true
+            camera_left_link:
+              Value: true
+            camera_left_optical_frame:
+              Value: true
+            camera_right_link:
+              Value: true
+            camera_right_optical_frame:
+              Value: true
+            camera_traffic_light_link:
+              Value: true
+            camera_traffic_light_optical_frame:
+              Value: true
+            front_axle_link:
+              Value: true
+            gps_link:
+              Value: true
+            imu_link:
+              Value: true
+            lidar_link:
+              Value: true
+            map:
+              Value: true
+            odom:
+              Value: true
+            rear_axle_link:
+              Value: true
+          Marker Scale: 1
+          Name: TF
+          Show Arrows: true
+          Show Axes: true
+          Show Names: true
+          Tree:
+            map:
+              odom:
+                base_link:
+                  rear_axle_link:
+                    camera_front_link:
+                      camera_front_optical_frame: {}
+                    camera_left_link:
+                      camera_left_optical_frame: {}
+                    camera_right_link:
+                      camera_right_optical_frame: {}
+                    camera_traffic_light_link:
+                      camera_traffic_light_optical_frame: {}
+                    front_axle_link: {}
+                    gps_link: {}
+                    imu_link: {}
+                    lidar_link: {}
+          Update Interval: 0
+          Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/RobotModel
+          Collision Enabled: false
+          Description File: ''
+          Description Source: Topic
+          Description Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /robot_description
+          Enabled: true
+          Links:
+            All Links Enabled: true
+            Expand Joint Details: false
+            Expand Link Details: false
+            Expand Tree: false
+            Link Tree Style: Links in Alphabetic Order
+            base_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+              Value: true
+            camera_front_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_front_optical_frame:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_left_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_left_optical_frame:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_right_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_right_optical_frame:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_traffic_light_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            camera_traffic_light_optical_frame:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            front_axle_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            gps_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            imu_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            lidar_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+            rear_axle_link:
+              Alpha: 1
+              Show Axes: false
+              Show Trail: false
+          Mass Properties:
+            Inertia: false
+            Mass: false
+          Name: Robot Model
+          TF Prefix: ''
+          Update Interval: 0
+          Value: true
+          Visual Enabled: true
+      Enabled: true
+      Name: Scene
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/Image
+          Enabled: true
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Front Camera
+          Normalize Range: true
+          Topic:
+            Depth: 2
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/sensors/camera/front/compressed
+          Value: true
+        - Class: rviz_default_plugins/Image
+          Enabled: false
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Left Camera
+          Normalize Range: true
+          Topic:
+            Depth: 2
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/sensors/camera/left/compressed
+          Value: false
+        - Class: rviz_default_plugins/Image
+          Enabled: false
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Right Camera
+          Normalize Range: true
+          Topic:
+            Depth: 2
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/sensors/camera/right/compressed
+          Value: false
+        - Class: rviz_default_plugins/Image
+          Enabled: false
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: Traffic Light Camera
+          Normalize Range: true
+          Topic:
+            Depth: 2
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/sensors/camera/traffic_light/compressed
+          Value: false
+      Enabled: true
+      Name: Cameras
+    - Class: rviz_common/Group
+      Displays:
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
+            Value: true
+          Enabled: true
+          Keep: 100
+          Name: Selected Localization Route Elevation
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/localization/odometry_route_elevation
+          Value: true
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: false
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 51; 204; 255
+              Scale: 1
+              Value: false
+            Value: false
+          Enabled: false
+          Keep: 100
+          Name: Selected Localization Ground Projection
+          Position Tolerance: 0.10000000149011612
+          Shape:
+            Alpha: 1
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 0; 255; 255
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/localization/odometry_ground
+          Value: false
+        - Angle Tolerance: 0.03
+          Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Keep: 300
+          Name: GNSS IMU Candidate
+          Position Tolerance: 0.1
+          Shape:
+            Alpha: 0.65
+            Axes Length: 1
+            Axes Radius: 0.06
+            Color: 255; 0; 255
+            Head Length: 0.3
+            Head Radius: 0.1
+            Shaft Length: 0.8
+            Shaft Radius: 0.05
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/backends/gnss_imu/odometry
+          Value: true
+        - Angle Tolerance: 0.03
+          Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Keep: 300
+          Name: Quaternion Wheel GNSS EKF Candidate
+          Position Tolerance: 0.1
+          Shape:
+            Alpha: 0.65
+            Axes Length: 1
+            Axes Radius: 0.06
+            Color: 255; 160; 0
+            Head Length: 0.3
+            Head Radius: 0.1
+            Shaft Length: 0.8
+            Shaft Radius: 0.05
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/backends/quaternion_wheel_gnss_ekf/odometry
+          Value: true
+        - Angle Tolerance: 0.03
+          Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Keep: 300
+          Name: IMU Quaternion Encoder Candidate
+          Position Tolerance: 0.1
+          Shape:
+            Alpha: 0.65
+            Axes Length: 1
+            Axes Radius: 0.06
+            Color: 160; 255; 0
+            Head Length: 0.3
+            Head Radius: 0.1
+            Shaft Length: 0.8
+            Shaft Radius: 0.05
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/backends/imu_quaternion_encoder/odometry
+          Value: true
+        - Angle Tolerance: 0.03
+          Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Keep: 300
+          Name: ESKF Candidate
+          Position Tolerance: 0.1
+          Shape:
+            Alpha: 0.65
+            Axes Length: 1
+            Axes Radius: 0.06
+            Color: 0; 160; 255
+            Head Length: 0.3
+            Head Radius: 0.1
+            Shaft Length: 0.8
+            Shaft Radius: 0.05
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/backends/eskf/odometry
+          Value: true
+        - Angle Tolerance: 0.03
+          Class: rviz_default_plugins/Odometry
+          Enabled: true
+          Keep: 300
+          Name: FastLIO Candidate
+          Position Tolerance: 0.1
+          Shape:
+            Alpha: 0.8
+            Axes Length: 1
+            Axes Radius: 0.06
+            Color: 0; 255; 255
+            Head Length: 0.3
+            Head Radius: 0.1
+            Shaft Length: 0.8
+            Shaft Radius: 0.05
+            Value: Arrow
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/backends/fastlio/odometry
+          Value: true
+        - Alpha: 0.55
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 180; 180; 180
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Name: Fixed PCD Map
+          Position Transformer: XYZ
+          Selectable: false
+          Size (Pixels): 2
+          Size (m): 0.03
+          Style: Points
+          Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/fastlio/map
+          Use Fixed Frame: true
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 0; 255; 170
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Name: Registered LiDAR
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 4
+          Size (m): 0.04
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/localization/fastlio/registered_points
+          Use Fixed Frame: true
+          Value: true
+        - Alpha: 0.55
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 80; 80
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Name: Effective Match Points
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 5
+          Size (m): 0.05
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /cloud_effected
+          Use Fixed Frame: true
+          Value: false
+      Enabled: true
+      Name: Localization
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.55
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 64; 64
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 206
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Raw LiDAR
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/sensors/lidar/points
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 64; 255; 64
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Deskewed LiDAR
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/deskewed
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 64; 128; 255
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Cropped LiDAR
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/cropped
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 64
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Leveled LiDAR
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/leveled
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 64; 255; 255
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Ground
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/ground
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 160; 64
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Nonground
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 4
+          Size (m): 0.019999999552965164
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/nonground
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 85; 255; 127
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: PointXYZIRC
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.009999999776482582
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/points_xyzirc
+          Use Fixed Frame: true
+          Use rainbow: false
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: Intensity
+          Decay Time: 0
+          Enabled: true
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 1
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Euclidean Clusters
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 7
+          Size (m): 0.029999999329447746
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/lidar/clusters
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: true
+      Enabled: true
+      Name: LiDAR Preprocessing
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 0.699999988079071
+          Class: rviz_default_plugins/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: true
+          Name: Combined Occupancy
+          Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/combined
+          Update Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/combined_updates
+          Use Timestamp: false
+          Value: true
+        - Alpha: 0.5
+          Class: rviz_default_plugins/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: false
+          Name: Static Occupancy
+          Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/static
+          Update Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/static_updates
+          Use Timestamp: false
+          Value: false
+        - Alpha: 0.65
+          Class: rviz_default_plugins/Map
+          Color Scheme: costmap
+          Draw Behind: false
+          Enabled: false
+          Name: Dynamic Occupancy
+          Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/dynamic
+          Update Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /ad/perception/occupancy/dynamic_updates
+          Use Timestamp: false
+          Value: false
+      Enabled: true
+      Name: Occupancy Grid
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Predicted Objects
+          Namespaces: {}
+          Topic:
+            Depth: 1
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/perception/objects
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Predicted Corridor Relevance
+          Namespaces:
+            ad_prediction_corridor_relevance: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/relevant_objects
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Occupancy Corridor Relevance
+          Namespaces:
+            ad_occupancy_corridor_relevance: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/occupancy_relevance
+          Value: true
+      Enabled: true
+      Name: Objects and Prediction
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 0; 170; 255
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.20000000298023224
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.05000000074505806
+          Name: Global Path
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose Color: 255; 85; 255
+          Pose Style: None
+          Radius: 0.029999999329447746
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/planner/path
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Path Tracking
+          Namespaces: {}
+          Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/path_tracking
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Local Motion Candidates
+          Namespaces:
+            ad_planner_candidates: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/candidate_paths
+          Value: true
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 255; 170; 0
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.20000000298023224
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.07999999821186066
+          Name: Local Command Rollout
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose Color: 255; 85; 255
+          Pose Style: None
+          Radius: 0.029999999329447746
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/local_path
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Planner Target
+          Namespaces:
+            ad_planner: true
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/target
+          Value: true
+      Enabled: true
+      Name: Planning and Control
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 85; 255; 127
+          Enabled: false
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.20000000298023224
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.03999999910593033
+          Name: MPPI Transformed Reference
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose Color: 85; 255; 127
+          Pose Style: None
+          Radius: 0.029999999329447746
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/mppi/transformed_reference
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: MPPI Candidate Trajectories
+          Namespaces: {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ad/viz/planner/mppi/trajectories
+          Value: false
+      Enabled: true
+      Name: MPPI Debug
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Angle: -0.4100002646446228
+      Class: rviz_default_plugins/TopDownOrtho
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Scale: 27.15093994140625
+      Target Frame: base_link
+      Value: TopDownOrtho (rviz)
+      X: -0.0043487548828125
+      Y: -0.184906005859375
+    Saved: null
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 900
+  Hide Left Dock: false
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd0000000200000000000001560000032efc0200000007fb000000100044006900730070006c006100790073010000003b00000261000000c700fffffffb0000001200530065006c0065006300740069006f006e0000000171000000930000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007300000001b9000000b60000005c00fffffffb0000001800460072006f006e0074002000430061006d00650072006101000002a2000000c70000002800fffffffb0000002800540072006100660066006900630020004c0069006700680074002000430061006d006500720061000000020f0000006f0000002800fffffffb0000001800520069006700680074002000430061006d006500720061000000025e000000830000002800fffffffb00000016004c006500660074002000430061006d00650072006100000002cc0000009d0000002800ffffff00000001000001cb0000032efc0200000001fb0000000a00560069006500770073010000003b0000032e000000a000ffffff000002730000032e00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: false
+  Width: 1440
+  X: 571
+  Y: 182

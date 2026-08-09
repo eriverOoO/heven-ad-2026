@@ -1,0 +1,20 @@
+/**:
+  ros__parameters:
+    topics:
+      input: /ad/sensors/lidar/points
+      output: /ad/perception/lidar/deskewed
+      imu: /ad/sensors/imu/data
+      wheel: /ad/localization/input/wheel_speed
+    base_frame: base_link
+    deskew_mode: 3d
+    limits:
+      maximum_scan_duration_sec: 0.20
+      maximum_point_count: 300000
+      # Live MORAI IMU delivery reaches 106.5 ms without timestamp reorder.
+      # Keep a narrow margin while still failing closed on longer outages.
+      maximum_imu_gap_sec: 0.12
+      maximum_wheel_gap_sec: 0.20
+      history_age_sec: 1.0
+      pending_depth: 4
+      pending_timeout_sec: 0.15
+      integration_substep_sec: 0.005

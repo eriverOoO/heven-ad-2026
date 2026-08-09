@@ -1,0 +1,62 @@
+/**:
+  ros__parameters:
+    run_id: ""
+    output_root: ""
+    resume: true
+
+    topics.command: "/ad/control/command"
+    topics.vehicle_status: "/ad/vehicle/status"
+    topics.collisions: "/ad/safety/collisions"
+
+    vehicle_model: "2023_Hyundai_Ioniq5"
+    simulator_build: "S4.251001.MolitComp03"
+    command_kinds: ["brake"]
+    speed_bins_kph:
+      [0, 5, 10, 15, 20, 25, 30, 35, 40, 45,
+       50, 55, 57, 60, 65, 70, 75, 80, 85, 90, 95,
+       100, 105, 110, 115, 120, 125, 130, 135, 140, 145,
+       150, 155, 160, 165, 170, 175, 180, 185]
+    command_percentages:
+      [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    minimum_valid_trials: 3
+    maximum_attempts: 7
+    mad_limit_mps2: 0.15
+    cross_check_limit_mps2: 0.2
+    repeatability_mad_limit_mps2: 0.5
+    baseline_duration_sec: 0.75
+    discard_sec: 0.08
+    measurement_window_end_sec: 1.45
+    minimum_measurement_samples: 2
+    minimum_braking_speed_mps: 0.5
+    maximum_sample_gap_sec: 0.1
+    command_echo_fraction: 0.8
+    onset_minimum_deceleration_mps2: 0.15
+    onset_sigma_multiplier: 3.0
+    onset_sustain_samples: 2
+
+    controller.speed_tolerance_mps: 0.15
+    controller.settle_duration_sec: 1.0
+    controller.settle_acceleration_mps2: 0.2
+    controller.test_duration_sec: 1.5
+    controller.minimum_test_duration_sec: 0.35
+    controller.test_end_speed_mps: 0.3
+    controller.scale_brake_duration_by_command: true
+    controller.brake_duration_reference_command: 0.1
+    controller.speed_control_kp: 0.25
+    controller.speed_control_ki: 0.08
+    controller.speed_control_integral_limit: 12.5
+    controller.speed_control_maximum_dt_sec: 0.1
+    controller.maximum_reach_accelerator: 1.0
+    controller.maximum_recovery_brake: 0.35
+    controller.maximum_reach_duration_sec: 120.0
+    controller.stale_status_sec: 1.0
+    controller.maximum_yaw_deviation_rad: 0.2
+    controller.maximum_lateral_displacement_m: 1.5
+    controller.maximum_speed_mps: 52.777778
+    controller.maximum_abs_acceleration_mps2: 12.0
+    # A step brake command intentionally creates high jerk; record it rather
+    # than aborting a valid emergency-brake cell.
+    controller.maximum_abs_jerk_mps3: 1000.0
+    controller.safe_stop_brake: 0.4
+    controller.stopped_speed_mps: 0.1
+    controller.safe_stop_hold_sec: 1.0

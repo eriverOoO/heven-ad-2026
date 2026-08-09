@@ -1,0 +1,14 @@
+[Unit]
+Description=Trigger agent-tick planner
+
+[Timer]
+# test mode: every hour at :00
+# production mode: same OnCalendar; wrapper filters to 00:00 only
+OnCalendar=*-*-* *:00:00
+AccuracySec=30s
+RandomizedDelaySec=0
+Persistent=false
+Unit=agent-tick.service
+
+[Install]
+WantedBy=timers.target
