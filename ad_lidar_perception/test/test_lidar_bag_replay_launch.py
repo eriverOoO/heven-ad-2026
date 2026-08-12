@@ -55,6 +55,7 @@ def launch_context(bag, **overrides):
         "rate": "1.0",
         "startup_delay_sec": "2.0",
         "start_paused": "false",
+        "loop": "true",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -126,6 +127,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "rate",
         "startup_delay_sec",
         "start_paused",
+        "loop",
         "composition_config",
         "cluster_config",
         "ground_config",
@@ -142,6 +144,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "rate": "0.5",
         "startup_delay_sec": "2.0",
         "start_paused": "false",
+        "loop": "true",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -374,6 +377,7 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
         "10000",
         "--disable-keyboard-controls",
         str(bag.resolve()),
+        "--loop",
         "--topics",
         *module.SOURCE_TOPICS,
     ]

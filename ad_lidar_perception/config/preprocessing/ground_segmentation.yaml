@@ -1,6 +1,8 @@
 /**:
   ros__parameters:
-    algorithm: patchwork  #patchworkpp
+    # Patchwork++ is the production default. Classic Patchwork remains
+    # available by supplying a config that sets this value to "patchwork".
+    algorithm: patchworkpp
     # Launch supplies base_frame and sensor_height from the selected sensor
     # profile and the real enabled/bypass input frame.
     num_iter: 3
