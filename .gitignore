@@ -8,6 +8,10 @@ data/
 # The development bridge installs this generated, pinned descriptor set.
 !ad_morai_bridge_dev/data/
 results/
+# Local dataset and replay artifacts are intentionally not versioned.
+bags/
+datasets/
+*.bin
 /runner/
 worktrees/
 
