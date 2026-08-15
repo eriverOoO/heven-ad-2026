@@ -98,3 +98,5 @@ route_corridor.json
 
 # Local data / external clones
 external/
+OpenPCDet/
+third_party/OpenPCDet/

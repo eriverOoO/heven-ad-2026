@@ -217,6 +217,7 @@ def _launch_setup(context):
     start_paused = _parse_bool(
         "start_paused", _perform(context, "start_paused")
     )
+    loop = _parse_bool("loop", _perform(context, "loop"))
 
     # Reformat the validated number to prevent passing non-numeric shell-like
     # input through to the subprocess while retaining a readable command line.
@@ -240,6 +241,8 @@ def _launch_setup(context):
     ]
     if start_paused:
         command.append("--start-paused")
+    if loop:
+        command.append("--loop")
     command.extend(["--topics", *SOURCE_TOPICS])
 
     description = IncludeLaunchDescription(
@@ -333,6 +336,11 @@ def generate_launch_description():
                 "start_paused",
                 default_value="false",
                 description="Start rosbag paused; must be true or false",
+            ),
+            DeclareLaunchArgument(
+                "loop",
+                default_value="true",
+                description="Replay the bag repeatedly; must be true or false",
             ),
             DeclareLaunchArgument(
                 "composition_config",

@@ -195,3 +195,11 @@ ros2 bag record -s mcap \
 ```
 
 모르는 내용이나 오류가 있으면 실행한 명령과 오류 전문을 Agent/LLM에게 전달해 질문한다.
+
+## Offline CenterPoint 준비
+
+MORAI dataset을 pinned OpenPCDet CenterPoint에 연결하는 STEP 05-A 환경,
+adapter, 검증 명령은
+[CenterPoint offline environment](docs/perception/centerpoint_offline_environment.md)에
+정리되어 있다. 이 경로는 production ROS perception pipeline과 분리되어 있으며 현재
+학습이나 성능 평가를 실행하지 않는다.
