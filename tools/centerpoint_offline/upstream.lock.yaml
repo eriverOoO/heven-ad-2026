@@ -1,0 +1,6 @@
+framework: OpenPCDet
+repository: https://github.com/open-mmlab/OpenPCDet.git
+commit: 233f849829b6ac19afb8af8837a0246890908755
+reported_version: 0.6.0
+resolved_at_utc: '2026-08-15'
+integration: external_checkout_runtime_registration
