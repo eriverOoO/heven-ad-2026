@@ -1,0 +1,85 @@
+{
+  "ground_truth": {
+    "boxes": [
+      {
+        "actor_id": 3,
+        "center_policy": "ground_center_to_box_center",
+        "class_name": "pedestrian",
+        "forward_center_offset_m": 0.0,
+        "height": 1.815999984741211,
+        "length": 0.3330000042915344,
+        "raw_object_type": 0,
+        "source_heading_rad": -3.0957932472229004,
+        "source_position_map": [
+          -58.51674270629883,
+          -11.65439224243164,
+          28.544588088989258
+        ],
+        "source_size_xyz": [
+          0.3330000042915344,
+          0.6679999828338623,
+          1.815999984741211
+        ],
+        "width": 0.6679999828338623,
+        "x": -0.3855475548591367,
+        "y": -6.623637376044435,
+        "yaw": 1.367867259055352,
+        "z": -1.3044084027669882
+      }
+    ],
+    "header_stamp_ns": 1785857534298956371,
+    "source_delta_ns": -2098809,
+    "source_frame": "map",
+    "target_frame": "lidar_link",
+    "topic": "/ad/dev/objects"
+  },
+  "points": {
+    "dtype": "float32_little_endian",
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "intensity"
+    ],
+    "finite_count": 15520,
+    "nonfinite_removed": 13280,
+    "path": "points/static_20260805_003151_1785857534301055180.bin",
+    "raw_count": 28800
+  },
+  "sample_id": "static_20260805_003151_1785857534301055180",
+  "scene": "static_20260805_003151",
+  "schema_version": 1,
+  "source": {
+    "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+    "frame_id": "lidar_link",
+    "header_stamp_ns": 1785857534301055180,
+    "record_timestamp_ns": 1785857534322304857,
+    "topic": "/ad/sensors/lidar/points"
+  },
+  "transform_alignment": {
+    "chain": [
+      "map",
+      "odom",
+      "base_link",
+      "rear_axle_link",
+      "lidar_link"
+    ],
+    "ego_delta_ns": -3789991,
+    "ego_header_stamp_ns": 1785857534297265189,
+    "map_to_odom": {
+      "quaternion_xyzw": [
+        -0.0018250566286686677,
+        0.010692259168949073,
+        -0.003555537615348159,
+        0.9999348493349115
+      ],
+      "translation": [
+        -0.42946318305037323,
+        -0.8954407745927142,
+        -30.178823424940575
+      ]
+    },
+    "tf_delta_ns": -1068897,
+    "tf_header_stamp_ns": 1785857534299986283
+  }
+}

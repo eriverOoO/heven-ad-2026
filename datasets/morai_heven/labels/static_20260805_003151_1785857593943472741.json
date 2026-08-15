@@ -1,0 +1,135 @@
+{
+  "ground_truth": {
+    "boxes": [
+      {
+        "actor_id": 13,
+        "center_policy": "rear_axle_ground_to_box_center",
+        "class_name": "vehicle",
+        "forward_center_offset_m": 1.3375000059604645,
+        "height": 1.4769999980926514,
+        "length": 4.84499979019165,
+        "raw_object_type": 1,
+        "source_heading_rad": -0.2145187109708786,
+        "source_position_map": [
+          -106.17288208007812,
+          325.97210693359375,
+          28.681156158447266
+        ],
+        "source_size_xyz": [
+          4.84499979019165,
+          2.0899999141693115,
+          1.4769999980926514
+        ],
+        "width": 2.0899999141693115,
+        "x": 11.94765454773875,
+        "y": 5.420436068010019,
+        "yaw": -1.7968773525696566,
+        "z": -1.0941871249329864
+      },
+      {
+        "actor_id": 48,
+        "center_policy": "rear_axle_ground_to_box_center",
+        "class_name": "vehicle",
+        "forward_center_offset_m": 1.3375000059604645,
+        "height": 1.4769999980926514,
+        "length": 4.84499979019165,
+        "raw_object_type": 1,
+        "source_heading_rad": 1.425611138343811,
+        "source_position_map": [
+          -84.26060485839844,
+          340.3138122558594,
+          28.70865249633789
+        ],
+        "source_size_xyz": [
+          4.84499979019165,
+          2.0899999141693115,
+          1.4769999980926514
+        ],
+        "width": 2.0899999141693115,
+        "x": 27.65607794249695,
+        "y": -15.561042534241935,
+        "yaw": -0.1567488815901814,
+        "z": -0.9619144817303997
+      },
+      {
+        "actor_id": 36,
+        "center_policy": "rear_axle_ground_to_box_center",
+        "class_name": "vehicle",
+        "forward_center_offset_m": 1.3375000059604645,
+        "height": 1.4769999980926514,
+        "length": 4.84499979019165,
+        "raw_object_type": 1,
+        "source_heading_rad": -1.853344440460205,
+        "source_position_map": [
+          -119.4373779296875,
+          347.79766845703125,
+          28.659198760986328
+        ],
+        "source_size_xyz": [
+          4.84499979019165,
+          2.0899999141693115,
+          1.4769999980926514
+        ],
+        "width": 2.0899999141693115,
+        "x": 32.94475489210936,
+        "y": 20.122396696086128,
+        "yaw": 2.8474834782718492,
+        "z": -1.234293259564037
+      }
+    ],
+    "header_stamp_ns": 1785857593930610441,
+    "source_delta_ns": -12862300,
+    "source_frame": "map",
+    "target_frame": "lidar_link",
+    "topic": "/ad/dev/objects"
+  },
+  "points": {
+    "dtype": "float32_little_endian",
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "intensity"
+    ],
+    "finite_count": 13601,
+    "nonfinite_removed": 15199,
+    "path": "points/static_20260805_003151_1785857593943472741.bin",
+    "raw_count": 28800
+  },
+  "sample_id": "static_20260805_003151_1785857593943472741",
+  "scene": "static_20260805_003151",
+  "schema_version": 1,
+  "source": {
+    "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+    "frame_id": "lidar_link",
+    "header_stamp_ns": 1785857593943472741,
+    "record_timestamp_ns": 1785857593956964003,
+    "topic": "/ad/sensors/lidar/points"
+  },
+  "transform_alignment": {
+    "chain": [
+      "map",
+      "odom",
+      "base_link",
+      "rear_axle_link",
+      "lidar_link"
+    ],
+    "ego_delta_ns": -15081862,
+    "ego_header_stamp_ns": 1785857593928390879,
+    "map_to_odom": {
+      "quaternion_xyzw": [
+        -6.289226815229178e-06,
+        2.9739489729280553e-05,
+        -0.01174799710363245,
+        0.999930989438802
+      ],
+      "translation": [
+        -7.52727130827067,
+        -2.054254910722193,
+        -28.696051292210804
+      ]
+    },
+    "tf_delta_ns": -1643162,
+    "tf_header_stamp_ns": 1785857593941829579
+  }
+}

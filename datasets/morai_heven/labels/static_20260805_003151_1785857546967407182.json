@@ -1,0 +1,85 @@
+{
+  "ground_truth": {
+    "boxes": [
+      {
+        "actor_id": 31,
+        "center_policy": "rear_axle_ground_to_box_center",
+        "class_name": "vehicle",
+        "forward_center_offset_m": 1.3974999785423279,
+        "height": 1.7999999523162842,
+        "length": 4.961999893188477,
+        "raw_object_type": 1,
+        "source_heading_rad": -1.5420267581939697,
+        "source_position_map": [
+          66.48165130615234,
+          149.763427734375,
+          28.696434020996094
+        ],
+        "source_size_xyz": [
+          4.961999893188477,
+          2.1549999713897705,
+          1.7999999523162842
+        ],
+        "width": 2.1549999713897705,
+        "x": 73.18566180553897,
+        "y": -19.184973756302938,
+        "yaw": -2.355851041648431,
+        "z": 0.41002618435486937
+      }
+    ],
+    "header_stamp_ns": 1785857546975060042,
+    "source_delta_ns": 7652860,
+    "source_frame": "map",
+    "target_frame": "lidar_link",
+    "topic": "/ad/dev/objects"
+  },
+  "points": {
+    "dtype": "float32_little_endian",
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "intensity"
+    ],
+    "finite_count": 17230,
+    "nonfinite_removed": 11570,
+    "path": "points/static_20260805_003151_1785857546967407182.bin",
+    "raw_count": 28800
+  },
+  "sample_id": "static_20260805_003151_1785857546967407182",
+  "scene": "static_20260805_003151",
+  "schema_version": 1,
+  "source": {
+    "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+    "frame_id": "lidar_link",
+    "header_stamp_ns": 1785857546967407182,
+    "record_timestamp_ns": 1785857546992039715,
+    "topic": "/ad/sensors/lidar/points"
+  },
+  "transform_alignment": {
+    "chain": [
+      "map",
+      "odom",
+      "base_link",
+      "rear_axle_link",
+      "lidar_link"
+    ],
+    "ego_delta_ns": 6427181,
+    "ego_header_stamp_ns": 1785857546973834363,
+    "map_to_odom": {
+      "quaternion_xyzw": [
+        0.00030086494533898995,
+        -0.0005131834581773889,
+        -0.024475423841543945,
+        0.999700254951853
+      ],
+      "translation": [
+        -5.588455911607064,
+        0.04448489403239364,
+        -28.845169348861454
+      ]
+    },
+    "tf_delta_ns": -619637,
+    "tf_header_stamp_ns": 1785857546966787545
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "ground_truth": {
+    "boxes": [
+      {
+        "actor_id": 2,
+        "center_policy": "ground_center_to_box_center",
+        "class_name": "obstacle",
+        "forward_center_offset_m": 0.0,
+        "height": 0.4300000071525574,
+        "length": 0.75,
+        "raw_object_type": 2,
+        "source_heading_rad": -1.4289478063583374,
+        "source_position_map": [
+          -60.6104621887207,
+          -142.1788330078125,
+          28.374374389648438
+        ],
+        "source_size_xyz": [
+          0.75,
+          0.75,
+          0.4300000071525574
+        ],
+        "width": 0.75,
+        "x": 84.04786312201708,
+        "y": 23.349140466339744,
+        "yaw": -2.522797420604998,
+        "z": -1.7199300703048195
+      }
+    ],
+    "header_stamp_ns": 1785857514960445859,
+    "source_delta_ns": -1095984,
+    "source_frame": "map",
+    "target_frame": "lidar_link",
+    "topic": "/ad/dev/objects"
+  },
+  "points": {
+    "dtype": "float32_little_endian",
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "intensity"
+    ],
+    "finite_count": 14164,
+    "nonfinite_removed": 14636,
+    "path": "points/static_20260805_003151_1785857514961541843.bin",
+    "raw_count": 28800
+  },
+  "sample_id": "static_20260805_003151_1785857514961541843",
+  "scene": "static_20260805_003151",
+  "schema_version": 1,
+  "source": {
+    "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+    "frame_id": "lidar_link",
+    "header_stamp_ns": 1785857514961541843,
+    "record_timestamp_ns": 1785857514978782451,
+    "topic": "/ad/sensors/lidar/points"
+  },
+  "transform_alignment": {
+    "chain": [
+      "map",
+      "odom",
+      "base_link",
+      "rear_axle_link",
+      "lidar_link"
+    ],
+    "ego_delta_ns": -2549987,
+    "ego_header_stamp_ns": 1785857514958991856,
+    "map_to_odom": {
+      "quaternion_xyzw": [
+        1.1772418273489364e-06,
+        -5.420545232794146e-07,
+        -0.011750466880777907,
+        0.999930960880002
+      ],
+      "translation": [
+        5.398853148941782,
+        -1.8398167186814192,
+        -28.735785630324862
+      ]
+    },
+    "tf_delta_ns": -1881935,
+    "tf_header_stamp_ns": 1785857514959659908
+  }
+}
