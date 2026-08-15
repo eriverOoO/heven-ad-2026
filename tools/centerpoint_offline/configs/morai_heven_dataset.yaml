@@ -1,0 +1,35 @@
+DATASET: MoraiHevenDataset
+DATA_PATH: ''  # Pass --dataset explicitly; do not commit a machine-local path.
+
+# Set to morai_heven_v1 for a versioned merged export. Null intentionally keeps
+# the established, unversioned STEP 03 export readable for reproduction.
+EXPECTED_DATASET_VERSION: null
+
+POINT_CLOUD_RANGE: [-4.0, -25.0, -3.0, 100.0, 25.0, 5.0]
+DATA_SPLIT:
+  train: train
+  test: val
+
+POINT_FEATURE_ENCODING:
+  encoding_type: absolute_coordinates_encoding
+  used_feature_list: [x, y, z, intensity]
+  src_feature_list: [x, y, z, intensity]
+
+# STEP 05-A deliberately performs no augmentation or tuning.
+DATA_AUGMENTOR:
+  DISABLE_AUG_LIST: []
+  AUG_CONFIG_LIST: []
+
+DATA_PROCESSOR:
+  - NAME: mask_points_and_boxes_outside_range
+    REMOVE_OUTSIDE_BOXES: true
+  - NAME: shuffle_points
+    SHUFFLE_ENABLED:
+      train: false
+      test: false
+  - NAME: transform_points_to_voxels
+    VOXEL_SIZE: [0.125, 0.125, 0.2]
+    MAX_POINTS_PER_VOXEL: 5
+    MAX_NUMBER_OF_VOXELS:
+      train: 150000
+      test: 150000

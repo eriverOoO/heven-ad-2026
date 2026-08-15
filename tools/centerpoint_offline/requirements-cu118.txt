@@ -1,0 +1,16 @@
+# Install with the PyTorch cu118 index documented in README.md.
+torch==2.1.2+cu118
+torchvision==0.16.2+cu118
+spconv-cu118==2.3.6
+numpy==1.26.4
+scipy==1.11.4
+PyYAML==6.0.2
+easydict==1.13
+SharedArray==3.2.4
+tqdm==4.67.1
+tensorboardX==2.6.4
+llvmlite==0.41.1
+numba==0.58.1
+scikit-image==0.22.0
+opencv-python==4.11.0.86
+pyquaternion==0.9.9
