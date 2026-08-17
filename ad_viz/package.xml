@@ -9,6 +9,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>ad_interfaces</depend>
+  <depend version_eq="1.13.0">autoware_perception_msgs</depend>
   <depend>builtin_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>

@@ -5,6 +5,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/DefaultBuildType.cmake")
 
 find_package(ament_cmake REQUIRED)
 find_package(ad_interfaces REQUIRED)
+find_package(autoware_perception_msgs 1.13.0 EXACT REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -52,6 +53,42 @@ target_compile_features(ad_perception_marker_node PUBLIC cxx_std_17)
 target_link_libraries(
   ad_perception_marker_node ad_viz_perception_marker_node)
 ament_target_dependencies(ad_perception_marker_node rclcpp)
+
+add_library(ad_viz_object_marker_builder
+  src/perception/object_marker_builder.cpp)
+target_compile_features(ad_viz_object_marker_builder PUBLIC cxx_std_17)
+target_include_directories(ad_viz_object_marker_builder PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>")
+ament_target_dependencies(ad_viz_object_marker_builder
+  autoware_perception_msgs
+  builtin_interfaces
+  geometry_msgs
+  std_msgs
+  unique_identifier_msgs
+  visualization_msgs)
+
+add_library(ad_viz_perception_visualizer_node
+  src/perception/perception_visualizer_node.cpp)
+target_compile_features(ad_viz_perception_visualizer_node PUBLIC cxx_std_17)
+target_include_directories(ad_viz_perception_visualizer_node PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>")
+target_link_libraries(ad_viz_perception_visualizer_node
+  ad_viz_marker_builder
+  ad_viz_object_marker_builder)
+ament_target_dependencies(ad_viz_perception_visualizer_node
+  ad_interfaces
+  autoware_perception_msgs
+  rclcpp
+  visualization_msgs)
+
+add_executable(perception_visualizer_node
+  src/perception/perception_visualizer_main.cpp)
+target_compile_features(perception_visualizer_node PUBLIC cxx_std_17)
+target_link_libraries(perception_visualizer_node
+  ad_viz_perception_visualizer_node)
+ament_target_dependencies(perception_visualizer_node rclcpp)
 
 add_library(ad_viz_odometry_projection
   src/localization/odometry_projection.cpp)
@@ -144,6 +181,9 @@ install(TARGETS
   ad_viz_marker_builder
   ad_viz_perception_marker_node
   ad_perception_marker_node
+  ad_viz_object_marker_builder
+  ad_viz_perception_visualizer_node
+  perception_visualizer_node
   ad_viz_odometry_projection
   ad_viz_odometry_ground_node
   ad_localization_ground_odometry
@@ -176,6 +216,15 @@ if(BUILD_TESTING)
     test_marker_builder
     ad_interfaces
     rclcpp
+    visualization_msgs)
+
+  ament_add_gtest(
+    test_object_marker_builder test/test_object_marker_builder.cpp)
+  target_link_libraries(
+    test_object_marker_builder ad_viz_object_marker_builder)
+  ament_target_dependencies(
+    test_object_marker_builder
+    autoware_perception_msgs
     visualization_msgs)
 
   ament_add_gtest(
@@ -212,6 +261,8 @@ endif()
 ament_export_include_directories(include)
 ament_export_libraries(
   ad_viz_marker_builder
+  ad_viz_object_marker_builder
+  ad_viz_perception_visualizer_node
   ad_viz_perception_marker_node
   ad_viz_odometry_projection
   ad_viz_odometry_ground_node
@@ -221,6 +272,7 @@ ament_export_libraries(
   ad_viz_visualization_tf_relay_node)
 ament_export_dependencies(
   ad_interfaces
+  autoware_perception_msgs
   builtin_interfaces
   geometry_msgs
   nav_msgs
