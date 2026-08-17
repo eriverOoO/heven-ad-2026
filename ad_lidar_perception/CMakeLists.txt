@@ -338,13 +338,22 @@ install(TARGETS
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME}
+install(DIRECTORY config launch rviz DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
 ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   ../scripts/check_autoware_perception.py
   DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  ad_lidar_perception/centerpoint_detector_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_centerpoint_detector)
+install(DIRECTORY
+  ../tools/centerpoint_offline/
+  DESTINATION share/${PROJECT_NAME}/centerpoint_offline
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "test_*.py" EXCLUDE)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -415,6 +424,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_lidar_perception_launch test/test_lidar_perception_launch.py)
   ament_add_pytest_test(
+    test_centerpoint_ros test/test_centerpoint_ros.py)
+  ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
@@ -426,6 +437,9 @@ if(BUILD_TESTING)
     test_object_detection_launch test/test_object_detection_launch.py)
   ament_add_pytest_test(
     test_tracking_launch test/test_tracking_launch.py)
+  ament_add_pytest_test(
+    test_perception_visualization_launch
+    test/test_perception_visualization_launch.py)
   ament_add_pytest_test(
     test_check_autoware_perception
     "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/tests/test_check_autoware_perception.py"

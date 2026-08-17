@@ -96,6 +96,8 @@ def launch_context(config, **overrides):
         "cluster_config": "/tmp/clustering.yaml",
         "crop_clearance_m": "0.20",
         "start_ground_segmentation": "true",
+        "start_visualization": "false",
+        "start_rviz": "false",
         "ground_config": "/tmp/ground.yaml",
         "sensor_config": "/tmp/sensors.yaml",
         "sensor_profile": "",
@@ -108,6 +110,15 @@ def launch_context(config, **overrides):
         "finite_filter_enabled": "true",
         "densifier_enabled": "false",
         "point_layout_adapter_enabled": "true",
+        "detector_backend": "euclidean",
+        "checkpoint_path": "",
+        "score_threshold": "0.1",
+        "max_detections": "500",
+        "device": "cuda:0",
+        "point_cloud_range": "[-4.0,-25.0,-3.0,100.0,25.0,5.0]",
+        "centerpoint_enabled": "true",
+        "centerpoint_mock_mode": "false",
+        "openpcdet_root": "",
     }
     values.update(overrides)
     context = LaunchContext()
@@ -215,6 +226,27 @@ def test_exact_ordered_leaf_graphs_for_every_composition(
     assert [action.source for action in actions] == expected
     assert "ground_segmentation.launch.py" in expected
     assert "occupancy_grid.launch.py" in expected
+
+
+def test_centerpoint_backend_switch_adds_optional_heven_node(tmp_path, monkeypatch):
+    config = write_composition(
+        tmp_path,
+        composition_text(detector="euclidean_cluster", tracker="autoware"),
+    )
+    _module, actions = record_setup(
+        monkeypatch,
+        config,
+        detector_backend="centerpoint",
+        checkpoint_path="/models/not-production.pth",
+        openpcdet_root="/opt/OpenPCDet",
+    )
+    names = [action.source for action in actions]
+    assert "centerpoint_detector.launch.py" in names
+    assert "euclidean_clustering.launch.py" not in names
+    centerpoint = next(action for action in actions if action.source == "centerpoint_detector.launch.py")
+    arguments = dict(centerpoint.kwargs["launch_arguments"])
+    assert arguments["detector_backend"] == "centerpoint"
+    assert str(arguments["input_topic"]) == "/ad/perception/lidar/cropped"
 
 
 def test_optional_branches_forward_only_their_owned_inputs(
@@ -442,6 +474,8 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "platform_profile",
         "composition_config",
         "start_ground_segmentation",
+        "start_visualization",
+        "start_rviz",
         "ground_config",
         "sensor_config",
         "sensor_profile",
@@ -457,6 +491,15 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "cluster_config",
         "crop_clearance_m",
         "use_sim_time",
+        "detector_backend",
+        "checkpoint_path",
+        "score_threshold",
+        "max_detections",
+        "device",
+        "point_cloud_range",
+        "centerpoint_enabled",
+        "centerpoint_mock_mode",
+        "openpcdet_root",
     }
     default_context = LaunchContext()
     assert perform_substitutions(
@@ -899,6 +942,8 @@ def test_top_level_morai_profile_prohibits_deskew_before_any_include(
     ("name", "value"),
     [
         ("start_ground_segmentation", "yes"),
+        ("start_visualization", "sometimes"),
+        ("start_rviz", "auto"),
         ("deskew_enabled", "1"),
         ("self_crop_enabled", "enabled"),
         ("patchwork_leveling_enabled", ""),

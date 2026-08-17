@@ -57,6 +57,10 @@ def _parse_platform_profile(value):
 def _launch_setup(context):
     composition_path = Path(_perform(context, "composition_config"))
     selection = load_selection(composition_path)
+    detector_backend = _perform(context, "detector_backend")
+    if detector_backend not in {"euclidean", "centerpoint"}:
+        raise RuntimeError("detector_backend must be euclidean or centerpoint")
+    heven_centerpoint = detector_backend == "centerpoint"
     if selection.detector.build_only:
         raise RuntimeError(
             "build_only selection cannot activate the runtime composition"
@@ -97,10 +101,20 @@ def _launch_setup(context):
     _parse_enabled(
         "densifier_enabled", _perform(context, "densifier_enabled")
     )
+    start_visualization = _parse_enabled(
+        "start_visualization", _perform(context, "start_visualization")
+    )
+    start_rviz = _parse_enabled(
+        "start_rviz", _perform(context, "start_rviz")
+    )
     deskew_mode = _perform(context, "deskew_mode")
     if deskew_mode not in {"2d", "3d"}:
         raise RuntimeError("deskew_mode must be '2d' or '3d'")
-    if selection.detector.backend == "euclidean_cluster" and not ground_enabled:
+    if (
+        not heven_centerpoint
+        and selection.detector.backend == "euclidean_cluster"
+        and not ground_enabled
+    ):
         raise RuntimeError(
             "euclidean_cluster detector requires ground segmentation"
         )
@@ -166,7 +180,25 @@ def _launch_setup(context):
             )
         )
 
-    if selection.detector.backend == "euclidean_cluster":
+    if heven_centerpoint:
+        actions.append(
+            _include(
+                "centerpoint_detector.launch.py",
+                {
+                    "detector_backend": "centerpoint",
+                    "checkpoint_path": LaunchConfiguration("checkpoint_path"),
+                    "score_threshold": LaunchConfiguration("score_threshold"),
+                    "max_detections": LaunchConfiguration("max_detections"),
+                    "device": LaunchConfiguration("device"),
+                    "point_cloud_range": LaunchConfiguration("point_cloud_range"),
+                    "enabled": LaunchConfiguration("centerpoint_enabled"),
+                    "mock_mode": LaunchConfiguration("centerpoint_mock_mode"),
+                    "openpcdet_root": LaunchConfiguration("openpcdet_root"),
+                    "input_topic": selected_topic,
+                },
+            )
+        )
+    elif selection.detector.backend == "euclidean_cluster":
         actions.append(
             _include(
                 "euclidean_clustering.launch.py",
@@ -205,6 +237,16 @@ def _launch_setup(context):
 
     if selection.occupancy.publish_combined:
         actions.append(_include("combined_occupancy_grid.launch.py"))
+    if start_visualization or start_rviz:
+        actions.append(
+            _include(
+                "perception_visualization.launch.py",
+                {
+                    "start_rviz": "true" if start_rviz else "false",
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                },
+            )
+        )
     return actions
 
 
@@ -223,6 +265,18 @@ def generate_launch_description():
                     package_share / "config" / "lidar_perception.yaml"
                 ),
             ),
+            DeclareLaunchArgument("detector_backend", default_value="euclidean"),
+            DeclareLaunchArgument("checkpoint_path", default_value=""),
+            DeclareLaunchArgument("score_threshold", default_value="0.1"),
+            DeclareLaunchArgument("max_detections", default_value="500"),
+            DeclareLaunchArgument("device", default_value="cuda:0"),
+            DeclareLaunchArgument(
+                "point_cloud_range",
+                default_value="[-4.0,-25.0,-3.0,100.0,25.0,5.0]",
+            ),
+            DeclareLaunchArgument("centerpoint_enabled", default_value="true"),
+            DeclareLaunchArgument("centerpoint_mock_mode", default_value="false"),
+            DeclareLaunchArgument("openpcdet_root", default_value=""),
             DeclareLaunchArgument("raw_input_topic", default_value=RAW_TOPIC),
             DeclareLaunchArgument(
                 "cluster_config",
@@ -251,6 +305,10 @@ def generate_launch_description():
                 "finite_filter_enabled", default_value="true"
             ),
             DeclareLaunchArgument("densifier_enabled", default_value="false"),
+            DeclareLaunchArgument(
+                "start_visualization", default_value="false"
+            ),
+            DeclareLaunchArgument("start_rviz", default_value="false"),
             DeclareLaunchArgument(
                 "point_layout_adapter_enabled",
                 default_value="true",
