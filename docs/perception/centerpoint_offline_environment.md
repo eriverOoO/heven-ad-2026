@@ -196,3 +196,133 @@ In addition to the requested extra bags and their scenario evidence:
    performance claim;
 6. choose checkpoint/output storage and experiment provenance. Model weights,
    logs, and generated artifacts must remain outside Git.
+
+## STEP 05-B: minimal CUDA training smoke
+
+`train_morai_centerpoint.py` reuses the MORAI adapter and the minimal runtime
+import path above. It builds the OpenPCDet dataset preprocessing path,
+CenterPoint, Adam optimizer, and an epoch-based learning-rate scheduler. It
+performs real CUDA forward/backward/optimizer steps and writes atomic
+checkpoints, but intentionally performs no evaluation or metric calculation.
+The training YAML inherits the existing smoke architecture and only adds
+untuned optimizer defaults.
+
+From the pinned Python environment, run a two-iteration smoke (outputs remain
+outside the repository):
+
+```bash
+cd "$HOME/projects/heven-ad-2026"
+"$HOME/venvs/heven-centerpoint/bin/python" \
+  tools/centerpoint_offline/train_morai_centerpoint.py \
+  --dataset "$HOME/datasets/morai_heven" \
+  --openpcdet-root "$HOME/projects/OpenPCDet" \
+  --epochs 1 \
+  --batch-size 1 \
+  --workers 0 \
+  --output-dir /tmp/heven-centerpoint-smoke-step05b \
+  --seed 2026 \
+  --max-iterations 2
+```
+
+`--max-iterations` is an optional safety cap intended for smoke validation.
+Without it, all batches in the requested epochs are processed. Each iteration
+logs epoch, iteration, total loss, learning rate, current allocated GPU memory,
+and peak allocated GPU memory. Each completed epoch produces
+`checkpoint_epoch_XXX.pth` and atomically replaces `checkpoint_latest.pth`.
+These checkpoints prove pipeline execution only; the current repeated static
+scene cannot support a model-performance claim.
+
+This exact command was verified on 2026-08-16 with an RTX 4060, PyTorch
+2.1.2+cu118, and spconv-cu118 2.3.6. Both capped iterations completed forward,
+backward, and optimizer steps. The observed losses were `57.568012` and
+`104.720093`; peak memory allocated as reported by PyTorch was 329.1 MiB. It
+created `checkpoint_epoch_001.pth` and `checkpoint_latest.pth` under the output
+directory. These observations are execution evidence, not evaluation results.
+
+Related validation commands are:
+
+```bash
+cd "$HOME/projects/heven-ad-2026"
+"$HOME/venvs/heven-centerpoint/bin/python" -m unittest discover \
+  -s tools/centerpoint_offline -p 'test_*.py' -v
+"$HOME/venvs/heven-centerpoint/bin/python" -m compileall -q \
+  tools/centerpoint_offline
+```
+
+### Short dry-run and resume verification
+
+The following capped commands validate checkpoint continuation without turning
+the repeated static scene into a performance experiment. The first process
+runs three optimizer steps in epoch 1. The second, fresh process restores the
+latest checkpoint and runs one more step in epoch 2:
+
+```bash
+cd "$HOME/projects/heven-ad-2026"
+"$HOME/venvs/heven-centerpoint/bin/python" \
+  tools/centerpoint_offline/train_morai_centerpoint.py \
+  --dataset "$HOME/datasets/morai_heven" \
+  --openpcdet-root "$HOME/projects/OpenPCDet" \
+  --epochs 1 --batch-size 1 --workers 0 --seed 2026 \
+  --max-iterations 3 \
+  --output-dir /tmp/heven-centerpoint-dry-run-step05b2 \
+  --summary-json /tmp/heven-centerpoint-dry-run-step05b2/dry_run_summary.json
+
+"$HOME/venvs/heven-centerpoint/bin/python" \
+  tools/centerpoint_offline/train_morai_centerpoint.py \
+  --dataset "$HOME/datasets/morai_heven" \
+  --openpcdet-root "$HOME/projects/OpenPCDet" \
+  --epochs 2 --batch-size 1 --workers 0 --seed 2026 \
+  --max-iterations 4 \
+  --resume /tmp/heven-centerpoint-dry-run-step05b2/checkpoint_latest.pth \
+  --output-dir /tmp/heven-centerpoint-dry-run-step05b2 \
+  --summary-json /tmp/heven-centerpoint-dry-run-step05b2/dry_run_summary.json
+```
+
+Verified on 2026-08-17: the accumulated run completed two capped epochs and
+four iterations with no non-finite loss. Resume restored model, optimizer,
+scheduler, epoch 1, and iteration 3; the added step used the scheduled learning
+rate `0.0001` and advanced the checkpoint to epoch 2 / iteration 4. PyTorch
+reported 356.8 MiB peak allocated VRAM. The resulting
+`dry_run_summary.json` is machine-readable execution evidence only. No
+accuracy, recall, precision, mAP, or comparative evaluation was run.
+
+## STEP 05-C: offline inference and benchmark interface
+
+`infer_morai_centerpoint.py` constructs the same fixed CenterPoint architecture
+and MORAI class order, then requires a strict checkpoint state-dictionary load.
+It runs evaluation-mode CUDA inference and writes one
+`heven.offline_detection.v1` JSON object per source frame. CUDA synchronization
+brackets only the model forward call; dataset reads and JSON serialization are
+outside `inference_time_ms`. For batches larger than one, the synchronized
+batch time is reported as amortized per-frame time.
+
+The verified ten-frame interface command was:
+
+```bash
+cd "$HOME/projects/heven-ad-2026"
+"$HOME/venvs/heven-centerpoint/bin/python" \
+  tools/centerpoint_offline/infer_morai_centerpoint.py \
+  --dataset "$HOME/datasets/morai_heven" \
+  --openpcdet-root "$HOME/projects/OpenPCDet" \
+  --checkpoint /tmp/heven-centerpoint-dry-run-step05b2/checkpoint_latest.pth \
+  --split train \
+  --output /tmp/heven-centerpoint-inference-step05c/predictions.jsonl \
+  --batch-size 1 --workers 0 \
+  --score-threshold 0.1 --max-detections 500 \
+  --max-frames 10 --seed 2026 \
+  --summary /tmp/heven-centerpoint-inference-step05c/summary.json
+```
+
+The run strictly loaded epoch 2 / iteration 4 and processed ten frames. The
+JSONL reader in `prediction_bridge.py` validates schema, frame, boxes, scores,
+and fixed class mapping. Its small `benchmark_records()` adapter exposes source
+timestamps, predicted XY centers, class names, and scores in input order. It
+does not feed model inference time into the existing ROS/bag latency metric or
+alter that metric's semantics.
+
+Observed interface-validation output was 490 predictions (49.0/frame). CUDA
+model-forward latency was mean 127.471 ms, p50 18.235 ms, p95 616.255 ms, and
+maximum 1098.796 ms. The first measured call includes CUDA/model warm-up cost;
+these values were retained as observed and are not a performance benchmark.
+The dry-run checkpoint and single static scene cannot support any detector
+quality or comparative claim.
