@@ -7,7 +7,7 @@ import json
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import numpy as np
 
@@ -106,3 +106,60 @@ def append_jsonl(path: Path | str, frame: CommonDetectionFrame) -> None:
     payload = asdict(frame)
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n")
+
+
+def frame_from_dict(payload: dict[str, Any]) -> CommonDetectionFrame:
+    """Validate and decode one HEVEN JSONL object for offline benchmarks."""
+    if payload.get("schema") != SCHEMA:
+        raise ValueError(f"unsupported offline detection schema: {payload.get('schema')!r}")
+    detections = tuple(
+        CommonDetection(
+            class_name=str(item["class_name"]),
+            score=float(item["score"]),
+            box_lidar=tuple(float(value) for value in item["box_lidar"]),  # type: ignore[arg-type]
+        )
+        for item in payload.get("detections", [])
+    )
+    prediction = {
+        "pred_boxes": np.asarray([item.box_lidar for item in detections], dtype=np.float32).reshape(-1, 7),
+        "pred_scores": np.asarray([item.score for item in detections], dtype=np.float32),
+        "pred_labels": np.asarray(
+            [tuple(("vehicle", "pedestrian", "obstacle")).index(item.class_name) + 1 for item in detections],
+            dtype=np.int64,
+        ),
+    }
+    return convert_openpcdet_prediction(
+        sample_id=str(payload["sample_id"]),
+        source_header_stamp_ns=int(payload["source_header_stamp_ns"]),
+        prediction=prediction,
+        class_names=("vehicle", "pedestrian", "obstacle"),
+        frame_id=str(payload.get("frame_id", "lidar_link")),
+        inference_time_ms=(
+            None if payload.get("inference_time_ms") is None else float(payload["inference_time_ms"])
+        ),
+    )
+
+
+def read_jsonl(path: Path | str) -> Iterator[CommonDetectionFrame]:
+    """Read records in file order; inference latency remains model-only metadata."""
+    with Path(path).open("r", encoding="utf-8") as stream:
+        for line_number, line in enumerate(stream, start=1):
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+                yield frame_from_dict(payload)
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"invalid record at line {line_number}: {error}") from error
+
+
+def benchmark_records(path: Path | str) -> Iterator[dict[str, Any]]:
+    """Small STEP 02 adapter preserving stamp, centers, class, and score."""
+    for frame in read_jsonl(path):
+        yield {
+            "sample_id": frame.sample_id,
+            "source_header_stamp_ns": frame.source_header_stamp_ns,
+            "centers_xy": benchmark_centers(frame),
+            "classes": tuple(item.class_name for item in frame.detections),
+            "scores": tuple(item.score for item in frame.detections),
+        }
