@@ -1,0 +1,9 @@
+[submodule "references/ab3dmot"]
+	path = references/ab3dmot
+	url = https://github.com/xinshuoweng/AB3DMOT.git
+[submodule "references/trackeval"]
+	path = references/trackeval
+	url = https://github.com/JonathonLuiten/TrackEval.git
+[submodule "references/simpletrack"]
+	path = references/simpletrack
+	url = https://github.com/tusen-ai/SimpleTrack.git
