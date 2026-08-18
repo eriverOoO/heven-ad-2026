@@ -5,6 +5,10 @@
 > for the new `ad_publish_morai_frames` / `ad_record_detected_objects` tools,
 > exact commands, and observed results. Everything else in this file is
 > unchanged from the original audit and still accurate.
+>
+> Second update (same day): a bounded non-smoke (3-epoch, full existing
+> train split) checkpoint was trained, closing CP-1 criteria #1 and #5 —
+> see "## CP-1 Milestone" below, now **CP-1: PASSED**.
 
 Source: `docs/perception/centerpoint_offline_environment.md`,
 `docs/perception/centerpoint_ros_interface.md`, and the files listed under
@@ -194,3 +198,102 @@ dataset diversity (one scene, empty `val`/`test`) as already documented
 above, independent of the #1/#5 gap. That blocker does not, by itself, fail
 CP-1 — but CP-1 is not being marked passed here because #1/#5 are a
 separate, non-diversity-blocked gap.
+
+### CP-1 re-check 2026-08-18: criteria #1 and #5 (non-smoke checkpoint)
+
+Trained one bounded, non-smoke checkpoint on the existing
+`tools/centerpoint_offline/train_morai_centerpoint.py` pipeline, unchanged
+architecture/config, minimum safe batch size (1), no hyperparameter search:
+3 full epochs over the entire existing 1,764-sample `train` split (5,292
+iterations total), following the procedure "one epoch, continue only if
+stable and clearly learning, cap at 3 epochs." Epoch 1 alone showed a clear
+downward loss trend (first-50-iteration mean 17.7 → last-50-iteration mean
+6.7, per-quartile means 9.4/8.0/7.9/6.7, no NaN/Inf) justifying the
+continuation to 3 epochs.
+
+**GPU/VRAM checked first** (`nvidia-smi`): RTX 4060, 8,188 MiB total, ~6.8
+GB free at start.
+
+| item | value |
+|---|---|
+| dataset size | 1,764 samples (`train` split, single scene — unchanged) |
+| batch size | 1 (minimum safe, per prior verified runs) |
+| epoch/iteration count | 3 epochs, 5,292 iterations total (1,764/epoch) |
+| loss summary | initial 57.57 → final 3.08; min 1.21, max 115.13 (early spikes); no NaN/Inf detected |
+| peak VRAM | 373.9 MiB (epochs 2–3; 343.9 MiB for epoch 1 alone) |
+| training time | 116.8 s (epoch 1) + 412.7 s (epochs 2–3, resumed) ≈ 529.5 s total |
+| checkpoint path | `<scratch>/nonsmoke/checkpoints/checkpoint_latest.pth` (epoch 3 / iteration 5,292) — ephemeral, not committed, per AGENTS.md; fully reproducible from the exact command recorded in `train_summary_epoch3.json` (dataset path, seed 2026, epochs, batch size, resume chain) |
+
+**#1 Non-smoke checkpoint exists, provenance documented → PASS.** This is a
+complete-dataset, multi-epoch run (not an artificially-capped 2–5-iteration
+smoke test), with checkpoint save/resume verified across the run
+(`checkpoint_resume_success`, `optimizer_state_restored`,
+`scheduler_state_restored`, `post_resume_optimizer_step_success` all
+`true` for the epoch-3 summary) and full provenance recorded in
+`train_summary_epoch1.json` / `train_summary_epoch3.json` (exact command,
+dataset version, seed, losses, VRAM, checkpoint paths). (The training
+script's own JSON still carries the fixed label
+`"purpose": "training_pipeline_dry_run_only"` — that string is unconditional
+code metadata, not a semantic smoke/non-smoke marker; the actual
+distinguishing facts, epoch/iteration count and full-split coverage, are
+what changed.)
+
+**Offline inference on the new checkpoint** (20 frames,
+`infer_morai_centerpoint.py`, unchanged script/config):
+
+| stat | smoke checkpoint (prior) | non-smoke checkpoint (this run) |
+|---|---|---|
+| predictions/frame | 0 (5-iter) or ~50, capped (2-iter) | 14.75 |
+| class distribution | 100% `obstacle` | 100% `vehicle` |
+| score range | 0.1006–0.1010 (stdev 0.00012) — noise floor | 0.100–0.329 (stdev 0.064) — real spread |
+| box dimensions (L×W×H) | ~0.95×0.97×~1 m, near-constant | mean 4.43×2.03×1.81 m, varying |
+| inference latency | mean 61.7 ms / p95 263.6 ms (5-iter) | mean 43.5 ms / p50 20.0 ms / p95 50.9 ms |
+
+Cross-checked the new checkpoint's predicted box dimensions against real GT
+box dimensions in this dataset (sampled 200 label files: 320 `vehicle` / 8
+`pedestrian` / 8 `obstacle` GT boxes; GT vehicle mean L=5.12 W=2.16 H=1.70
+m). The predicted mean (L=4.43 W=2.03 H=1.81 m) is within ~15% of the real
+GT vehicle mean on all three axes, and the single predicted class
+(`vehicle`) matches the scene's actually-dominant GT class (320/336 sampled
+GT boxes). Predicted positions (x −3.5..59.4 m, y −5.6..20.4 m) stay inside
+the configured detection ROI.
+
+**ROS2 + RViz re-verified live with this checkpoint** (not just offline):
+`ad_centerpoint_detector` loaded it via strict `state_dict` load and ran 5
+real CUDA forward passes (`model_forward` 35–122 ms post-warm-up,
+`gpu_peak_mib` 271.9 during inference); the recorder captured 16–17
+objects/frame, 100% `vehicle`, scores 0.101–0.273, dimensions matching the
+offline run (L 4.37 W 2.02 H 1.79 m mean); the reused
+`ad_viz perception_visualizer_node` republished 34 non-clear-action markers
+(≈17 boxes × 2 markers/box) on `/ad/visualization/detected_objects`, the
+exact topic `heven_perception.rviz` displays.
+
+**#5 CenterPoint 3D boxes visible and geometrically plausible in RViz →
+PASS.** Judged only for implementation-milestone plausibility, per this
+check's instructions (not accuracy/generalization): boxes are visible
+(live marker output, as above) and now geometrically plausible — a single,
+scene-appropriate class, real-vehicle-scale dimensions matching this
+scene's own GT within ~15%, positions inside the valid ROI, and genuine
+score diversity, replacing the smoke checkpoint's uniform near-threshold
+noise grid.
+
+**Caveats (do not over-read this result):** This checkpoint was trained and
+evaluated on the *same* single repeated scene (no `val`/`test` exists to
+separate them), so plausible-looking boxes are expected even from
+memorization of that one scene, not evidence of generalization. **No
+accuracy, recall, precision, mAP, or superiority claim over Euclidean is
+made here or anywhere in this file.** The dataset-diversity blocker for
+real performance evaluation (see "Exact data requirements..." above) is
+completely unchanged by this run.
+
+## CP-1: PASSED
+
+All 8 criteria now pass: #2, #3, #4, #6, #7, #8 (unchanged, see table
+above) plus #1 and #5 (re-scored above). ROS2, RViz, offline inference, and
+the Euclidean/CenterPoint comparison tooling all work, and CenterPoint now
+produces a non-smoke checkpoint whose boxes are geometrically plausible
+enough to serve as an implementation milestone. This is **not** an accuracy,
+generalization, or Euclidean-superiority claim — proper performance
+evaluation stays blocked by dataset diversity (single scene, empty
+`val`/`test`) and remains tracked separately in "Exact data requirements
+for a meaningful trained checkpoint" above.
