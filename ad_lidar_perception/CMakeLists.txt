@@ -357,6 +357,10 @@ install(PROGRAMS
   ad_lidar_perception/record_detected_objects.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME ad_record_detected_objects)
+install(PROGRAMS
+  ad_lidar_perception/ab3dmot_tracker_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_ab3dmot_tracker)
 install(DIRECTORY
   ../tools/centerpoint_offline/
   DESTINATION share/${PROJECT_NAME}/centerpoint_offline
@@ -441,6 +445,10 @@ if(BUILD_TESTING)
     test_ab3dmot_geometry test/test_ab3dmot_geometry.py)
   ament_add_pytest_test(
     test_ab3dmot_core test/test_ab3dmot_core.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ros test/test_ab3dmot_ros.py)
+  ament_add_pytest_test(
+    test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)
   ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(

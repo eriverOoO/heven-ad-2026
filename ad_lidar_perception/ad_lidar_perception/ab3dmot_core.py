@@ -118,7 +118,18 @@ def _greedy_matching(cost_matrix: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Detection:
-    """One HEVEN z-up detection box, as would come from `DetectedObjects`."""
+    """One HEVEN z-up detection box, as would come from `DetectedObjects`.
+
+    ``label``/``label_probability``/``existence_probability`` are opaque
+    passthrough metadata -- never read by the KF, association, or lifecycle
+    math below. They exist to carry a detection's classification and score
+    onto its matched `Track`/`TrackedState`, mirroring AB3DMOT's own
+    reference `Tracker` class, which carries an analogous per-detection
+    ``info`` payload onto its matched track's ``self.info`` on every
+    *matched* update only (`AB3DMOT_libs/model.py::update`,
+    ``trk.info = info[d, :][0]``) and leaves it unchanged on coast frames --
+    the same semantics `Track.update` below implements.
+    """
 
     x: float
     y: float
@@ -127,6 +138,9 @@ class Detection:
     length: float
     width: float
     height: float
+    label: int = 0
+    label_probability: float = 0.0
+    existence_probability: float = 0.0
 
     def as_box3d(self) -> Box3D:
         return Box3D(self.x, self.y, self.z, self.yaw, self.length, self.width, self.height)
@@ -160,6 +174,9 @@ class TrackedState:
     velocity_covariance: np.ndarray  # 3x3, from KF P[7:10, 7:10]
     hits: int
     time_since_update: int
+    label: int  # passthrough, see Detection docstring
+    label_probability: float
+    existence_probability: float
 
 
 class Track:
@@ -176,12 +193,17 @@ class Track:
     def __init__(self, track_id: int, detection: Detection, kf_class: type) -> None:
         self.track_id = track_id
         # `info` is an unused pass-through slot on the reused reference
-        # class (stored but never read by anything in this module).
+        # class (stored but never read by anything in this module) -- we
+        # carry classification/score via our own label fields instead,
+        # below, so both are updated together on every matched update.
         self._kf_wrapper = kf_class(detection.as_measurement_array(), np.zeros(1), track_id)
         self.hits = 1
         self.time_since_update = 0
         self.age_frames = 0
         self.birth_frame_index: int | None = None  # set by Tracker on spawn
+        self.label = detection.label
+        self.label_probability = detection.label_probability
+        self.existence_probability = detection.existence_probability
 
     @property
     def _kf(self):
@@ -221,6 +243,9 @@ class Track:
         self._kf.x[3, 0] = _wrap_to_pi(float(self._kf.x[3, 0]))
         self.time_since_update = 0
         self.hits += 1
+        self.label = detection.label
+        self.label_probability = detection.label_probability
+        self.existence_probability = detection.existence_probability
 
     def is_confirmed(self, min_hits: int, frame_index: int) -> bool:
         """Output-eligibility rule, exactly AB3DMOT's own `output()` condition:
@@ -254,6 +279,9 @@ class Track:
             velocity_covariance=np.array(p[7:10, 7:10]),
             hits=self.hits,
             time_since_update=self.time_since_update,
+            label=self.label,
+            label_probability=self.label_probability,
+            existence_probability=self.existence_probability,
         )
 
 
