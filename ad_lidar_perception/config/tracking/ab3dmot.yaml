@@ -1,0 +1,17 @@
+/**:
+  ros__parameters:
+    # T-1A initial baseline. Values resolved in
+    # docs/research/tracking_architecture.md "AB3DMOT Integration
+    # Decisions" §3: the most common value across AB3DMOT's own
+    # per-class/per-dataset configs, not tuned for HEVEN. Not yet loaded
+    # by any ROS2 node (T-1B) -- this file documents the parameter
+    # surface ad_lidar_perception/ad_lidar_perception/ab3dmot_config.py
+    # mirrors for the standalone tracking core.
+    association_metric: giou_3d
+    matcher: greedy
+    min_hits: 1
+    max_age: 2
+    # No single defensible reference default exists (AB3DMOT's own
+    # per-class values span -0.2 to -0.8); left at the loosest
+    # defensible starting point until measured against real HEVEN data.
+    giou_gate: 0.0

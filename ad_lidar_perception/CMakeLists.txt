@@ -438,6 +438,10 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_detection_recording test/test_detection_recording.py)
   ament_add_pytest_test(
+    test_ab3dmot_geometry test/test_ab3dmot_geometry.py)
+  ament_add_pytest_test(
+    test_ab3dmot_core test/test_ab3dmot_core.py)
+  ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
