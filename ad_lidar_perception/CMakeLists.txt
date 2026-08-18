@@ -349,6 +349,14 @@ install(PROGRAMS
   ad_lidar_perception/centerpoint_detector_node.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME ad_centerpoint_detector)
+install(PROGRAMS
+  ad_lidar_perception/publish_morai_frames.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_publish_morai_frames)
+install(PROGRAMS
+  ad_lidar_perception/record_detected_objects.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_record_detected_objects)
 install(DIRECTORY
   ../tools/centerpoint_offline/
   DESTINATION share/${PROJECT_NAME}/centerpoint_offline
@@ -425,6 +433,10 @@ if(BUILD_TESTING)
     test_lidar_perception_launch test/test_lidar_perception_launch.py)
   ament_add_pytest_test(
     test_centerpoint_ros test/test_centerpoint_ros.py)
+  ament_add_pytest_test(
+    test_morai_replay test/test_morai_replay.py)
+  ament_add_pytest_test(
+    test_detection_recording test/test_detection_recording.py)
   ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
