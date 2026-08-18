@@ -1,48 +1,73 @@
 # STATUS
 
-## CP-1 result
+## Current task: Tracking architecture audit (read-only, no implementation)
 
-**CP-1: PASSED.** (2026-08-18, re-check after training one bounded
-non-smoke checkpoint.) All 8 gate criteria in
-`docs/research/centerpoint_status.md` ("## CP-1 Milestone" +
-"CP-1 re-check 2026-08-18") now pass. The previous 2/8 FAIL (#1 no
-non-smoke checkpoint, #5 boxes not geometrically plausible) is resolved:
-trained 3 full epochs (5,292 iterations) over the existing 1,764-sample
-single-scene `train` split, unchanged architecture/config, batch size 1,
-no hyperparameter search, peak VRAM 373.9 MiB, loss 57.6→3.08 (no
-NaN/Inf). The resulting checkpoint's predictions are 100% class `vehicle`
-with mean dimensions (L 4.43 W 2.03 H 1.81 m) within ~15% of this scene's
-real GT vehicle mean (L 5.12 W 2.16 H 1.70 m, sampled 200 label files),
-replacing the prior smoke checkpoint's uniform near-threshold noise grid
-(100% `obstacle`, near-constant ~0.95–1 m boxes, scores in a 0.0001-wide
-band). Re-verified live end-to-end: ROS2 node loaded the checkpoint via
-strict load and ran real CUDA inference (16–17 objects/frame,
-`model_forward` 35–122 ms post-warm-up); the reused `ad_viz` visualizer
-republished 34 markers on the exact topic `heven_perception.rviz`
-displays.
+Branch: `research/tracking-audit`. Produced
+`docs/research/tracking_architecture.md`: full DetectedObjects → Autoware
+`multi_object_tracker` → TrackedObjects → HEVEN IMM/prediction flow,
+documenting HEVEN's I/O contract (topics/messages/frames/timestamp
+handling/QoS), the Autoware tracker's real association (BEV + MuSSP
+min-cost-flow solver, not Hungarian)/state estimation (EKF: bicycle model
+for vehicles, CTRV for pedestrians)/lifecycle (existence-probability +
+adaptive-covariance thresholds, not hit/miss counters)/class-specific
+behavior, and a decomposition of both `references/ab3dmot` (linear 10-state
+KF, per-class Hungarian/greedy + IoU/GIoU/Mahalanobis, orientation
+correction, hits/max_age lifecycle) and `references/simpletrack`
+(coarse-hash+NMS preprocessing, configurable association incl. Mahalanobis,
+the same borrowed AB3DMOT KF with a time-varying `dt`, an explicit
+birth/alive/dead FSM, and a "redundancy module" second-chance association
+against low-score detections). Also documents where KF/EKF/IMM/KalmanNet
+could later be compared, explicitly separates tracking state estimation
+from HEVEN's own downstream IMM future-trajectory prediction, and proposes
+(design only) the smallest AB3DMOT adapter shape with its open questions
+(yaw-convention verification, frame/TF ownership, per-class parameter
+choice, output message shape) flagged rather than guessed.
 
-**No accuracy, generalization, or Euclidean-superiority claim is made.**
-This checkpoint was trained and evaluated on the same single repeated
-scene, so plausible boxes are expected from memorization, not proven
-generalization.
+No tracker was implemented. No production code, submodule source, or
+`docs/agent/STATUS.md`-adjacent research docs from prior tasks were
+modified beyond this file and the new audit doc.
+
+**Branch/submodule discrepancy found and documented (not fixed here)**:
+this branch does not contain the `chore: add tracking research references`
+commit (`4d26e0e`, on `chore/tracking-references` /
+`origin/chore/tracking-references`), so `.gitmodules` and
+`references/README.md` are absent here even though the three reference
+checkouts physically remain on disk (leftover from an earlier branch
+checkout in this same working tree) at the exact pinned SHAs
+`references/README.md` records. Read directly from disk for this audit;
+recommend merging/rebasing `chore/tracking-references` into whatever branch
+carries future Tracking work so `references/README.md` and `.gitmodules`
+are consistently present.
+
+## Previous: CP-1 result
+
+**CP-1: PASSED** (2026-08-18, merged to `main` in PR #2 / commit
+`aa5cacb`). Full detail retained in `docs/research/centerpoint_status.md`.
 
 ## Remaining blocker
 
-None for CP-1 itself. Separately and unchanged: proper mAP/generalization
-performance evaluation remains blocked purely by dataset diversity
-(`train`/`val`/`test` all draw from one scene; `val`/`test` are empty) —
-see "Exact data requirements for a meaningful trained checkpoint" in
-`docs/research/centerpoint_status.md`. This blocker is independent of CP-1
-and was not addressed in this task (no new data was introduced).
+None for this audit task itself. Two separate, pre-existing items remain
+open (unrelated to each other):
+1. The branch/submodule discrepancy above (`references/` commit not yet on
+   this branch).
+2. CenterPoint mAP/generalization evaluation still blocked by dataset
+   diversity (unchanged, see `docs/research/centerpoint_status.md`).
+
+Additionally, per this audit: the `PedestrianAndBicycleTracker`'s exact
+model hand-off logic between its internal pedestrian/bicycle sub-trackers,
+and `TrackerOverlapManager::merge`'s exact pruning logic, were not traced
+in this pass (flagged, not guessed) — read
+`lib/tracker/model/pedestrian_and_bicycle_tracker.cpp` and
+`lib/association/tracker_overlap_manager.cpp` if that detail becomes
+load-bearing for future work.
 
 ## Exact recommended next task
 
-CP-1 has passed; do not start Tracking yet per this task's instructions.
-Next, per AGENTS.md's research order (CenterPoint → Euclidean vs
-CenterPoint → Ground segmentation → Tracking...), and since the Euclidean
-vs CenterPoint comparison tooling already exists
-(`docs/perception/centerpoint_vs_euclidean_comparison.md`): either (a)
-begin Ground segmentation work, or (b) if new diverse MORAI scenes become
-available, populate `val`/`test` splits and revisit real performance
-evaluation before moving on. Tracking work should wait until an explicit
-go-ahead, per this task's instruction not to start it now.
+Per this task's instruction: stop after the audit. Per AGENTS.md's research
+order (Tracking → Association → KF/EKF/IMM/KalmanNet...), the next task —
+once explicitly requested — is most naturally either (a) resolving the
+branch/submodule discrepancy above, or (b) verifying the AB3DMOT yaw/theta
+convention against `AB3DMOT_libs/box.py` (the first open question flagged
+in `docs/research/tracking_architecture.md` §7) before any adapter
+implementation begins. Do not start implementing the AB3DMOT adapter until
+that verification and an explicit go-ahead.
