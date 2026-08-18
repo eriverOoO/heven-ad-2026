@@ -1,6 +1,244 @@
 # STATUS
 
-## Current task: T-1C — Runtime verification of the AB3DMOT ROS2 tracker
+## RViz Tracking Comparison
+
+Branch: `feat/ab3dmot-tracker`. Visualization-only milestone extending the
+existing `ad_viz` perception visualizer to show the Autoware tracker and
+the experimental AB3DMOT tracker at the same time, off the same detection
+stream, reusing the exact T-1C MORAI replay/TF setup. No tracking
+algorithm, association, KF, Autoware tracker, detector, IMM/prediction, or
+occupancy code was touched — only `ad_viz` (marker builder, node, CMake,
+tests) and `ad_lidar_perception`'s visualization launch/RViz-config/tests.
+
+### Approach
+
+Reused the existing `perception_visualizer_node` executable by launching
+it **twice** with different parameters, rather than creating a second
+visualization package or node:
+- Instance 1 (unchanged topics): `id_prefix:="A-"`, subscribes
+  `/ad/perception/objects/tracked` (Autoware), publishes
+  `/ad/visualization/tracked_objects`.
+- Instance 2 (new): `id_prefix:="B-"`, subscribes
+  `/experiment/tracked/ab3dmot`, publishes
+  `/experiment/visualization/tracked_objects_ab3dmot`,
+  `visualize_detections:=false` and `visualize_predictions:=false` (avoids
+  duplicate detection markers and an unused prediction subscription).
+
+`ad_lidar_perception/launch/perception_visualization.launch.py` now starts
+both instances; `ad_lidar_perception/rviz/heven_perception.rviz` gained a
+new "Tracked Objects (AB3DMOT)" `MarkerArray` display on the new topic,
+and the old "Tracked Objects" display was renamed "Tracked Objects
+(Autoware)" for clarity.
+
+### Track visualization features (all in `ad_viz`)
+
+- **ID prefix / disambiguation**: `ObjectMarkerConfig::id_prefix` is
+  prepended to each track's on-screen label, so the two trackers never
+  rely on color alone (`A-<id>` / `B-<id>`), per the task requirement.
+- **Fixed a pre-existing label bug found while touching this code**: the
+  ID suffix shown in the label was `uuid.substr(0, 8)` (first 8 hex
+  chars). AB3DMOT's UUID encoding (`ab3dmot_ros.py::track_id_to_uuid`,
+  from T-1B) packs its integer track id into the **low 8 bytes**
+  (`uuid[8:16]`), so every AB3DMOT track showed an identical, useless
+  `00000000` suffix. Fixed to take the **last 16 hex chars** (last 8
+  bytes) — verified live: AB3DMOT labels now read e.g. `B-0000000000000001`,
+  `B-00000000000000ce` (correct, distinct, matches the tracker's own small
+  integer ids); Autoware labels remain distinct (its own UUIDs are
+  effectively random in all 16 bytes), e.g. `A-7b4fb59b736c7e9f...`. Also
+  exported `uuid_hex()` from `object_marker_builder` so the new trajectory
+  code can key its per-track state identically without re-deriving the
+  encoding.
+- **Trajectory history**: new `ad_viz::perception::TrajectoryHistory`
+  class (`trajectory_history.hpp`/`.cpp`) — a per-track key bounded
+  `std::deque<Point>` (oldest dropped once `trajectory_max_points`, default
+  30, is exceeded) plus time-based pruning (`prune_stale`, default 3.0 s
+  timeout) so a track's history is fully removed once its tracker stops
+  publishing it. Operates on plain `int64_t` nanosecond stamps (not
+  `rclcpp::Time`), matching this repo's established convention for
+  avoiding ROS clock-type pitfalls (`imm_predictor.hpp` etc.). Only ever
+  stores already-observed positions — never predicts/extrapolates.
+- **`build_trajectory_markers`**: renders one `LINE_STRIP` per track with
+  >=2 points (namespace `trajectory/<id_prefix><uuid_hex>`); emits no
+  `DELETEALL` of its own — `PerceptionVisualizerNode::on_tracks` appends
+  its output into the *same* `MarkerArray`/topic as
+  `build_tracked_markers` (which already emits one `DELETEALL` per
+  publish), so stale trajectory markers are cleared in the same frame as
+  stale boxes/labels — no orphaned markers, confirmed live (see below).
+- New node params: `id_prefix` (string, default `""`), `visualize_detections`
+  (bool, default `true`, gates the detection subscription/publisher so the
+  second AB3DMOT-only instance doesn't republish detections twice),
+  `trajectory_max_points` (int, default 30), `trajectory_stale_timeout_sec`
+  (double, default 3.0).
+
+### Tests
+
+`colcon build --symlink-install --packages-up-to ad_viz` and
+`--packages-select ad_lidar_perception`, both clean, after fixing one
+build-environment issue unrelated to this task's code (the shared
+`heven_ros_ws` build tree had a stale cached Python interpreter path from
+an earlier venv-activated session, breaking `rosidl`/`ament` for several
+packages incl. `ad_interfaces`; fixed by clearing those 4 packages' build
+directories — pure build artifacts, not source — so CMake re-detected the
+correct interpreter).
+
+New/updated gtests, all passing (`ctest` in `ad_viz`, full suite: 7/7,
+including the 2 new/changed ones plus the pre-existing 5): `ad_viz`
+`test_trajectory_history` (new — 4 cases: rejects invalid construction,
+accumulates points per track, bounds points per track with oldest-dropped,
+prunes stale tracks by elapsed time) and `test_object_marker_builder`
+(updated: fixed the now-stale first-8-hex-char UUID assertion to the
+corrected last-16-hex-char format; added 2 new cases covering
+`id_prefix` label prepending and `build_trajectory_markers`'s
+short-history-skip / prefixed-namespace behavior).
+
+`ad_lidar_perception`'s full `ctest -R "launch|rviz|visualiz"` (8/8,
+including `test_perception_visualization_launch`, updated for the new
+second `Node` instance, the renamed/added RViz `MarkerArray` displays, and
+the `id_prefix`/`tracked_input_topic` launch-arg wiring) — all pass.
+
+### Live RViz smoke test — actually run, not simulated
+
+Reused the exact T-1C setup: same static `odom->base_link` (identity) +
+`base_link->lidar_link` (`z=1.70`, identity) TF precedent (this time
+correctly published via `tf2_ros.StaticTransformBroadcaster` on
+`/tf_static`, not a periodically-republished dynamic `/tf` — an earlier
+attempt using a repeating dynamic broadcaster hit a real "extrapolation
+into the future" TF race against live detection timestamps; switching to
+static, and restarting all TF-listening nodes fresh afterward so no node
+retained a poisoned mixed static/dynamic TF cache, fixed it cleanly), same
+`ad_publish_morai_frames` replay of `~/datasets/morai_heven` (`train`
+split), same Euclidean detector feeding both trackers off one
+`/ad/perception/objects/detected` stream. Launched: `ab3dmot_tracker.launch.py
+enabled:=true`, `tracking.launch.py` (Autoware), `euclidean_clustering.launch.py`,
+and `perception_visualization.launch.py start_rviz:=true` (both visualizer
+instances + a real `rviz2` process, confirmed alive with a real OpenGL
+context: `Stereo is NOT SUPPORTED` / `OpenGl version: 4.2` in its log).
+
+**No pixel-level screenshot was possible in this environment** (no `sudo`
+for `imagemagick`/`xwd`; `PIL.ImageGrab` against the available WSLg X
+display failed with an X `BadMatch` error). Per this repo's own established
+precedent for exactly this situation (`docs/research/centerpoint_status.md`:
+"verified by direct topic echo, not a GUI screenshot"), verification was
+instead done directly against the live `MarkerArray` content on the two
+topics RViz displays, plus confirming RViz's own subscriptions:
+
+1. **Both IDs visible with correct prefixes** — confirmed directly:
+   Autoware labels `"UNKNOWN 1.00 A-7b4fb59b736c7e9f"` etc. (distinct
+   16-hex-char suffixes per track); AB3DMOT labels
+   `"UNKNOWN 1.00 B-0000000000000001"`, `"...B-00000000000000ce"` etc.
+   (small integer ids, now fully shown thanks to the 16-char-suffix fix
+   above).
+2. **Boxes plausible / aligned** — sampled absolute box pose positions
+   from a live AB3DMOT message: x in roughly [-3, 43] m, y in [-12, 19] m,
+   z in [0.9, 2.9] m (odom frame) — consistent with the cropped point
+   cloud's own configured range and the `z=1.70` m LiDAR mount height;
+   not a pixel check, but geometrically plausible, not garbage/NaN.
+3. **Velocity arrows render** — `Marker::ARROW` (`type: 0`) present per
+   moving track in both trackers' live output.
+4. **Trajectories update over time and are bounded** — sampled the same
+   AB3DMOT/Autoware topics repeatedly over ~15 s: per-track `LINE_STRIP`
+   point counts grew (2 -> 7 -> 10 -> ...) and were observed reaching
+   exactly the configured cap of **30** on both trackers' longest-lived
+   tracks — the bound holds in the live pipeline, not just in the unit
+   test.
+5. **Stale histories disappear** — resampled ~14 s apart: AB3DMOT
+   trajectory-track count dropped from 80 (many short-lived, quickly
+   replaced tracks — see below) to 20, and specific old track-id
+   namespaces confirmed **absent** from the later message — stale
+   pruning is working live, not just in `test_trajectory_history`.
+6. **No marker-array accumulation** — sampled the AB3DMOT visualization
+   topic's total marker count twice, 10 s apart, mid-replay: 128 both
+   times (stable) — confirms the per-frame `DELETEALL` + bounded history
+   design does not leak markers over a sustained run.
+7. **RViz actually subscribed** — `ros2 topic info --verbose` on both
+   `/ad/visualization/tracked_objects` and
+   `/experiment/visualization/tracked_objects_ab3dmot` shows exactly one
+   subscriber each: node `heven_perception_rviz` — the real RViz process
+   launched above, confirming the `.rviz` config's two `MarkerArray`
+   displays are wired to the right topics.
+8. **Both trackers' output topics publish continuously off the same
+   detection stream** during replay: `/ad/perception/objects/detected`
+   ~8.6 Hz, `/experiment/tracked/ab3dmot` ~8.5 Hz, `/ad/perception/objects/tracked`
+   ~8.2-8.4 Hz (`ros2 topic hz`, mid-replay).
+
+### Qualitative observations (real, not manufactured)
+
+- **Track-ID churn / fragmentation is real and frequent** in this
+  baseline AB3DMOT config (`min_hits=1`, `giou_gate=0.0`, greedy
+  matching): one sampled instant showed ~80 distinct AB3DMOT track-history
+  namespaces alive at once, the large majority with only 2 trajectory
+  points (i.e. created and about to be replaced almost immediately) and a
+  handful with 7-10+ points (persistent, stable tracks). This is
+  consistent with §3's already-documented, not-yet-calibrated
+  `giou_gate` default (flagged in the AB3DMOT Integration Decisions as
+  needing real-data calibration) — this session did not tune it, only
+  observed and recorded the resulting visual behavior.
+- **Persistent tracking**: multiple track ids (e.g. AB3DMOT's low integer
+  ids `0x1..0x20` range, well as several Autoware UUIDs) remained present
+  and updating across many consecutive messages during the replay window,
+  with trajectories growing smoothly up to the 30-point cap — normal,
+  stable tracking is visibly present alongside the high-churn tracks
+  above.
+- **Birth/deletion**: directly observed via the stale-pruning check above
+  (§5) — dozens of AB3DMOT tracks born and pruned within a ~14 s window.
+- **Crossing objects / ID switches**: not specifically isolated in this
+  session (would require per-object trajectory-shape inspection across a
+  longer window than the spot-checks performed here); not claimed either
+  way beyond the general churn pattern already documented above. No
+  accuracy claim is made from this RViz-only verification, per this
+  task's own instruction.
+
+### Files changed by this task (RViz Tracking Comparison; not yet
+committed/pushed — see below)
+
+```
+ad_viz/CMakeLists.txt
+ad_viz/include/ad_viz/perception/object_marker_builder.hpp
+ad_viz/include/ad_viz/perception/perception_visualizer_node.hpp
+ad_viz/include/ad_viz/perception/trajectory_history.hpp   (new)
+ad_viz/src/perception/object_marker_builder.cpp
+ad_viz/src/perception/perception_visualizer_node.cpp
+ad_viz/src/perception/trajectory_history.cpp               (new)
+ad_viz/test/test_object_marker_builder.cpp
+ad_viz/test/test_trajectory_history.cpp                     (new)
+ad_lidar_perception/launch/perception_visualization.launch.py
+ad_lidar_perception/rviz/heven_perception.rviz
+ad_lidar_perception/test/test_perception_visualization_launch.py
+docs/agent/STATUS.md (this update)
+```
+
+**A. Pre-existing unrelated dirty files** (unchanged, not staged/touched
+by this task — same 19 files as every prior task this session):
+
+```
+.claude/skills/bootstrap-repo/scripts/bootstrap-repo.sh
+.claude/skills/bootstrap-repo/tests/test_bootstrap_repo.sh
+.claude/skills/issue-worker/scripts/claim_issue.sh
+.claude/skills/issue-worker/tests/test_claim_issue.sh
+ops/runner/bin/agent-tick
+ops/runner/bin/codex-pr-review.sh
+ops/runner/bin/pr-set-in-review.sh
+ops/runner/bin/render_prompt.sh
+ops/runner/repo-context.sh
+ops/runner/tests/test_env_precedence.sh
+ops/runner/tests/test_pr_set_in_review.sh
+scripts/apply_dependency_patches.sh
+scripts/bootstrap_workspace.sh
+scripts/check_autoware_perception.py
+scripts/setup_dev_env.sh
+scripts/test_python.sh
+scripts/tests/test_verify_template_contract.sh
+scripts/verify-template-contract.sh
+scripts/verify_ad_data.py
+```
+
+### Blockers
+
+None. Live comparison works end-to-end. Not committed/pushed per this
+task's explicit instruction — left in the working tree for a future,
+separate commit task.
+
+## Previous: T-1C — Runtime verification of the AB3DMOT ROS2 tracker
 
 Branch: `feat/ab3dmot-tracker`. **T-1C: PASS.** Actually launched the real
 ROS2 graph (not just unit tests) and replayed real MORAI-exported LiDAR

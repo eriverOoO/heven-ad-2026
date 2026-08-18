@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ad_viz/perception/object_marker_builder.hpp"
+#include "ad_viz/perception/trajectory_history.hpp"
 
 #include <ad_interfaces/msg/predicted_object_array.hpp>
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
@@ -28,6 +29,7 @@ private:
     const ad_interfaces::msg::PredictedObjectArray::ConstSharedPtr input);
 
   ObjectMarkerConfig config_;
+  std::unique_ptr<TrajectoryHistory> trajectory_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr detection_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr tracked_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr prediction_publisher_;

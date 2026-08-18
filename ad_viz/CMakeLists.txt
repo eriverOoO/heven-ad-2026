@@ -68,6 +68,15 @@ ament_target_dependencies(ad_viz_object_marker_builder
   unique_identifier_msgs
   visualization_msgs)
 
+add_library(ad_viz_trajectory_history
+  src/perception/trajectory_history.cpp)
+target_compile_features(ad_viz_trajectory_history PUBLIC cxx_std_17)
+target_include_directories(ad_viz_trajectory_history PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>")
+ament_target_dependencies(ad_viz_trajectory_history
+  geometry_msgs)
+
 add_library(ad_viz_perception_visualizer_node
   src/perception/perception_visualizer_node.cpp)
 target_compile_features(ad_viz_perception_visualizer_node PUBLIC cxx_std_17)
@@ -76,7 +85,8 @@ target_include_directories(ad_viz_perception_visualizer_node PUBLIC
   "$<INSTALL_INTERFACE:include>")
 target_link_libraries(ad_viz_perception_visualizer_node
   ad_viz_marker_builder
-  ad_viz_object_marker_builder)
+  ad_viz_object_marker_builder
+  ad_viz_trajectory_history)
 ament_target_dependencies(ad_viz_perception_visualizer_node
   ad_interfaces
   autoware_perception_msgs
@@ -182,6 +192,7 @@ install(TARGETS
   ad_viz_perception_marker_node
   ad_perception_marker_node
   ad_viz_object_marker_builder
+  ad_viz_trajectory_history
   ad_viz_perception_visualizer_node
   perception_visualizer_node
   ad_viz_odometry_projection
@@ -228,6 +239,14 @@ if(BUILD_TESTING)
     visualization_msgs)
 
   ament_add_gtest(
+    test_trajectory_history test/test_trajectory_history.cpp)
+  target_link_libraries(
+    test_trajectory_history ad_viz_trajectory_history)
+  ament_target_dependencies(
+    test_trajectory_history
+    geometry_msgs)
+
+  ament_add_gtest(
     test_odometry_projection test/test_odometry_projection.cpp)
   target_link_libraries(
     test_odometry_projection
@@ -262,6 +281,7 @@ ament_export_include_directories(include)
 ament_export_libraries(
   ad_viz_marker_builder
   ad_viz_object_marker_builder
+  ad_viz_trajectory_history
   ad_viz_perception_visualizer_node
   ad_viz_perception_marker_node
   ad_viz_odometry_projection

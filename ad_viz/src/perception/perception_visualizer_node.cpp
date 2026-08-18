@@ -19,7 +19,8 @@ PerceptionVisualizerNode::PerceptionVisualizerNode(
     declare_parameter<double>("label_height_m", 0.45),
     declare_parameter<double>("label_z_offset_m", 0.25),
     declare_parameter<double>("velocity_scale_sec", 1.0),
-    declare_parameter<double>("minimum_velocity_mps", 0.01)}
+    declare_parameter<double>("minimum_velocity_mps", 0.01),
+    declare_parameter<std::string>("id_prefix", "")}
 {
   const auto qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile();
   const auto marker_qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().durability_volatile();
@@ -37,15 +38,25 @@ PerceptionVisualizerNode::PerceptionVisualizerNode(
     "predicted_output_topic", "/ad/visualization/predicted_objects");
   const bool visualize_predictions = declare_parameter<bool>(
     "visualize_predictions", true);
+  const bool visualize_detections = declare_parameter<bool>(
+    "visualize_detections", true);
+  const int trajectory_max_points = declare_parameter<int>("trajectory_max_points", 30);
+  const double trajectory_stale_timeout_sec = declare_parameter<double>(
+    "trajectory_stale_timeout_sec", 3.0);
 
-  detection_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-    detected_output, marker_qos);
+  trajectory_ = std::make_unique<TrajectoryHistory>(
+    static_cast<std::size_t>(std::max(2, trajectory_max_points)), trajectory_stale_timeout_sec);
+
+  if (visualize_detections) {
+    detection_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+      detected_output, marker_qos);
+    detection_subscription_ =
+      create_subscription<autoware_perception_msgs::msg::DetectedObjects>(
+      detected_input, qos,
+      std::bind(&PerceptionVisualizerNode::on_detections, this, std::placeholders::_1));
+  }
   tracked_publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
     tracked_output, marker_qos);
-  detection_subscription_ =
-    create_subscription<autoware_perception_msgs::msg::DetectedObjects>(
-    detected_input, qos,
-    std::bind(&PerceptionVisualizerNode::on_detections, this, std::placeholders::_1));
   tracked_subscription_ =
     create_subscription<autoware_perception_msgs::msg::TrackedObjects>(
     tracked_input, qos,
@@ -74,7 +85,21 @@ void PerceptionVisualizerNode::on_tracks(
   const autoware_perception_msgs::msg::TrackedObjects::ConstSharedPtr input)
 {
   try {
-    tracked_publisher_->publish(build_tracked_markers(*input, config_));
+    auto markers = build_tracked_markers(*input, config_);
+    const std::int64_t stamp_ns =
+      static_cast<std::int64_t>(input->header.stamp.sec) * 1000000000LL +
+      static_cast<std::int64_t>(input->header.stamp.nanosec);
+    for (const auto & object : input->objects) {
+      trajectory_->update(
+        uuid_hex(object.object_id), object.kinematics.pose_with_covariance.pose.position,
+        stamp_ns);
+    }
+    trajectory_->prune_stale(stamp_ns);
+    const auto trajectory_markers = build_trajectory_markers(
+      trajectory_->entries(), input->header, config_);
+    markers.markers.insert(
+      markers.markers.end(), trajectory_markers.markers.begin(), trajectory_markers.markers.end());
+    tracked_publisher_->publish(markers);
   } catch (const std::exception & error) {
     RCLCPP_WARN(get_logger(), "Rejected tracked objects for visualization: %s", error.what());
   }
