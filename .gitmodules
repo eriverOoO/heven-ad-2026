@@ -7,3 +7,6 @@
 [submodule "references/simpletrack"]
 	path = references/simpletrack
 	url = https://github.com/tusen-ai/SimpleTrack.git
+[submodule "references/kalmannet"]
+	path = references/kalmannet
+	url = https://github.com/KalmanNet/KalmanNet_TSP.git

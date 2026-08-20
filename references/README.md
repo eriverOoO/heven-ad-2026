@@ -49,3 +49,21 @@ code. Read before implementing; do not modify submodule source.
   design (its motion model, association, and life-cycle simplifications)
   to compare against the AB3DMOT baseline during the Tracking research
   phase.
+
+## references/kalmannet
+
+- **Upstream repository**: https://github.com/KalmanNet/KalmanNet_TSP.git
+- **Pinned commit**: `828a2cf529bc84f43b37d543d916fe5858054457` (`main`)
+- **Associated paper**: Revach, Shlezinger, Ni, Escoriza, van Sloun, Eldar,
+  "KalmanNet: Neural Network Aided Kalman Filtering for Partially Known
+  Dynamics" (IEEE Trans. Signal Processing, 2022; arXiv:2107.10043).
+- **License**: **no `LICENSE` file found in the repository** — treated as
+  all-rights-reserved by default; used for architecture reading/reference
+  only, nothing copied into production code. Any production use would
+  need explicit license clarification from the authors first.
+- **Purpose in HEVEN**: Architecture reference (the learned-Kalman-gain
+  mechanism, its GRU/FC structure, and its input/output contract) for
+  T-9A's own, independently written, much smaller experimental KalmanNet
+  module (`ad_lidar_perception/ad_lidar_perception/kalmannet_core.py`).
+  Full audit: `~/heven_presentation_assets/kalmannet/kalmannet_architecture_audit.md`
+  (outside repo, not committed).

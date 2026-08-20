@@ -1,5 +1,99 @@
 # STATUS
 
+## T-9A: KalmanNet offline dataset + prototype — PASS, CASE A (qualified)
+
+Branch: `feat/kalmannet-tracker` (branched from `e5f6beb` on
+`feat/ab3dmot-tracker`). Goal: establish a defensible KalmanNet training/
+eval dataset and build an OFFLINE prototype before any ROS integration.
+**No ROS integration, no change to the production Linear KF/EKF/IMM
+baseline.** Full detail: `~/heven_presentation_assets/kalmannet/README.md`
+(17-section report + `kalmannet_architecture_audit.md` +
+`ground_truth_audit.md`, figures/JSON/CSV/checkpoint — outside repo, not
+committed).
+
+**GT audit (highest-priority phase)**: `~/datasets/morai_heven/labels/*.json`
+(1,764 files) contain independent MORAI simulator GT per object
+(persistent `actor_id`, x/y/z/yaw/dims, own real `header_stamp_ns`) via a
+`map->odom->base_link->rear_axle_link->lidar_link` transform chain --
+**structurally independent of the Euclidean detector**. Verified the
+detection stream's own `stamp_ns` is a replay-time artifact (not usable
+for dt); `window_sample_ids.txt` (T-8A's own capture-order record) gives
+the correct frame-index join key instead. **PATH A selected** (real GT
+available and synchronizable).
+
+**Reference**: new pinned submodule `references/kalmannet`
+(KalmanNet_TSP, commit `828a2cf5`, architecture #2; no LICENSE file,
+reference-only). This task's own module
+(`ad_lidar_perception/ad_lidar_perception/kalmannet_core.py`, new,
+ROS-independent) implements a documented single-GRU simplification
+(7,016 params) preserving the reference's structural property: analytical
+`f`/`h`, only the Kalman gain is learned.
+
+**Dataset**: 4-state CV problem (`[x,y,vx,vy]`/`[x,y]`), GT-derived
+velocity via real (non-uniform) dt finite-differencing. 56 segments /
+1,396 frames / 11 actors after gate+length filtering. **Actor-level
+train(7)/val(2)/test(2) split, zero leakage** -- train 1,011 frames, val
+164, test 221 (held-out actors 1 [strong turn] and 18 [straight]).
+
+**Training**: seed 0, bounded 60 epochs (early-stop not triggered, val
+loss still improving), all Phase-13 sanity checks passed (overfit-one-
+sequence 7038.9->7.3, monotonic train loss, checkpoint-reload verified
+byte-identical, 0 NaN/Inf, real-dt-variation stable, no hidden-state leak
+across sequence boundaries).
+
+**Held-out test (real, n=221, never-tuned Q/R baseline)**: KalmanNet beats
+both the classical KF baseline and the raw-measurement baseline on every
+position/velocity metric (position RMSE 0.854 KalmanNet vs 1.115 KF vs
+0.866 measurement-only; velocity RMSE 1.371 vs 2.120). **Honestly
+reported, not spun**: the untuned classical KF is actually *worse* than
+raw measurement on position here -- not re-tuned post hoc, per this
+task's explicit "do not over-tune Q/R against test data" instruction.
+
+**Generalization stress test (SYNTHETIC, explicitly labeled)**: at 2.7x
+training-calibrated measurement noise, KalmanNet stays numerically stable
+in all 3 conditions (no divergence) but does **not** uniformly beat KF
+out-of-distribution -- wins only the turning condition, loses both
+straight conditions. Reported as found, not smoothed over.
+
+**Runtime**: KalmanNet CPU ~8x slower than classical KF (0.18ms vs
+0.02ms mean) but sub-millisecond; CUDA slower than CPU at this tiny
+per-step scale (kernel-launch overhead dominates) -- reported despite
+being counter-intuitive.
+
+**Tests**: new `test_kalmannet_core.py` (16/16 pass, run via the
+torch-enabled `heven-centerpoint` venv -- deliberately **not** wired into
+`CMakeLists.txt`/`colcon test`, since `kalmannet_core.py` imports torch at
+module level and the system ROS Python has no torch, mirroring
+`centerpoint_ros.py`'s own established torch-isolation pattern). Full
+pre-existing AB3DMOT suite re-run as regression: **195/195 pass**,
+unchanged.
+
+**KalmanNet readiness: CASE A, qualified** -- real independent GT exists
+and offline evaluation is meaningful (genuine held-out win), but the
+real-data sample (11 actors) is small and generalization is mixed, so
+T-9B should proceed as an **experimental, opt-in path only** (same
+pattern as CTRV EKF/IMM), not a baseline replacement.
+
+**Recommended next task**: T-9B experimental opt-in ROS integration of
+this same 4-state KalmanNet CV model (mirroring the `state_estimator`
+config pattern already used for `linear_kf`/`ekf`/`imm`), explicitly
+scoped to the demonstrated real-data regime and carrying forward both the
+small-sample and mixed-generalization caveats -- or, before that, capture
+additional real MORAI actor trajectories (more scenes/routes) to grow
+PATH A's sample size beyond 11 actors.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update, `.gitmodules`/`references/README.md` (new
+`references/kalmannet` submodule), and the two new
+`kalmannet_core.py`/`test_kalmannet_core.py` files -- no AB3DMOT/tracking
+production source file was touched. Not committed/pushed, per this
+task's instruction.
+
+## T-9A result: **PASS**
+
+---
+
 ## T-8A: Motion-regime evaluation dataset — PASS, CASE B (KalmanNet readiness)
 
 Branch: `feat/ab3dmot-tracker`. Goal: build a reusable MORAI motion-regime
