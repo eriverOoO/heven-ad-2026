@@ -68,6 +68,13 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("min_hits", 1)
         self.declare_parameter("max_age", 2)
         self.declare_parameter("giou_gate", 0.0)
+        self.declare_parameter("euclidean_gate_m", 3.0)
+        self.declare_parameter("mahalanobis_gate", 11.62)
+        self.declare_parameter("mahalanobis_max_distance_m", 0.0)
+        self.declare_parameter("state_estimator", "linear_kf")
+        self.declare_parameter("yaw_measurement_mode", "detector")
+        self.declare_parameter("imm_cv_to_cv_probability", 0.95)
+        self.declare_parameter("imm_ctrv_to_ctrv_probability", 0.95)
 
         self.enabled = bool(self.get_parameter("enabled").value)
         self.target_frame = str(self.get_parameter("target_frame").value)
@@ -97,6 +104,13 @@ class Ab3dmotTrackerNode(Node):
             min_hits=int(self.get_parameter("min_hits").value),
             max_age=int(self.get_parameter("max_age").value),
             giou_gate=float(self.get_parameter("giou_gate").value),
+            euclidean_gate_m=float(self.get_parameter("euclidean_gate_m").value),
+            mahalanobis_gate=float(self.get_parameter("mahalanobis_gate").value),
+            mahalanobis_max_distance_m=float(self.get_parameter("mahalanobis_max_distance_m").value),
+            state_estimator=str(self.get_parameter("state_estimator").value),
+            yaw_measurement_mode=str(self.get_parameter("yaw_measurement_mode").value),
+            imm_cv_to_cv_probability=float(self.get_parameter("imm_cv_to_cv_probability").value),
+            imm_ctrv_to_ctrv_probability=float(self.get_parameter("imm_ctrv_to_ctrv_probability").value),
         )
         root_param = str(self.get_parameter("ab3dmot_root").value)
         ab3dmot_root = Path(root_param) if root_param else None

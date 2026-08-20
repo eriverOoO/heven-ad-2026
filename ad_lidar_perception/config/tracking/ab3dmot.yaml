@@ -8,6 +8,9 @@
     # surface ad_lidar_perception/ad_lidar_perception/ab3dmot_config.py
     # mirrors for the standalone tracking core.
     association_metric: giou_3d
+    # T-3: 'greedy' (default, production-matching baseline) or 'hungarian'
+    # (opt-in global assignment, scipy.optimize.linear_sum_assignment).
+    # Override at launch with matcher:=hungarian.
     matcher: greedy
     min_hits: 1
     max_age: 2

@@ -450,6 +450,18 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)
   ament_add_pytest_test(
+    test_ab3dmot_association test/test_ab3dmot_association.py)
+  ament_add_pytest_test(
+    test_ab3dmot_association_metrics test/test_ab3dmot_association_metrics.py)
+  ament_add_pytest_test(
+    test_ab3dmot_hybrid_gate test/test_ab3dmot_hybrid_gate.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ekf test/test_ab3dmot_ekf.py)
+  ament_add_pytest_test(
+    test_ab3dmot_heading test/test_ab3dmot_heading.py)
+  ament_add_pytest_test(
+    test_ab3dmot_imm test/test_ab3dmot_imm.py)
+  ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
