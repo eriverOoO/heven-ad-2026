@@ -88,6 +88,27 @@ def generate_launch_description():
                 "cap -- pure T-4/T-5A Mahalanobis behavior is unchanged."
             ),
         ),
+        DeclareLaunchArgument(
+            "kalmannet_checkpoint",
+            default_value="",
+            description=(
+                "T-9B: opt-in, experimental. Absolute path to a frozen "
+                "KalmanNet checkpoint (e.g. DENSE-KALMANNET-v2). Required "
+                "(must be non-empty) when state_estimator:=kalmannet; never "
+                "loaded otherwise. No default path is baked in -- must be "
+                "supplied explicitly."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "kalmannet_device",
+            default_value="cpu",
+            description=(
+                "T-9B: 'cpu' (default -- the tiny model makes GPU kernel-"
+                "launch overhead dominate, per T-9A/T-12's own offline "
+                "runtime findings) or 'cuda'. Only read when "
+                "state_estimator:=kalmannet."
+            ),
+        ),
     ]
     node = Node(
         package="ad_lidar_perception",
@@ -121,6 +142,8 @@ def generate_launch_description():
                 "imm_ctrv_to_ctrv_probability": ParameterValue(
                     LaunchConfiguration("imm_ctrv_to_ctrv_probability"), value_type=float
                 ),
+                "kalmannet_checkpoint": LaunchConfiguration("kalmannet_checkpoint"),
+                "kalmannet_device": LaunchConfiguration("kalmannet_device"),
             },
         ],
     )

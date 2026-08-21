@@ -21,8 +21,11 @@ SUPPORTED_MATCHERS = ("greedy", "hungarian")
 SUPPORTED_METRICS = ("giou_3d", "euclidean", "mahalanobis")
 # T-7A: "linear_kf" (default, unchanged AB3DMOT reference constant-velocity
 # filter) or "ekf" (opt-in planar CTRV nonlinear model, see
-# ab3dmot_core.py's EKFEstimator).
-SUPPORTED_STATE_ESTIMATORS = ("linear_kf", "ekf", "imm")
+# ab3dmot_core.py's EKFEstimator). T-9B: "kalmannet" (opt-in, experimental --
+# see ab3dmot_core.py's KalmanNetEstimator and
+# ~/heven_presentation_assets/kalmannet_ros_integration/README.md).
+SUPPORTED_STATE_ESTIMATORS = ("linear_kf", "ekf", "imm", "kalmannet")
+DEFAULT_KALMANNET_DEVICE = "cpu"
 
 # T-7B: 2x2 Markov model-transition self-persistence probabilities for the
 # IMM(CV + CTRV) estimator. High self-transition is a defensible baseline
@@ -86,6 +89,14 @@ class AB3DMOTConfig:
     yaw_measurement_mode: str = "detector"
     imm_cv_to_cv_probability: float = DEFAULT_IMM_CV_TO_CV_PROBABILITY
     imm_ctrv_to_ctrv_probability: float = DEFAULT_IMM_CTRV_TO_CTRV_PROBABILITY
+    # T-9B: opt-in KalmanNet checkpoint path. Empty/default = KalmanNet
+    # disabled; never loaded when state_estimator != "kalmannet" (see
+    # AB3DMOTTracker.__init__). Required (non-empty) when
+    # state_estimator == "kalmannet" -- no silent fallback to random
+    # weights. Never a hardcoded absolute developer-machine path in this
+    # file; must be supplied via config/launch argument.
+    kalmannet_checkpoint: str = ""
+    kalmannet_device: str = DEFAULT_KALMANNET_DEVICE
 
     def __post_init__(self) -> None:
         if self.state_estimator not in SUPPORTED_STATE_ESTIMATORS:
@@ -93,6 +104,25 @@ class AB3DMOTConfig:
                 f"unsupported state_estimator {self.state_estimator!r}; "
                 f"only {SUPPORTED_STATE_ESTIMATORS} implemented"
             )
+        if self.state_estimator == "kalmannet":
+            if not self.kalmannet_checkpoint:
+                raise ValueError(
+                    "state_estimator='kalmannet' requires a non-empty kalmannet_checkpoint path"
+                )
+            if self.association_metric == "mahalanobis":
+                # T-9B Phase 3: KalmanNet's learned gain does not provide a
+                # calibrated posterior covariance equivalent to a KF's P --
+                # Mahalanobis association consumes estimator covariance
+                # directly, so pairing it with KalmanNet would silently
+                # associate on a fabricated uncertainty. Rejected outright
+                # (Option B, the safer of the two documented policies in
+                # kalmannet_ros_integration/README.md section 5) rather than
+                # inventing neural covariance semantics.
+                raise ValueError(
+                    "state_estimator='kalmannet' cannot be combined with "
+                    "association_metric='mahalanobis' -- KalmanNet has no calibrated "
+                    "posterior covariance; use 'euclidean' or 'giou_3d' instead"
+                )
         if not (0.0 < self.imm_cv_to_cv_probability <= 1.0):
             raise ValueError("imm_cv_to_cv_probability must be in (0, 1]")
         if not (0.0 < self.imm_ctrv_to_ctrv_probability <= 1.0):
