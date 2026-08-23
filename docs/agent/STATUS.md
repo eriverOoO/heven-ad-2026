@@ -1,5 +1,598 @@
 # STATUS
 
+## One-click camera + LiDAR tracking RViz replay — PASS
+
+Added the portable, opt-in `scripts/run_camera_lidar_tracking.sh` entrypoint,
+`camera_lidar_tracking_replay.launch.py`, and a focused camera/tracking RViz
+config. One command now validates the local bag and runtime packages, replays
+the front compressed camera and the existing LiDAR source whitelist from one
+MCAP player/clock, starts the unchanged MORAI classical Euclidean/Autoware
+path plus the frozen experimental AB3DMOT baseline, publishes the established
+replay-only `odom -> base_link` anchor, and opens RViz with camera, point cloud,
+detections, and both trackers enabled. LiDAR-only replay remains unchanged by
+the new strict-default-false `include_front_camera` argument.
+
+Live run started at bag offset 175 s at 1.0x: bag `/tf_static` plus the
+established replay-only identity `odom -> base_link` anchor, RANSAC ground
+segmentation, Euclidean detection, production-default Autoware tracking, and
+the frozen experimental AB3DMOT baseline (Linear KF + Euclidean 3 m +
+Hungarian, yaw unobserved). RViz and the front-camera window both opened.
+Every pipeline topic was verified with exactly one publisher after removing
+stale processes from the preceding, different-dataset RViz run; both tracker
+outputs published real `odom`-frame messages and RViz subscribed to both
+marker topics.
+
+This is visual/qualitative corroboration only: the bag has no camera
+annotations, no `CameraInfo`, no recorded perception output, and no dynamic
+localization TF. It is a different moving-ego sequence from the stationary
+T-series data, so no T-series metric or accuracy claim transfers to it.
+
+Portability: `package.xml` now declares `rosbag2_storage_mcap` and
+`compressed_image_transport`, so the standard bootstrap/rosdep flow installs
+them on another Ubuntu 22.04/ROS Humble PC. The 3.6 GB bag remains local and is
+explicitly ignored (`*.mcap` plus `/morai_cam4_*/`); it must be copied
+separately and is never committed. The launcher has no hardcoded home path and
+supports `HEVEN_AD_WS_PATH` for nonstandard workspaces.
+
+Verification: 45 focused source tests pass; isolated `ad_lidar_perception`
+build/install passes; installed launch `--show-args` passes; 3/3 relevant
+CTest targets pass; shell/Python syntax and `git diff --check` pass. A complete
+manual live run of the same camera/LiDAR/TF/detector/tracker/visualizer graph
+also passed before consolidation, with exactly one publisher per pipeline
+topic and real `odom`-frame outputs from both trackers. The final rosbag2-based
+one-click replay cannot be run on this PC until the approved but
+password-blocked apt dependencies are installed; the launcher fails early with
+the exact missing package instead of starting a partial graph.
+
+---
+
+## P-FIG: Final Presentation Figure Bundle — COMPLETE
+
+Created the collection-only final figure bundle at
+`~/heven_presentation_assets/presentation_figures/` and the portable archive
+at `~/heven_presentation_assets/presentation_figures.zip`. No experiment,
+scientific-result regeneration, image re-encoding, source-pack edit, algorithm
+change, commit, or push was performed. Original artifacts were only read and
+copied.
+
+Selection followed the final corrected `FIGURE_SHORTLIST.csv` plus
+`FINAL_PRESENTATION_AUDIT.md`. The bundle contains 17 MAIN and 23 curated
+APPENDIX figures (40 images; 42 regular files including
+`FIGURE_BUNDLE_MANIFEST.csv` and `FIGURE_CAVEATS.md`). All 40 source paths and
+copies exist, are non-empty, pass PNG signature/chunk-CRC/IDAT decompression
+validation, and have byte-identical SHA-256 hashes. ZIP integrity passes. Total
+uncompressed regular-file size is 4,995,535 bytes; ZIP size is 4,670,924
+bytes.
+
+The obsolete 40-frame ground-segmentation null-result figure is excluded; the
+pre-existing corrected T-2B 400-frame presentation-only figure is included.
+The 10/10 stability claim uses `ten_seed_validation_distribution.png`; the
+5-seed clipping sweep is separately named/caveated as a diagnostic. Camera
+MAIN contains exactly the two approved figures, with DIFFERENT-SEQUENCE
+boundaries recorded. Dense `camera_lidar_final_summary.png` remains appendix.
+All T-14/T-15, offline/online, ground, KalmanNet fairness, association, camera,
+and T-13 caveats are recorded in `FIGURE_CAVEATS.md` and per-row in the
+manifest.
+
+No shortlisted image is missing. The authoritative shortlist separately
+references `final_system_architecture.md` as a text diagram and states that no
+existing PNG exists; because this task was collection-only, no new architecture
+graphic was invented. No T-15 association-matrix PNG was added because none is
+selected by the final shortlist.
+
+## P-FIG result: **COMPLETE**
+
+---
+
+## P-E2: Integrate Camera-LiDAR Qualitative Evidence into the Final Presentation Pack — PASS
+
+Branch: `feat/kalmannet-tracker`. Development remains FROZEN (per T-16).
+No experiment run, no algorithm/retraining/threshold change, no repo
+source file touched, no commit/push. Two parts, both complete: (1)
+resolved every remaining item from the second-round Codex audit
+(`FINAL_CODEX_REAUDIT.md`/`FINAL_CODEX_REAUDIT_TABLE.csv`, repo root,
+untracked); (2) integrated the completed P-E1 camera-LiDAR validation
+(`~/heven_presentation_assets/camera_lidar_validation/`) into the
+existing corrected presentation source pack
+(`~/heven_presentation_assets/presentation_source_pack/`), in place.
+
+**Part 1 (re-audit corrections)**: T-2B figure/caption/`FIGURE_SHORTLIST.csv`
+caveat corrected from "-0.515 on changed frames" to "-0.515 across all
+400 frames (OFF 11.97 -> ON 11.455)," re-verified against
+`ground_segmentation/t2b_detection_identity_check.md`, figure regenerated;
+Hungarian claim (`CLAIM_CHECKLIST.csv` claim 1) fully rewritten (not just
+caveated) to remove the "did not materially improve tracking behavior"
+overclaim T-3 never measured; GIoU wording narrowed to the precise
+"lowest HOTA/highest IDSW in both T-15 rows" scope
+(`CLAIM_CHECKLIST.csv`, `GLOSSARY.md`); CenterPoint "better absolute
+accuracy" corrected to "lower in-sample/train-scene localization error"
+(`GLOSSARY.md`); "9 bugs" corrected to "8 ledger entries / 7 narrative
+groups" (`TECHNICAL_APPENDIX_OUTLINE.md`); all previously-malformed rows
+in `CLAIM_CHECKLIST.csv`/`NUMBER_CHECKLIST.csv`/`FIGURE_SHORTLIST.csv`
+fixed by quoting comma-containing fields (0 bad rows, verified via a
+Python `csv` row-width check on all three files); `SLIDE_OUTLINE_20MIN.md`
+slides 16-18 now carry the full literal mandated overlap sentence instead
+of "Show overlap caveat" shorthand.
+
+**Part 2 (camera integration)**: inspected all 3 user-named candidate
+figures directly before selecting (`camera_lidar_final_summary.png`
+found too dense/small-text for a live slide, moved to appendix instead of
+being forced into the main deck). Selected exactly 2 main-deck figures at
+2 locations: `projected_lidar_boxes_camera.png` (Location A, system/setup,
+near baseline architecture) and `qualitative_tracking_failure.png`
+(Location B, tracking climax, near T-14/T-15) — both explicitly captioned
+DIFFERENT-SEQUENCE (moving-ego bag `morai_cam4_20260813_163222`, not the
+static T-series scene) with speaker guidance never to attach a T-14/T-15
+number to either figure. New `CAMERA_LIDAR_PRESENTATION_GUIDE.md`
+(11-section guide). Updated in place: `FIGURE_SHORTLIST.csv` (+6 rows),
+`NUMBER_CHECKLIST.csv` (+3 rows), `CLAIM_CHECKLIST.csv` (+1 claim, +1
+FORBIDDEN entry), `SLIDE_OUTLINE_15MIN.md`, `SLIDE_OUTLINE_20MIN.md`,
+`PRESENTATION_STORYLINE.md`, `PRESENTATION_MASTER_SUMMARY.md`,
+`EXPECTED_QA.md` (+2 Q&A), `TECHNICAL_APPENDIX_OUTLINE.md` (+A13),
+`ONE_PAGE_CHEATSHEET.md` (+1 never-say item). New
+`PRESENTATION_PACK_CAMERA_UPDATE.md` reports the full diff, an 8-item
+final check (all 8 pass, including re-confirming the mandatory 100%
+train/eval overlap sentence count is unchanged on every existing
+CenterPoint slide/figure row), and verdict.
+
+**Verdict: READY FOR FINAL CODEX AUDIT.**
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo source/algorithm file was touched; all work
+lives under `~/heven_presentation_assets/presentation_source_pack/`. Not
+committed/pushed, per this task's instruction.
+
+## P-E2 result: **PASS**
+
+---
+
+## T-16: Final Experimental Freeze and Development Handoff — FROZEN
+
+Branch: `feat/kalmannet-tracker`. Not a new experiment — T-15 completed
+the final major research question. T-16 audits and consolidates the full
+CP-1 through T-15 research program into one reproducible handoff before
+presentation-slide work begins. **No detector/association/lifecycle/
+threshold change, no KalmanNet/CenterPoint retraining, no new GT
+optimization; no repo/algorithm source file touched.**
+
+**Handoff location**:
+`~/heven_presentation_assets/final_development_handoff/` — `README.md`
+(20-section structure per this task's own spec),
+`experiment_timeline.csv` (24 tasks, CP-1 through T-15),
+`final_results.csv` (canonical numeric results, sourced from original
+JSON/README artifacts — spot-verified directly against
+`gt_mot_eval/primary_association_comparison_full.json`,
+`state_estimator_gt_comparison/phase8b_apples_to_apples_available_only.json`,
+`kalmannet_training_stability/phase16_primary_final.json`, checkpoint
+SHA-256s), `claim_ledger.csv` (23 major claims classified SUPPORTED/
+SUPPORTED WITH CAVEAT/SUPERSEDED/NOT SUPPORTED/FALSE), `dataset_
+limitations.csv` (8 rows), `engineering_forensics.csv` (9 real bugs found/
+fixed, none invalidating a final published number), `artifact_manifest.csv`
+(per-experiment README/figure/data audit, 24 directories), `superseded_
+results.md` (10 do-not-reuse entries), `final_system_architecture.md`
+(frozen pipeline + full KalmanNet/CenterPoint provenance).
+
+**Phase 0 audit**: HEAD is `3a3c6b9` (T-9B KalmanNet ROS integration —
+confirmed already committed, not assumed from old reports), branch
+`feat/kalmannet-tracker`, `git status --short` shows only the same 19
+pre-existing chmod-only dirty files plus `STATUS.md` — no legitimate
+source changes are pending/uncommitted from any prior task.
+
+**Phase 1 test audit**: full directly-relevant suite re-run, **214/214
+pass, unchanged** from every T-9B/T-13/T-14/T-15 session-end check — no
+test-count change to report.
+
+**Key consolidated findings** (full detail in the handoff `README.md`):
+production Autoware remains fully unchanged throughout the entire
+project; experimental AB3DMOT default remains Linear KF + Euclidean-3m-
+BEV + Hungarian; DENSE-KALMANNET-v2 (SHA-256 `956604975e...fb7d48`, 10/10
+seed-stable, ROS-exact 0.00e+00) and CenterPoint (SHA-256 `466c8181...`,
+reproduced this session's T-14, 100% train/eval overlap) are both
+strictly opt-in/experimental, never production defaults or validated
+generalization claims. Ten historical conclusions are explicitly flagged
+SUPERSEDED (ground-segmentation-no-effect, KalmanNet-clearly-beats-KF,
+lowest-churn-means-best-identity, KalmanNet-long-gap-robustness, T-12-
+collapse-is-intrinsic, T-12.2-instability-is-flakiness, and four
+CenterPoint/detection-propagation risks) — full replacement framing in
+`superseded_results.md`.
+
+**Commit decision**: only `STATUS.md` plus the same 19 protected files
+are dirty — **no algorithm commit created**, per this task's own explicit
+instruction not to create a meaningless commit and not to commit
+unless separately instructed.
+
+## T-16 result: **DEVELOPMENT FROZEN**
+
+---
+
+## T-15: Detector × Association Interaction Study — PASS, CASE C (multi-factor)
+
+Branch: `feat/kalmannet-tracker`. Goal: explain T-14's central result
+(CenterPoint's GT detection-metric win did not propagate to tracking under
+Euclidean-3m+Hungarian). Full detail:
+`~/heven_presentation_assets/detector_association_interaction/README.md`
+(21-section report, 15 figures). **No new detector, no CenterPoint/
+KalmanNet retraining, no lifecycle change, no GT-based parameter tuning;
+no repo/algorithm source file touched.** Reused T-14's canonical detection
+files unmodified (verified: 1,764/1,764 frames each detector, 0
+duplicates, checkpoint SHA-256 unchanged).
+
+**6-condition frozen matrix** (Euclidean/CenterPoint detector × Euclidean-
+3m/GIoU/Mahalanobis-Hybrid association, all parameters copied unchanged
+from T-4/T-5B/T-6, never retuned against any GT score), run offline
+(no ROS): all 6 conditions 1,764/1,764 frames, 0 NaN/Inf, byte-identical
+reruns (0.0 determinism diff), 100% finite velocity. **A1 (Euclidean
+detector + Euclidean assoc) exactly reproduces T-14's own primary result**
+(HOTA 0.0631, IDSW 86).
+
+**Central interaction finding**: the detector effect (Euclidean→
+CenterPoint) is **consistently negative across all three association
+methods** (dHOTA -0.010/-0.0001/-0.008, dAssA -0.039/-0.021/-0.035 for
+Euclidean-assoc/GIoU/Mahalanobis respectively) and **far larger** than the
+association-method effect within either detector (≤0.003 HOTA swing).
+GIoU does **not** rescue CenterPoint (B2 HOTA 0.0528 ≈ B1's 0.0529, IDSW
+537 > 443) — ruling out a simple "use geometry-aware association" fix.
+Root cause for GIoU specifically: `yaw_measurement_mode=unobserved`
+freezes every track's yaw at 0; Euclidean's own detections are also
+always yaw=0 (trivial alignment), while CenterPoint's real non-zero yaw
+actively suppresses 3D GIoU overlap — confirmed directly (mean GIoU
+affinity of accepted matches: Euclidean 0.747 vs. CenterPoint 0.470,
+despite CenterPoint's far better raw geometry).
+
+**Candidate-density confirmed as real and large**: CenterPoint's
+valid-gated-pair count is 4-30x Euclidean's at every association method
+(e.g. 134-172/frame vs. 6-31/frame) — direct evidence for Hypothesis A.
+ID-switch forensics found a heavy-tailed density distribution (one
+representative switch occurred in a frame with 90 detections/117 active
+tracks/722 valid pairs, far above the 16.5/frame mean) — occasional
+extreme local spikes disproportionately drive switches.
+
+**Score/density sensitivity (diagnostic, thresholds fixed a priori:
+0.1/0.2/0.3/0.5) and a density-controlled top-K diagnostic (explicitly
+labeled non-production) both show density reduction helps a lot but not
+completely**: at threshold 0.3 (3.25 det/frame, below Euclidean's own
+9.15), HOTA nearly doubles (0.0529→0.0975) and *exceeds* the Euclidean
+baseline (0.0631); the density-matched top-K diagnostic similarly lifts
+HOTA to 0.0813 and IDF1 to 0.0525 (both above Euclidean's own values).
+**But AssA stays flat (~0.058-0.066) far below Euclidean's 0.0971 across
+the entire useful density range, and IDSW never approaches Euclidean's 86
+even at matched density (402 vs. 86)** — density is not the whole story.
+
+**CenterPoint temporal jitter, tested directly and confirmed**:
+frame-to-frame position jitter (relative to GT's own motion) is *higher*
+for CenterPoint than Euclidean (0.463m vs. 0.288m) despite CenterPoint's
+far lower absolute localization error (0.368m vs. 1.176m, T-14) — low
+absolute error and low frame-to-frame stability are not the same
+property, and this gap plausibly explains the residual AssA/IDSW gap
+density-matching alone doesn't close.
+
+**Secondary CenterPoint-yaw experiment (full message semantics, not a
+detector-controlled comparison)**: unlocking CenterPoint's real predicted
+yaw (`yaw_measurement_mode=detector`) does **not** help GIoU — it gets
+slightly worse (HOTA 0.0528→0.0499, IDSW 537→546) — explained by the
+same extreme track churn meaning yaw rarely converges before a track
+dies, so real yaw mostly adds noise rather than reaping a converged-yaw
+benefit. Euclidean association is unaffected either way (it never reads
+yaw), as expected.
+
+**T-10 conclusions revisited**: "GIoU worst/near-worst identity
+stability" is **ROBUST ACROSS DETECTORS** (confirmed for both). "Euclidean
+3m is the strongest association" is **DETECTOR-DEPENDENT** (nearly true
+for Euclidean detector, but Mahalanobis Hybrid wins for CenterPoint).
+"Mahalanobis reduces churn without improving GT identity" is
+**DETECTOR-DEPENDENT IN DETAIL** (identity does move with churn for
+Euclidean; for CenterPoint, AssA/HOTA improve but IDSW gets worse).
+
+**Runtime** (association-only, never mixed with detector inference):
+construction cost correlates strongly with `n_detections × n_tracks`
+(Pearson r 0.94-0.996, all 6 conditions) — GIoU is far the most expensive
+for CenterPoint's density (mean 49ms/frame, p95 185ms, max 737ms).
+
+**Classification: CASE C (multi-factor)** — density/ambiguity, a
+persistent post-density-control association gap, geometry-aware
+association's specific yaw-freeze confound, and CenterPoint's own
+temporal jitter all contribute; no single downstream lever (association
+metric, score threshold, or yaw semantics alone) fully closes the gap to
+Euclidean-detector tracking quality. All results remain
+IN-DISTRIBUTION / TRAIN-SCENE (T-14's 100% overlap finding, unchanged and
+restated, not re-litigated).
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged. `git status --short` shows only the same 19 pre-existing
+chmod-only dirty files plus this `STATUS.md` update — no repo/algorithm/
+config file was touched (all work under
+`~/heven_presentation_assets/detector_association_interaction/`).
+
+**Limitations**: still the same single static scene / 100% CenterPoint
+train overlap as T-14; the Phase 10 forensic switch trace is an
+independent GT-track re-identification method, not numerically identical
+to TrackEval's own IDSW definition (both point the same direction, not
+claimed as the same count); score/density and top-K experiments are
+explicitly diagnostic, no new production threshold selected; the
+yaw-convergence explanation for Phase 15's negative result is a plausible,
+evidence-consistent mechanism, not independently proven via a dedicated
+convergence-time measurement.
+
+**Recommended next task**: (a) a lifecycle-aware follow-up testing
+whether delaying GIoU's yaw trust until a track has accumulated N hits
+recovers some of the lost real-yaw benefit, since the current all-or-
+nothing semantics may discard real information before it can stabilize;
+or (b) capture genuinely new, disjoint MORAI scenes (T-14's own
+recommendation, still unaddressed) so these density/jitter/geometry
+mechanism findings can be tested out-of-sample. Not started this session.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-15 result: **PASS**
+
+---
+
+## T-14: End-to-End Detector × Tracker Evaluation with Independent MORAI GT — PASS, CASE B (+ mandatory CASE E qualifier)
+
+Branch: `feat/kalmannet-tracker`. Final major perception experiment before
+presentation freeze. Goal: holding the downstream tracker fixed, does
+changing the detector (Euclidean vs. CenterPoint) propagate to GT-based
+tracking quality? Full detail:
+`~/heven_presentation_assets/end_to_end_detector_tracker/README.md`
+(22-section report, 15 figures, JSON/CSV — outside repo, not committed).
+**No new detection/tracking algorithm, no per-detector tracker tuning, no
+KalmanNet retraining/use (Phase 18 secondary 2x2 explicitly dropped, per
+its own "do not delay" permission); no repo/algorithm source file
+touched.**
+
+**CenterPoint checkpoint reproduced, not newly trained**: no usable
+checkpoint existed on disk at task start (the prior "non-smoke" checkpoint
+was ephemeral scratch output, already cleaned up) — a genuine
+reproducibility gap, not a design choice. Reproduced the exact documented
+recipe unchanged (seed 2026, 3 epochs, batch 1, full 1,764-frame train
+split): loss 57.58→3.12 (reference: 57.57→3.08, closely reproduced), 0
+NaN/Inf. Reproduction shows modest, honestly-reported variance from the
+old fingerprint (16.47 vs. 14.75-17 predictions/frame; 93.6% vs. 100%
+vehicle class) — not re-rolled or cherry-picked, reported as the single
+attempt's real result.
+
+**Window**: full 1,764-frame dataset (not a sub-window) — a pre-freeze
+actor-coverage scan (applying T-13's own lesson) found this maximizes
+valid vehicle-actor coverage (19/19 actors, 2,844 GT observations, 100% of
+all vehicle-class GT in the dataset). All 19 valid actors are `vehicle`
+class; the dataset's only pedestrian/obstacle GT belongs to the 2
+already-`excluded_actor_ids` actors — vehicle is therefore the only
+defensible class domain, confirmed not assumed.
+
+**Input fairness (CASE INPUT-B)**: Euclidean's real production pipeline
+includes ground segmentation (RANSAC, T-2's own already-validated node);
+CenterPoint's designed input is cropped-only, no ground segmentation —
+genuinely different intended pipelines, not an oversight. T-14 evaluates
+each detector's own real production path and reports this as a **pipeline
+comparison**, not a controlled algorithm-only ablation, throughout.
+
+**Detection GT metrics** (3.0m BEV gate, fixed for both, never tuned per
+detector): CenterPoint clearly wins recall (81.1% vs. 71.1%), localization
+error (0.368m vs. 1.176m mean, 3.2x tighter), far-range recall (68.7% vs.
+51.6%), and vehicle box geometry (length bias -0.34m vs. -2.92m). Euclidean
+wins precision (12.5% vs. 7.9%) only because it emits far fewer raw boxes
+(9.15/frame vs. 16.47/frame) — both precision numbers are low against the
+same T-11-documented annotation-domain mismatch, not treated as an
+absolute FP claim.
+
+**Central finding (detection-to-tracking propagation), the same frozen
+tracker for both**: CenterPoint's detection-level win does **not**
+propagate to tracking. HOTA Euclidean 0.0631 > CenterPoint 0.0529; AssA
+0.0971 vs. 0.0582; IDF1 0.0319 vs. 0.0252; IDSW 86 vs. **443** (5.2x
+worse); unique tracks 1,749 vs. 5,916 (3.4x more churn). Only DetA (0.0435
+vs. 0.0484) and LocA (0.691 vs. 0.803) — the tracking-level echo of the
+detection-side win — favor CenterPoint. Mechanism, directly evidenced
+(Phase 15 forensic case: 20 unmatched CenterPoint boxes within 5m of one
+real matched actor in a single frame): CenterPoint's much higher raw
+detection volume floods the same fixed 3.0m gate + Hungarian matcher with
+far more competing candidates per real object, driving churn and identity
+switching even though each detection is individually better-localized.
+**Better detection does not monotonically propagate to better tracking
+under an unchanged association configuration** — answered directly, not
+assumed either direction.
+
+**Representative forensic evidence**: Euclidean track_id 2 persists across
+**all 1,764 frames** of the replay with zero interruption; CenterPoint's
+single longest-lived track reaches only 79 observations — a concrete
+illustration of the churn gap. 330 GT instances CenterPoint uniquely
+covers vs. only 45 Euclidean uniquely covers (asymmetric, both directions
+real and shown with specific frame/actor examples).
+
+**Runtime**: CenterPoint ~22.5x slower at the detector stage (mean
+131.2ms vs. 5.8ms) and ~11.2x slower end-to-end through the same tracker
+(136.6ms vs. 12.2ms) — live-ROS-measured, stamp-preserved true
+input-to-tracked-output latency, cross-validated against this project's
+already-cited historical CenterPoint median (~136ms).
+
+**Mandatory CASE E qualifier — the single most important limitation**:
+`~/datasets/morai_heven/splits/`: `train=1764, val=0, test=0`. CenterPoint's
+reproduced checkpoint trained on **all 1,764 frames**; T-14's evaluation
+window is the same full 1,764 frames. **Overlap is 100%, not partial** —
+every scored frame was also a training example. Every CenterPoint
+detection-metric advantage above is **not separable from memorization**
+of this one static scene; Euclidean, non-learned, carries no equivalent
+risk — the comparison is structurally asymmetric. **All results are
+labeled IN-DISTRIBUTION / TRAIN-SCENE EVALUATION.** No generalization or
+real-world-deployment claim is made for CenterPoint anywhere.
+
+**Throughput/backpressure**: applied T-13's own root-caused lesson
+directly from the start (widened QoS depth ≥250, tooling-only; replay
+interval matched to each pipeline's processing cost) — every reported
+run shows 0 message loss (source-sent == detector-received ==
+tracker-received, explicit counts logged for all 4 live-ROS captures). One
+stale-DDS-publisher recurrence was caught immediately via T-13's own
+established `ros2 topic info --verbose` + exact-PID-kill + daemon-restart
+discipline, before any affected data was collected.
+
+**Classification: CASE B** (detection improves, tracking does not)
+**combined with a mandatory CASE E qualifier** (100% train/eval overlap
+means the detection-side numbers are pipeline behavior on this scene, not
+validated detector-quality evidence) — stated together, never presented
+as a plain CASE A/B generalization ranking.
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged — no repo/algorithm/config file was touched (all new work lives
+under `~/heven_presentation_assets/end_to_end_detector_tracker/`, plus a
+freshly reproduced, uncommitted CenterPoint checkpoint file). `git status
+--short` shows only the same 19 pre-existing chmod-only dirty files plus
+this `STATUS.md` update.
+
+**Limitations**: CenterPoint train/eval overlap is total (§20 of the
+README, the report's central caveat); the unmatched-detection domain-audit
+heuristic is confounded by CenterPoint's own raw detection density; GT
+covers only 19 scripted vehicle actors, not general scene geometry, so
+precision/F1 are domain-relative, not absolute; the reproduced CenterPoint
+checkpoint shows modest honest variance from the old documented
+fingerprint (single attempt, not re-rolled); Phase 18's optional
+estimator-interaction question (does the propagation finding depend on
+KalmanNet vs. Linear KF) remains open; latency figures are single-machine
+(RTX 4060, WSL2) only.
+
+**Recommended next task**: either (a) capture genuinely new, disjoint
+MORAI scenes to give CenterPoint a real held-out test set before trusting
+any detection-quality number, or (b) if presentation time requires a
+same-scene finding, present exactly this task's central result —
+CenterPoint's detection-side win does not propagate to tracking under the
+current fixed-gate association design — with the CASE E overlap caveat
+stated in the same breath. Not started this session, per explicit scope
+(Phase 18 secondary KalmanNet 2x2 also not started, explicitly dropped
+per its own "do not delay" permission).
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-14 result: **PASS**
+
+---
+
+## T-13: Source-Aligned ROS GT Cross-Check for State Estimators — PASS, CASE B
+
+Branch: `feat/kalmannet-tracker`. Goal: T-9B deferred a real GT cross-check
+of the live ROS AB3DMOT estimators (its own README §17), relying instead
+on an exact offline/online mechanism-equivalence proof. T-13 does the
+deferred work: reuses T-9B's own canonical 200-frame replay (static TF,
+`association_metric=euclidean/matcher=hungarian/euclidean_gate_m=3.0/
+yaw_measurement_mode=unobserved`, only `state_estimator` varies) for all
+4 estimators (Tuned KF/CTRV EKF/IMM/KalmanNet v2), positionally joins
+each live `TrackedObjects` output back to independent MORAI GT (T-11's
+established `recv_index`<->`frame_idx` join, never wall-clock), and
+computes real GT position/velocity error. Full detail:
+`~/heven_presentation_assets/ros_gt_crosscheck/README.md` (20-section
+report, 10 figures, CSV/JSON — outside repo, not committed). **No
+estimator algorithm change, no retraining, no parameter tuning, no
+association change; no repo/source file touched.**
+
+**Two real data-collection bugs found and fixed (tooling only, zero repo
+files)**: (1) a stray duplicate tracker publisher from an earlier launch
+was hidden by a broken `pgrep -af "a\|b\|c"` check — this environment's
+`pgrep`, like its already-documented `pkill`, treats `\|` as a **literal**
+character, not ERE alternation, so the "exhaustive" check silently
+matched nothing and gave false confidence; fixed via exact-PID `kill -9`
+(found via plain `ps aux`, not a broken pattern) + `ros2 daemon`
+restart. (2) After fixing that, a clean single-publisher KalmanNet run
+still lost 29/200 input messages to backpressure — traced to a shallow
+depth-10/50 QoS history queue in the (non-repo) replay/recorder tooling
+colliding with KalmanNet's higher real end-to-end latency (T-9B: 7.13ms
+mean vs. 4.3-6.4ms classical); fixed by widening the tooling's own QoS to
+depth-250 `RELIABLE` and slowing the KalmanNet-condition replay interval
+to 0.15s — never touching `ab3dmot_tracker_node.py`'s own existing,
+unmodified depth-10 subscription. Final clean result: all 4 conditions
+195/195 frames, 0 duplicate stamps, exactly 1 publisher throughout.
+
+**Coordinate alignment**: GT/detections are `lidar_link`, tracker output
+is `odom`; the T-1C static TF chain (`odom<-base_link` identity,
+`base_link<-lidar_link` z=+1.70 identity rotation) makes the transform
+exact and closed-form (`(x,y,z)->(x,y,z+1.70)`), no TF-lookup uncertainty.
+
+**A real, honestly-discovered limitation drives this task's headline**:
+the common usable frame range (`gt_frame_idx` 1-194, the intersection
+across all 4 conditions) contains **only actors 2 (`obstacle`) and 3
+(`pedestrian`) — both on T-12's own `excluded_actor_ids` list**
+("vehicle-speed kinematics inconsistent with class label"). **None of
+T-12's TEST actors (16/20/30) appear in this window** — T-9B's window was
+chosen for a runtime comparison, not GT-actor coverage, and the two goals
+conflict here. This was discovered during this task, not assumed.
+
+**Primary GT position result (all matched frames, n=38-41 per
+estimator)**: Tuned KF 1.000m, CTRV EKF 1.055m, IMM 1.115m, **KalmanNet
+v2 1.057m** — all four within a narrow ~1.00-1.12m band, no outlier.
+Match rate ~37% (106 GT actor-frame instances total), root-caused to a
+real detector-coverage gap (same domain-mismatch T-10 already documented)
+— of the 40 instances with any nearby detection, 95-100% were
+successfully track-matched per estimator, confirming the low overall rate
+is a scene property, not a tracker/estimator failure.
+
+**Offline (T-12) vs. ROS (T-13) comparison — explicitly not
+apples-to-apples**: T-12's offline TEST result (KalmanNet 3.065m, >2x
+Tuned KF's 1.456m) does **not** reproduce here (KalmanNet 1.049m vs. KF's
+0.997m, essentially tied) — but this cannot be attributed to the ROS
+integration, since T-9B's Phase 12 already proved online/offline
+KalmanNet math is bit-identical (0.00e+00) on shared input. The only
+variable that changed is which actors are evaluated (T-12: real
+vehicle-class TEST actors where fragmentation sensitivity was found;
+T-13: excluded-class actors 2/3 with scripted/discretized motion).
+Reported as an **unresolved actor-composition confound**, not as evidence
+against T-12's finding.
+
+**Velocity result reported but flagged as not a clean signal**:
+KalmanNet's lower RMSE (10.00 m/s vs. 16.7-18.6 m/s classical) against
+GT velocity for actors 2/3 is **not** claimed as a real accuracy win —
+these actors' finite-differenced GT velocity is the same
+kinematically-inconsistent signal T-12 already flagged as its reason for
+excluding them; matching a noisy target better is not evidence of better
+velocity estimation.
+
+**Identity-consistency (secondary context only)**: KalmanNet shows the
+most ID switches on actor 3 (10 vs. 4-7 for the others, n=14 matched
+frames) — consistent with T-12.1/T-12.3's documented fragmentation
+sensitivity, but on a different actor population and too small a sample
+to be confirmatory alone.
+
+**Classification: CASE B** — GT-based ROS metrics partly agree with the
+offline picture (no estimator catastrophically fails) but do not
+reproduce T-12's KalmanNet-fragmentation headline on this window, for a
+traceable, honest reason (actor-composition confound, not an integration
+defect — Phase 12 already proved the integration exact).
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged (211 pre-existing + verified via the same run). `git status
+--short` at the end of this task shows only the same pre-existing
+unrelated dirty files (0 content diff, permission-mode only) from every
+prior session, plus this `STATUS.md` update — no repo/algorithm/config
+file was touched.
+
+**Limitations**: single fixed replay window (reused from T-9B per this
+task's own Phase 1 "reuse" decision) with zero TEST-split actors; GT
+velocity for both usable actors is inherently noisy (§ above); per-actor/
+per-regime samples are small (13-41); KalmanNet's own frame range is
+offset by 1 frame from the other three (residual, explained artifact of
+the QoS fix); the direct-trace phase reuses T-9B's already-exact Phase 12
+equivalence rather than re-deriving it on this specific actor.
+
+**Recommended next task**: a true apples-to-apples ROS-vs-offline
+comparison needs a replay window containing T-12's actual TEST actors
+(16, 20, 30) — locate their frame ranges in the full 1764-frame canonical
+dataset and repeat this exact pipeline on that window, which would let
+the offline-vs-ROS comparison test T-12's fragmentation finding directly
+in the live ROS path without the actor-composition confound found here.
+Not started this session, per explicit scope (this task's window was
+fixed before the actor-composition issue was discovered).
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-13 result: **PASS**
+
+---
+
 ## T-9B: Opt-In ROS2 Integration of DENSE-KALMANNET-v2 — PASS, CASE A (with documented scope limits)
 
 Branch: `feat/kalmannet-tracker`. Goal: integrate T-12.3's frozen
