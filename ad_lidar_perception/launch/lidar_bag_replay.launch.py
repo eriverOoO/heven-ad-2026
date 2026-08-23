@@ -42,6 +42,13 @@ def _parse_bool(name, value):
     raise RuntimeError(f"{name} must be exactly 'true' or 'false'")
 
 
+def _parse_detector_backend(value):
+    normalized = str(value).strip()
+    if normalized not in {"euclidean", "centerpoint"}:
+        raise RuntimeError("detector_backend must be euclidean or centerpoint")
+    return normalized
+
+
 def _parse_number(name, value):
     try:
         result = float(value)
@@ -221,6 +228,9 @@ def _launch_setup(context):
     include_front_camera = _parse_bool(
         "include_front_camera", _perform(context, "include_front_camera")
     )
+    detector_backend = _parse_detector_backend(
+        _perform(context, "detector_backend")
+    )
 
     # Reformat the validated number to prevent passing non-numeric shell-like
     # input through to the subprocess while retaining a readable command line.
@@ -256,6 +266,10 @@ def _launch_setup(context):
         _launch_file("ad_lidar_perception", "lidar_perception.launch.py"),
         launch_arguments={
             "composition_config": str(composition_config),
+            "detector_backend": detector_backend,
+            "checkpoint_path": _perform(context, "checkpoint_path"),
+            "device": _perform(context, "device"),
+            "openpcdet_root": _perform(context, "openpcdet_root"),
             "cluster_config": str(cluster_config),
             "ground_config": str(ground_config),
             "crop_clearance_m": format(crop_clearance, ".15g"),
@@ -269,7 +283,11 @@ def _launch_setup(context):
             "finite_filter_enabled": "true",
             "densifier_enabled": "false",
             "point_layout_adapter_enabled": "false",
-            "start_ground_segmentation": "true",
+            # CenterPoint's validated contract is cropped-only; the classical
+            # Euclidean detector consumes the post-ground stream.
+            "start_ground_segmentation": (
+                "false" if detector_backend == "centerpoint" else "true"
+            ),
         }.items(),
     )
     player = ExecuteProcess(
@@ -349,6 +367,14 @@ def generate_launch_description():
                     "so the LiDAR-only replay contract stays unchanged"
                 ),
             ),
+            DeclareLaunchArgument(
+                "detector_backend",
+                default_value="euclidean",
+                description="euclidean (default) or opt-in centerpoint",
+            ),
+            DeclareLaunchArgument("checkpoint_path", default_value=""),
+            DeclareLaunchArgument("device", default_value="cuda:0"),
+            DeclareLaunchArgument("openpcdet_root", default_value=""),
             DeclareLaunchArgument(
                 "composition_config",
                 default_value=str(default_composition),

@@ -1,5 +1,51 @@
 # STATUS
 
+## 10-mode camera + LiDAR tracking preset replay — PASS (source/install), LIVE BLOCKED BY HOST PACKAGES
+
+Branch `feat/tracking-preset-replay` adds a validated, configuration-owned
+10-mode qualitative comparison matrix to the existing camera/LiDAR replay.
+`scripts/run_camera_lidar_tracking.sh --list-modes` lists the matrix and
+`--mode 1` through `--mode 10` selects Euclidean/CenterPoint detection,
+GIoU/Euclidean-3m/Mahalanobis-Hybrid-10m association, Greedy/Hungarian
+matching, and Linear-KF/CTRV-EKF/IMM/KalmanNet estimation exactly as documented
+in `config/tracking/camera_replay_presets.yaml`. Mode 3 remains the safe
+backward-compatible default. All modes keep yaw unobserved and preserve the
+existing AB3DMOT lifecycle; no detector, tracker, estimator, prediction,
+occupancy, QoS, frame, timestamp, or production Autoware algorithm changed.
+
+The launch now forwards the selected detector through bag replay. Euclidean
+keeps the existing ground-segmentation path; CenterPoint automatically uses
+its validated cropped-only input. Modes 4/10 explicitly apply Mahalanobis gate
+11.62 plus the 10 m physical cap. Model modes fail before graph startup when
+their external artifact/runtime is missing. The wrapper verifies the frozen
+CenterPoint and DENSE-KALMANNET-v2 SHA-256 values, while checkpoints and the
+3.6 GB MCAP remain ignored and must be copied separately.
+
+Portability: official OpenPCDet is now the pinned `references/openpcdet`
+submodule at `233f849829b6ac19afb8af8837a0246890908755`; `references/COLCON_IGNORE`
+prevents research repositories from being misidentified as ROS packages.
+The standard recursive submodule bootstrap therefore obtains the exact source
+on another PC. Runtime still requires the documented CUDA/PyTorch environment
+and externally supplied model weights for modes 7-10.
+
+Verification: 230 directly relevant Python tests pass, including every mode's
+exact launch wiring, invalid-mode/artifact rejection, detector preprocessing
+contract, all AB3DMOT association/estimator/KalmanNet regressions, runner CLI,
+and RViz topics. Shell syntax, Python compile, `git diff --check`, and a full
+repository-root `colcon list` pass. Isolated installed build of
+`ad_lidar_perception` passes; installed launch reports default mode 3 and ten
+installed presets; both relevant installed CTests pass. A new live GUI replay
+was not claimed because this host still lacks `rosbag2_storage_mcap` and
+`compressed_image_transport`; the runner reports those exact missing packages
+instead of starting a partial graph.
+
+This interface provides controlled qualitative replay, not a new unified
+10-condition quantitative experiment. Historical T-series results still span
+different offline/online datasets and protocols and must retain their existing
+caveats.
+
+---
+
 ## One-click camera + LiDAR tracking RViz replay — PASS
 
 Added the portable, opt-in `scripts/run_camera_lidar_tracking.sh` entrypoint,

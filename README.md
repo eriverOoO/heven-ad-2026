@@ -188,6 +188,17 @@ cd "$HOME/heven_ad_2026_ws/src/heven_ad_2026"
 ./scripts/run_camera_lidar_tracking.sh /absolute/path/to/extracted_bag
 ```
 
+추적 비교 프리셋 1~10을 확인하거나 선택한다. 인자를 생략하면 검증된
+3번(Euclidean detector + Euclidean 3 m + Hungarian + Linear KF)이 실행된다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh --list-modes
+./scripts/run_camera_lidar_tracking.sh --mode 6 --bag /absolute/path/to/bag
+```
+
+KalmanNet과 CenterPoint 프리셋은 Git에 포함되지 않는 체크포인트가 필요하다.
+필요한 옵션과 동일 조건 비교 절차는 아래 상세 문서를 따른다.
+
 상세 계약과 제한은
 [`docs/morai/lidar-mcap-replay.md`](docs/morai/lidar-mcap-replay.md)의
 “카메라와 트래킹 원클릭 동시 재생”을 따른다.
