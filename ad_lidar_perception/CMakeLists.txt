@@ -464,6 +464,9 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
+    test_camera_lidar_tracking_replay_launch
+    test/test_camera_lidar_tracking_replay_launch.py)
+  ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
   ament_add_pytest_test(
     test_preprocessing_launch test/test_preprocessing_launch.py)
