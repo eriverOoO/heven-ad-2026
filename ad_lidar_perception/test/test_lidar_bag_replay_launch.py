@@ -55,6 +55,7 @@ def launch_context(bag, **overrides):
         "rate": "1.0",
         "startup_delay_sec": "2.0",
         "start_paused": "false",
+        "include_front_camera": "false",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -126,6 +127,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "rate",
         "startup_delay_sec",
         "start_paused",
+        "include_front_camera",
         "composition_config",
         "cluster_config",
         "ground_config",
@@ -142,6 +144,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "rate": "0.5",
         "startup_delay_sec": "2.0",
         "start_paused": "false",
+        "include_front_camera": "false",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -296,6 +299,15 @@ def test_start_paused_is_a_strict_boolean(value):
         module._parse_bool("start_paused", value)
 
 
+@pytest.mark.parametrize("value", ["yes", "1", "", "falsee"])
+def test_include_front_camera_is_a_strict_boolean(value):
+    module = load_launch_module()
+    with pytest.raises(
+        RuntimeError, match="include_front_camera.*true.*false"
+    ):
+        module._parse_bool("include_front_camera", value)
+
+
 def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
     tmp_path, monkeypatch
 ):
@@ -396,6 +408,20 @@ def test_start_paused_flag_is_explicit_and_precedes_topics(
 
     assert command.count("--start-paused") == 1
     assert command.index("--start-paused") < command.index("--topics")
+
+
+def test_front_camera_replay_is_explicitly_opt_in(tmp_path, monkeypatch):
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    group = record_setup(
+        module,
+        monkeypatch,
+        launch_context(bag, include_front_camera="true"),
+    )[0]
+    command = group.kwargs["actions"][3].kwargs["actions"][0].kwargs["cmd"]
+
+    assert module.FRONT_CAMERA_TOPIC in command
+    assert command.count(module.FRONT_CAMERA_TOPIC) == 1
 
 
 def test_composition_config_must_be_an_absolute_regular_yaml(tmp_path):

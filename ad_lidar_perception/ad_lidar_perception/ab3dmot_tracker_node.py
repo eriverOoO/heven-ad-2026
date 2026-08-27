@@ -75,6 +75,8 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("yaw_measurement_mode", "detector")
         self.declare_parameter("imm_cv_to_cv_probability", 0.95)
         self.declare_parameter("imm_ctrv_to_ctrv_probability", 0.95)
+        self.declare_parameter("kalmannet_checkpoint", "")
+        self.declare_parameter("kalmannet_device", "cpu")
 
         self.enabled = bool(self.get_parameter("enabled").value)
         self.target_frame = str(self.get_parameter("target_frame").value)
@@ -111,10 +113,24 @@ class Ab3dmotTrackerNode(Node):
             yaw_measurement_mode=str(self.get_parameter("yaw_measurement_mode").value),
             imm_cv_to_cv_probability=float(self.get_parameter("imm_cv_to_cv_probability").value),
             imm_ctrv_to_ctrv_probability=float(self.get_parameter("imm_ctrv_to_ctrv_probability").value),
+            kalmannet_checkpoint=str(self.get_parameter("kalmannet_checkpoint").value),
+            kalmannet_device=str(self.get_parameter("kalmannet_device").value),
         )
         root_param = str(self.get_parameter("ab3dmot_root").value)
         ab3dmot_root = Path(root_param) if root_param else None
-        return AB3DMOTTracker(config, ab3dmot_root)
+        tracker = AB3DMOTTracker(config, ab3dmot_root)
+        # T-9B Phase 16: log checkpoint provenance exactly once, at build
+        # time -- never per-frame/per-track.
+        if tracker.kalmannet_provenance is not None:
+            self.get_logger().info(
+                "KalmanNet checkpoint loaded: "
+                f"path={tracker.kalmannet_provenance['checkpoint_path']} "
+                f"sha256={tracker.kalmannet_provenance['checkpoint_sha256']} "
+                f"hidden_size={tracker.kalmannet_provenance['hidden_size']} "
+                f"n_trainable_params={tracker.kalmannet_provenance['n_trainable_params']} "
+                f"device={tracker.kalmannet_provenance['device']}"
+            )
+        return tracker
 
     def _on_detected_objects(self, msg: DetectedObjects) -> None:
         if not self.enabled or self._tracker is None:

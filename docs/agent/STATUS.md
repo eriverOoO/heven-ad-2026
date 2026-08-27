@@ -1,5 +1,1644 @@
 # STATUS
 
+## One-click camera + LiDAR tracking RViz replay — PASS
+
+Added the portable, opt-in `scripts/run_camera_lidar_tracking.sh` entrypoint,
+`camera_lidar_tracking_replay.launch.py`, and a focused camera/tracking RViz
+config. One command now validates the local bag and runtime packages, replays
+the front compressed camera and the existing LiDAR source whitelist from one
+MCAP player/clock, starts the unchanged MORAI classical Euclidean/Autoware
+path plus the frozen experimental AB3DMOT baseline, publishes the established
+replay-only `odom -> base_link` anchor, and opens RViz with camera, point cloud,
+detections, and both trackers enabled. LiDAR-only replay remains unchanged by
+the new strict-default-false `include_front_camera` argument.
+
+Live run started at bag offset 175 s at 1.0x: bag `/tf_static` plus the
+established replay-only identity `odom -> base_link` anchor, RANSAC ground
+segmentation, Euclidean detection, production-default Autoware tracking, and
+the frozen experimental AB3DMOT baseline (Linear KF + Euclidean 3 m +
+Hungarian, yaw unobserved). RViz and the front-camera window both opened.
+Every pipeline topic was verified with exactly one publisher after removing
+stale processes from the preceding, different-dataset RViz run; both tracker
+outputs published real `odom`-frame messages and RViz subscribed to both
+marker topics.
+
+This is visual/qualitative corroboration only: the bag has no camera
+annotations, no `CameraInfo`, no recorded perception output, and no dynamic
+localization TF. It is a different moving-ego sequence from the stationary
+T-series data, so no T-series metric or accuracy claim transfers to it.
+
+Portability: `package.xml` now declares `rosbag2_storage_mcap` and
+`compressed_image_transport`, so the standard bootstrap/rosdep flow installs
+them on another Ubuntu 22.04/ROS Humble PC. The 3.6 GB bag remains local and is
+explicitly ignored (`*.mcap` plus `/morai_cam4_*/`); it must be copied
+separately and is never committed. The launcher has no hardcoded home path and
+supports `HEVEN_AD_WS_PATH` for nonstandard workspaces.
+
+Verification: 45 focused source tests pass; isolated `ad_lidar_perception`
+build/install passes; installed launch `--show-args` passes; 3/3 relevant
+CTest targets pass; shell/Python syntax and `git diff --check` pass. A complete
+manual live run of the same camera/LiDAR/TF/detector/tracker/visualizer graph
+also passed before consolidation, with exactly one publisher per pipeline
+topic and real `odom`-frame outputs from both trackers. The final rosbag2-based
+one-click replay cannot be run on this PC until the approved but
+password-blocked apt dependencies are installed; the launcher fails early with
+the exact missing package instead of starting a partial graph.
+
+---
+
+## P-FIG: Final Presentation Figure Bundle — COMPLETE
+
+Created the collection-only final figure bundle at
+`~/heven_presentation_assets/presentation_figures/` and the portable archive
+at `~/heven_presentation_assets/presentation_figures.zip`. No experiment,
+scientific-result regeneration, image re-encoding, source-pack edit, algorithm
+change, commit, or push was performed. Original artifacts were only read and
+copied.
+
+Selection followed the final corrected `FIGURE_SHORTLIST.csv` plus
+`FINAL_PRESENTATION_AUDIT.md`. The bundle contains 17 MAIN and 23 curated
+APPENDIX figures (40 images; 42 regular files including
+`FIGURE_BUNDLE_MANIFEST.csv` and `FIGURE_CAVEATS.md`). All 40 source paths and
+copies exist, are non-empty, pass PNG signature/chunk-CRC/IDAT decompression
+validation, and have byte-identical SHA-256 hashes. ZIP integrity passes. Total
+uncompressed regular-file size is 4,995,535 bytes; ZIP size is 4,670,924
+bytes.
+
+The obsolete 40-frame ground-segmentation null-result figure is excluded; the
+pre-existing corrected T-2B 400-frame presentation-only figure is included.
+The 10/10 stability claim uses `ten_seed_validation_distribution.png`; the
+5-seed clipping sweep is separately named/caveated as a diagnostic. Camera
+MAIN contains exactly the two approved figures, with DIFFERENT-SEQUENCE
+boundaries recorded. Dense `camera_lidar_final_summary.png` remains appendix.
+All T-14/T-15, offline/online, ground, KalmanNet fairness, association, camera,
+and T-13 caveats are recorded in `FIGURE_CAVEATS.md` and per-row in the
+manifest.
+
+No shortlisted image is missing. The authoritative shortlist separately
+references `final_system_architecture.md` as a text diagram and states that no
+existing PNG exists; because this task was collection-only, no new architecture
+graphic was invented. No T-15 association-matrix PNG was added because none is
+selected by the final shortlist.
+
+## P-FIG result: **COMPLETE**
+
+---
+
+## P-E2: Integrate Camera-LiDAR Qualitative Evidence into the Final Presentation Pack — PASS
+
+Branch: `feat/kalmannet-tracker`. Development remains FROZEN (per T-16).
+No experiment run, no algorithm/retraining/threshold change, no repo
+source file touched, no commit/push. Two parts, both complete: (1)
+resolved every remaining item from the second-round Codex audit
+(`FINAL_CODEX_REAUDIT.md`/`FINAL_CODEX_REAUDIT_TABLE.csv`, repo root,
+untracked); (2) integrated the completed P-E1 camera-LiDAR validation
+(`~/heven_presentation_assets/camera_lidar_validation/`) into the
+existing corrected presentation source pack
+(`~/heven_presentation_assets/presentation_source_pack/`), in place.
+
+**Part 1 (re-audit corrections)**: T-2B figure/caption/`FIGURE_SHORTLIST.csv`
+caveat corrected from "-0.515 on changed frames" to "-0.515 across all
+400 frames (OFF 11.97 -> ON 11.455)," re-verified against
+`ground_segmentation/t2b_detection_identity_check.md`, figure regenerated;
+Hungarian claim (`CLAIM_CHECKLIST.csv` claim 1) fully rewritten (not just
+caveated) to remove the "did not materially improve tracking behavior"
+overclaim T-3 never measured; GIoU wording narrowed to the precise
+"lowest HOTA/highest IDSW in both T-15 rows" scope
+(`CLAIM_CHECKLIST.csv`, `GLOSSARY.md`); CenterPoint "better absolute
+accuracy" corrected to "lower in-sample/train-scene localization error"
+(`GLOSSARY.md`); "9 bugs" corrected to "8 ledger entries / 7 narrative
+groups" (`TECHNICAL_APPENDIX_OUTLINE.md`); all previously-malformed rows
+in `CLAIM_CHECKLIST.csv`/`NUMBER_CHECKLIST.csv`/`FIGURE_SHORTLIST.csv`
+fixed by quoting comma-containing fields (0 bad rows, verified via a
+Python `csv` row-width check on all three files); `SLIDE_OUTLINE_20MIN.md`
+slides 16-18 now carry the full literal mandated overlap sentence instead
+of "Show overlap caveat" shorthand.
+
+**Part 2 (camera integration)**: inspected all 3 user-named candidate
+figures directly before selecting (`camera_lidar_final_summary.png`
+found too dense/small-text for a live slide, moved to appendix instead of
+being forced into the main deck). Selected exactly 2 main-deck figures at
+2 locations: `projected_lidar_boxes_camera.png` (Location A, system/setup,
+near baseline architecture) and `qualitative_tracking_failure.png`
+(Location B, tracking climax, near T-14/T-15) — both explicitly captioned
+DIFFERENT-SEQUENCE (moving-ego bag `morai_cam4_20260813_163222`, not the
+static T-series scene) with speaker guidance never to attach a T-14/T-15
+number to either figure. New `CAMERA_LIDAR_PRESENTATION_GUIDE.md`
+(11-section guide). Updated in place: `FIGURE_SHORTLIST.csv` (+6 rows),
+`NUMBER_CHECKLIST.csv` (+3 rows), `CLAIM_CHECKLIST.csv` (+1 claim, +1
+FORBIDDEN entry), `SLIDE_OUTLINE_15MIN.md`, `SLIDE_OUTLINE_20MIN.md`,
+`PRESENTATION_STORYLINE.md`, `PRESENTATION_MASTER_SUMMARY.md`,
+`EXPECTED_QA.md` (+2 Q&A), `TECHNICAL_APPENDIX_OUTLINE.md` (+A13),
+`ONE_PAGE_CHEATSHEET.md` (+1 never-say item). New
+`PRESENTATION_PACK_CAMERA_UPDATE.md` reports the full diff, an 8-item
+final check (all 8 pass, including re-confirming the mandatory 100%
+train/eval overlap sentence count is unchanged on every existing
+CenterPoint slide/figure row), and verdict.
+
+**Verdict: READY FOR FINAL CODEX AUDIT.**
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo source/algorithm file was touched; all work
+lives under `~/heven_presentation_assets/presentation_source_pack/`. Not
+committed/pushed, per this task's instruction.
+
+## P-E2 result: **PASS**
+
+---
+
+## T-16: Final Experimental Freeze and Development Handoff — FROZEN
+
+Branch: `feat/kalmannet-tracker`. Not a new experiment — T-15 completed
+the final major research question. T-16 audits and consolidates the full
+CP-1 through T-15 research program into one reproducible handoff before
+presentation-slide work begins. **No detector/association/lifecycle/
+threshold change, no KalmanNet/CenterPoint retraining, no new GT
+optimization; no repo/algorithm source file touched.**
+
+**Handoff location**:
+`~/heven_presentation_assets/final_development_handoff/` — `README.md`
+(20-section structure per this task's own spec),
+`experiment_timeline.csv` (24 tasks, CP-1 through T-15),
+`final_results.csv` (canonical numeric results, sourced from original
+JSON/README artifacts — spot-verified directly against
+`gt_mot_eval/primary_association_comparison_full.json`,
+`state_estimator_gt_comparison/phase8b_apples_to_apples_available_only.json`,
+`kalmannet_training_stability/phase16_primary_final.json`, checkpoint
+SHA-256s), `claim_ledger.csv` (23 major claims classified SUPPORTED/
+SUPPORTED WITH CAVEAT/SUPERSEDED/NOT SUPPORTED/FALSE), `dataset_
+limitations.csv` (8 rows), `engineering_forensics.csv` (9 real bugs found/
+fixed, none invalidating a final published number), `artifact_manifest.csv`
+(per-experiment README/figure/data audit, 24 directories), `superseded_
+results.md` (10 do-not-reuse entries), `final_system_architecture.md`
+(frozen pipeline + full KalmanNet/CenterPoint provenance).
+
+**Phase 0 audit**: HEAD is `3a3c6b9` (T-9B KalmanNet ROS integration —
+confirmed already committed, not assumed from old reports), branch
+`feat/kalmannet-tracker`, `git status --short` shows only the same 19
+pre-existing chmod-only dirty files plus `STATUS.md` — no legitimate
+source changes are pending/uncommitted from any prior task.
+
+**Phase 1 test audit**: full directly-relevant suite re-run, **214/214
+pass, unchanged** from every T-9B/T-13/T-14/T-15 session-end check — no
+test-count change to report.
+
+**Key consolidated findings** (full detail in the handoff `README.md`):
+production Autoware remains fully unchanged throughout the entire
+project; experimental AB3DMOT default remains Linear KF + Euclidean-3m-
+BEV + Hungarian; DENSE-KALMANNET-v2 (SHA-256 `956604975e...fb7d48`, 10/10
+seed-stable, ROS-exact 0.00e+00) and CenterPoint (SHA-256 `466c8181...`,
+reproduced this session's T-14, 100% train/eval overlap) are both
+strictly opt-in/experimental, never production defaults or validated
+generalization claims. Ten historical conclusions are explicitly flagged
+SUPERSEDED (ground-segmentation-no-effect, KalmanNet-clearly-beats-KF,
+lowest-churn-means-best-identity, KalmanNet-long-gap-robustness, T-12-
+collapse-is-intrinsic, T-12.2-instability-is-flakiness, and four
+CenterPoint/detection-propagation risks) — full replacement framing in
+`superseded_results.md`.
+
+**Commit decision**: only `STATUS.md` plus the same 19 protected files
+are dirty — **no algorithm commit created**, per this task's own explicit
+instruction not to create a meaningless commit and not to commit
+unless separately instructed.
+
+## T-16 result: **DEVELOPMENT FROZEN**
+
+---
+
+## T-15: Detector × Association Interaction Study — PASS, CASE C (multi-factor)
+
+Branch: `feat/kalmannet-tracker`. Goal: explain T-14's central result
+(CenterPoint's GT detection-metric win did not propagate to tracking under
+Euclidean-3m+Hungarian). Full detail:
+`~/heven_presentation_assets/detector_association_interaction/README.md`
+(21-section report, 15 figures). **No new detector, no CenterPoint/
+KalmanNet retraining, no lifecycle change, no GT-based parameter tuning;
+no repo/algorithm source file touched.** Reused T-14's canonical detection
+files unmodified (verified: 1,764/1,764 frames each detector, 0
+duplicates, checkpoint SHA-256 unchanged).
+
+**6-condition frozen matrix** (Euclidean/CenterPoint detector × Euclidean-
+3m/GIoU/Mahalanobis-Hybrid association, all parameters copied unchanged
+from T-4/T-5B/T-6, never retuned against any GT score), run offline
+(no ROS): all 6 conditions 1,764/1,764 frames, 0 NaN/Inf, byte-identical
+reruns (0.0 determinism diff), 100% finite velocity. **A1 (Euclidean
+detector + Euclidean assoc) exactly reproduces T-14's own primary result**
+(HOTA 0.0631, IDSW 86).
+
+**Central interaction finding**: the detector effect (Euclidean→
+CenterPoint) is **consistently negative across all three association
+methods** (dHOTA -0.010/-0.0001/-0.008, dAssA -0.039/-0.021/-0.035 for
+Euclidean-assoc/GIoU/Mahalanobis respectively) and **far larger** than the
+association-method effect within either detector (≤0.003 HOTA swing).
+GIoU does **not** rescue CenterPoint (B2 HOTA 0.0528 ≈ B1's 0.0529, IDSW
+537 > 443) — ruling out a simple "use geometry-aware association" fix.
+Root cause for GIoU specifically: `yaw_measurement_mode=unobserved`
+freezes every track's yaw at 0; Euclidean's own detections are also
+always yaw=0 (trivial alignment), while CenterPoint's real non-zero yaw
+actively suppresses 3D GIoU overlap — confirmed directly (mean GIoU
+affinity of accepted matches: Euclidean 0.747 vs. CenterPoint 0.470,
+despite CenterPoint's far better raw geometry).
+
+**Candidate-density confirmed as real and large**: CenterPoint's
+valid-gated-pair count is 4-30x Euclidean's at every association method
+(e.g. 134-172/frame vs. 6-31/frame) — direct evidence for Hypothesis A.
+ID-switch forensics found a heavy-tailed density distribution (one
+representative switch occurred in a frame with 90 detections/117 active
+tracks/722 valid pairs, far above the 16.5/frame mean) — occasional
+extreme local spikes disproportionately drive switches.
+
+**Score/density sensitivity (diagnostic, thresholds fixed a priori:
+0.1/0.2/0.3/0.5) and a density-controlled top-K diagnostic (explicitly
+labeled non-production) both show density reduction helps a lot but not
+completely**: at threshold 0.3 (3.25 det/frame, below Euclidean's own
+9.15), HOTA nearly doubles (0.0529→0.0975) and *exceeds* the Euclidean
+baseline (0.0631); the density-matched top-K diagnostic similarly lifts
+HOTA to 0.0813 and IDF1 to 0.0525 (both above Euclidean's own values).
+**But AssA stays flat (~0.058-0.066) far below Euclidean's 0.0971 across
+the entire useful density range, and IDSW never approaches Euclidean's 86
+even at matched density (402 vs. 86)** — density is not the whole story.
+
+**CenterPoint temporal jitter, tested directly and confirmed**:
+frame-to-frame position jitter (relative to GT's own motion) is *higher*
+for CenterPoint than Euclidean (0.463m vs. 0.288m) despite CenterPoint's
+far lower absolute localization error (0.368m vs. 1.176m, T-14) — low
+absolute error and low frame-to-frame stability are not the same
+property, and this gap plausibly explains the residual AssA/IDSW gap
+density-matching alone doesn't close.
+
+**Secondary CenterPoint-yaw experiment (full message semantics, not a
+detector-controlled comparison)**: unlocking CenterPoint's real predicted
+yaw (`yaw_measurement_mode=detector`) does **not** help GIoU — it gets
+slightly worse (HOTA 0.0528→0.0499, IDSW 537→546) — explained by the
+same extreme track churn meaning yaw rarely converges before a track
+dies, so real yaw mostly adds noise rather than reaping a converged-yaw
+benefit. Euclidean association is unaffected either way (it never reads
+yaw), as expected.
+
+**T-10 conclusions revisited**: "GIoU worst/near-worst identity
+stability" is **ROBUST ACROSS DETECTORS** (confirmed for both). "Euclidean
+3m is the strongest association" is **DETECTOR-DEPENDENT** (nearly true
+for Euclidean detector, but Mahalanobis Hybrid wins for CenterPoint).
+"Mahalanobis reduces churn without improving GT identity" is
+**DETECTOR-DEPENDENT IN DETAIL** (identity does move with churn for
+Euclidean; for CenterPoint, AssA/HOTA improve but IDSW gets worse).
+
+**Runtime** (association-only, never mixed with detector inference):
+construction cost correlates strongly with `n_detections × n_tracks`
+(Pearson r 0.94-0.996, all 6 conditions) — GIoU is far the most expensive
+for CenterPoint's density (mean 49ms/frame, p95 185ms, max 737ms).
+
+**Classification: CASE C (multi-factor)** — density/ambiguity, a
+persistent post-density-control association gap, geometry-aware
+association's specific yaw-freeze confound, and CenterPoint's own
+temporal jitter all contribute; no single downstream lever (association
+metric, score threshold, or yaw semantics alone) fully closes the gap to
+Euclidean-detector tracking quality. All results remain
+IN-DISTRIBUTION / TRAIN-SCENE (T-14's 100% overlap finding, unchanged and
+restated, not re-litigated).
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged. `git status --short` shows only the same 19 pre-existing
+chmod-only dirty files plus this `STATUS.md` update — no repo/algorithm/
+config file was touched (all work under
+`~/heven_presentation_assets/detector_association_interaction/`).
+
+**Limitations**: still the same single static scene / 100% CenterPoint
+train overlap as T-14; the Phase 10 forensic switch trace is an
+independent GT-track re-identification method, not numerically identical
+to TrackEval's own IDSW definition (both point the same direction, not
+claimed as the same count); score/density and top-K experiments are
+explicitly diagnostic, no new production threshold selected; the
+yaw-convergence explanation for Phase 15's negative result is a plausible,
+evidence-consistent mechanism, not independently proven via a dedicated
+convergence-time measurement.
+
+**Recommended next task**: (a) a lifecycle-aware follow-up testing
+whether delaying GIoU's yaw trust until a track has accumulated N hits
+recovers some of the lost real-yaw benefit, since the current all-or-
+nothing semantics may discard real information before it can stabilize;
+or (b) capture genuinely new, disjoint MORAI scenes (T-14's own
+recommendation, still unaddressed) so these density/jitter/geometry
+mechanism findings can be tested out-of-sample. Not started this session.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-15 result: **PASS**
+
+---
+
+## T-14: End-to-End Detector × Tracker Evaluation with Independent MORAI GT — PASS, CASE B (+ mandatory CASE E qualifier)
+
+Branch: `feat/kalmannet-tracker`. Final major perception experiment before
+presentation freeze. Goal: holding the downstream tracker fixed, does
+changing the detector (Euclidean vs. CenterPoint) propagate to GT-based
+tracking quality? Full detail:
+`~/heven_presentation_assets/end_to_end_detector_tracker/README.md`
+(22-section report, 15 figures, JSON/CSV — outside repo, not committed).
+**No new detection/tracking algorithm, no per-detector tracker tuning, no
+KalmanNet retraining/use (Phase 18 secondary 2x2 explicitly dropped, per
+its own "do not delay" permission); no repo/algorithm source file
+touched.**
+
+**CenterPoint checkpoint reproduced, not newly trained**: no usable
+checkpoint existed on disk at task start (the prior "non-smoke" checkpoint
+was ephemeral scratch output, already cleaned up) — a genuine
+reproducibility gap, not a design choice. Reproduced the exact documented
+recipe unchanged (seed 2026, 3 epochs, batch 1, full 1,764-frame train
+split): loss 57.58→3.12 (reference: 57.57→3.08, closely reproduced), 0
+NaN/Inf. Reproduction shows modest, honestly-reported variance from the
+old fingerprint (16.47 vs. 14.75-17 predictions/frame; 93.6% vs. 100%
+vehicle class) — not re-rolled or cherry-picked, reported as the single
+attempt's real result.
+
+**Window**: full 1,764-frame dataset (not a sub-window) — a pre-freeze
+actor-coverage scan (applying T-13's own lesson) found this maximizes
+valid vehicle-actor coverage (19/19 actors, 2,844 GT observations, 100% of
+all vehicle-class GT in the dataset). All 19 valid actors are `vehicle`
+class; the dataset's only pedestrian/obstacle GT belongs to the 2
+already-`excluded_actor_ids` actors — vehicle is therefore the only
+defensible class domain, confirmed not assumed.
+
+**Input fairness (CASE INPUT-B)**: Euclidean's real production pipeline
+includes ground segmentation (RANSAC, T-2's own already-validated node);
+CenterPoint's designed input is cropped-only, no ground segmentation —
+genuinely different intended pipelines, not an oversight. T-14 evaluates
+each detector's own real production path and reports this as a **pipeline
+comparison**, not a controlled algorithm-only ablation, throughout.
+
+**Detection GT metrics** (3.0m BEV gate, fixed for both, never tuned per
+detector): CenterPoint clearly wins recall (81.1% vs. 71.1%), localization
+error (0.368m vs. 1.176m mean, 3.2x tighter), far-range recall (68.7% vs.
+51.6%), and vehicle box geometry (length bias -0.34m vs. -2.92m). Euclidean
+wins precision (12.5% vs. 7.9%) only because it emits far fewer raw boxes
+(9.15/frame vs. 16.47/frame) — both precision numbers are low against the
+same T-11-documented annotation-domain mismatch, not treated as an
+absolute FP claim.
+
+**Central finding (detection-to-tracking propagation), the same frozen
+tracker for both**: CenterPoint's detection-level win does **not**
+propagate to tracking. HOTA Euclidean 0.0631 > CenterPoint 0.0529; AssA
+0.0971 vs. 0.0582; IDF1 0.0319 vs. 0.0252; IDSW 86 vs. **443** (5.2x
+worse); unique tracks 1,749 vs. 5,916 (3.4x more churn). Only DetA (0.0435
+vs. 0.0484) and LocA (0.691 vs. 0.803) — the tracking-level echo of the
+detection-side win — favor CenterPoint. Mechanism, directly evidenced
+(Phase 15 forensic case: 20 unmatched CenterPoint boxes within 5m of one
+real matched actor in a single frame): CenterPoint's much higher raw
+detection volume floods the same fixed 3.0m gate + Hungarian matcher with
+far more competing candidates per real object, driving churn and identity
+switching even though each detection is individually better-localized.
+**Better detection does not monotonically propagate to better tracking
+under an unchanged association configuration** — answered directly, not
+assumed either direction.
+
+**Representative forensic evidence**: Euclidean track_id 2 persists across
+**all 1,764 frames** of the replay with zero interruption; CenterPoint's
+single longest-lived track reaches only 79 observations — a concrete
+illustration of the churn gap. 330 GT instances CenterPoint uniquely
+covers vs. only 45 Euclidean uniquely covers (asymmetric, both directions
+real and shown with specific frame/actor examples).
+
+**Runtime**: CenterPoint ~22.5x slower at the detector stage (mean
+131.2ms vs. 5.8ms) and ~11.2x slower end-to-end through the same tracker
+(136.6ms vs. 12.2ms) — live-ROS-measured, stamp-preserved true
+input-to-tracked-output latency, cross-validated against this project's
+already-cited historical CenterPoint median (~136ms).
+
+**Mandatory CASE E qualifier — the single most important limitation**:
+`~/datasets/morai_heven/splits/`: `train=1764, val=0, test=0`. CenterPoint's
+reproduced checkpoint trained on **all 1,764 frames**; T-14's evaluation
+window is the same full 1,764 frames. **Overlap is 100%, not partial** —
+every scored frame was also a training example. Every CenterPoint
+detection-metric advantage above is **not separable from memorization**
+of this one static scene; Euclidean, non-learned, carries no equivalent
+risk — the comparison is structurally asymmetric. **All results are
+labeled IN-DISTRIBUTION / TRAIN-SCENE EVALUATION.** No generalization or
+real-world-deployment claim is made for CenterPoint anywhere.
+
+**Throughput/backpressure**: applied T-13's own root-caused lesson
+directly from the start (widened QoS depth ≥250, tooling-only; replay
+interval matched to each pipeline's processing cost) — every reported
+run shows 0 message loss (source-sent == detector-received ==
+tracker-received, explicit counts logged for all 4 live-ROS captures). One
+stale-DDS-publisher recurrence was caught immediately via T-13's own
+established `ros2 topic info --verbose` + exact-PID-kill + daemon-restart
+discipline, before any affected data was collected.
+
+**Classification: CASE B** (detection improves, tracking does not)
+**combined with a mandatory CASE E qualifier** (100% train/eval overlap
+means the detection-side numbers are pipeline behavior on this scene, not
+validated detector-quality evidence) — stated together, never presented
+as a plain CASE A/B generalization ranking.
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged — no repo/algorithm/config file was touched (all new work lives
+under `~/heven_presentation_assets/end_to_end_detector_tracker/`, plus a
+freshly reproduced, uncommitted CenterPoint checkpoint file). `git status
+--short` shows only the same 19 pre-existing chmod-only dirty files plus
+this `STATUS.md` update.
+
+**Limitations**: CenterPoint train/eval overlap is total (§20 of the
+README, the report's central caveat); the unmatched-detection domain-audit
+heuristic is confounded by CenterPoint's own raw detection density; GT
+covers only 19 scripted vehicle actors, not general scene geometry, so
+precision/F1 are domain-relative, not absolute; the reproduced CenterPoint
+checkpoint shows modest honest variance from the old documented
+fingerprint (single attempt, not re-rolled); Phase 18's optional
+estimator-interaction question (does the propagation finding depend on
+KalmanNet vs. Linear KF) remains open; latency figures are single-machine
+(RTX 4060, WSL2) only.
+
+**Recommended next task**: either (a) capture genuinely new, disjoint
+MORAI scenes to give CenterPoint a real held-out test set before trusting
+any detection-quality number, or (b) if presentation time requires a
+same-scene finding, present exactly this task's central result —
+CenterPoint's detection-side win does not propagate to tracking under the
+current fixed-gate association design — with the CASE E overlap caveat
+stated in the same breath. Not started this session, per explicit scope
+(Phase 18 secondary KalmanNet 2x2 also not started, explicitly dropped
+per its own "do not delay" permission).
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-14 result: **PASS**
+
+---
+
+## T-13: Source-Aligned ROS GT Cross-Check for State Estimators — PASS, CASE B
+
+Branch: `feat/kalmannet-tracker`. Goal: T-9B deferred a real GT cross-check
+of the live ROS AB3DMOT estimators (its own README §17), relying instead
+on an exact offline/online mechanism-equivalence proof. T-13 does the
+deferred work: reuses T-9B's own canonical 200-frame replay (static TF,
+`association_metric=euclidean/matcher=hungarian/euclidean_gate_m=3.0/
+yaw_measurement_mode=unobserved`, only `state_estimator` varies) for all
+4 estimators (Tuned KF/CTRV EKF/IMM/KalmanNet v2), positionally joins
+each live `TrackedObjects` output back to independent MORAI GT (T-11's
+established `recv_index`<->`frame_idx` join, never wall-clock), and
+computes real GT position/velocity error. Full detail:
+`~/heven_presentation_assets/ros_gt_crosscheck/README.md` (20-section
+report, 10 figures, CSV/JSON — outside repo, not committed). **No
+estimator algorithm change, no retraining, no parameter tuning, no
+association change; no repo/source file touched.**
+
+**Two real data-collection bugs found and fixed (tooling only, zero repo
+files)**: (1) a stray duplicate tracker publisher from an earlier launch
+was hidden by a broken `pgrep -af "a\|b\|c"` check — this environment's
+`pgrep`, like its already-documented `pkill`, treats `\|` as a **literal**
+character, not ERE alternation, so the "exhaustive" check silently
+matched nothing and gave false confidence; fixed via exact-PID `kill -9`
+(found via plain `ps aux`, not a broken pattern) + `ros2 daemon`
+restart. (2) After fixing that, a clean single-publisher KalmanNet run
+still lost 29/200 input messages to backpressure — traced to a shallow
+depth-10/50 QoS history queue in the (non-repo) replay/recorder tooling
+colliding with KalmanNet's higher real end-to-end latency (T-9B: 7.13ms
+mean vs. 4.3-6.4ms classical); fixed by widening the tooling's own QoS to
+depth-250 `RELIABLE` and slowing the KalmanNet-condition replay interval
+to 0.15s — never touching `ab3dmot_tracker_node.py`'s own existing,
+unmodified depth-10 subscription. Final clean result: all 4 conditions
+195/195 frames, 0 duplicate stamps, exactly 1 publisher throughout.
+
+**Coordinate alignment**: GT/detections are `lidar_link`, tracker output
+is `odom`; the T-1C static TF chain (`odom<-base_link` identity,
+`base_link<-lidar_link` z=+1.70 identity rotation) makes the transform
+exact and closed-form (`(x,y,z)->(x,y,z+1.70)`), no TF-lookup uncertainty.
+
+**A real, honestly-discovered limitation drives this task's headline**:
+the common usable frame range (`gt_frame_idx` 1-194, the intersection
+across all 4 conditions) contains **only actors 2 (`obstacle`) and 3
+(`pedestrian`) — both on T-12's own `excluded_actor_ids` list**
+("vehicle-speed kinematics inconsistent with class label"). **None of
+T-12's TEST actors (16/20/30) appear in this window** — T-9B's window was
+chosen for a runtime comparison, not GT-actor coverage, and the two goals
+conflict here. This was discovered during this task, not assumed.
+
+**Primary GT position result (all matched frames, n=38-41 per
+estimator)**: Tuned KF 1.000m, CTRV EKF 1.055m, IMM 1.115m, **KalmanNet
+v2 1.057m** — all four within a narrow ~1.00-1.12m band, no outlier.
+Match rate ~37% (106 GT actor-frame instances total), root-caused to a
+real detector-coverage gap (same domain-mismatch T-10 already documented)
+— of the 40 instances with any nearby detection, 95-100% were
+successfully track-matched per estimator, confirming the low overall rate
+is a scene property, not a tracker/estimator failure.
+
+**Offline (T-12) vs. ROS (T-13) comparison — explicitly not
+apples-to-apples**: T-12's offline TEST result (KalmanNet 3.065m, >2x
+Tuned KF's 1.456m) does **not** reproduce here (KalmanNet 1.049m vs. KF's
+0.997m, essentially tied) — but this cannot be attributed to the ROS
+integration, since T-9B's Phase 12 already proved online/offline
+KalmanNet math is bit-identical (0.00e+00) on shared input. The only
+variable that changed is which actors are evaluated (T-12: real
+vehicle-class TEST actors where fragmentation sensitivity was found;
+T-13: excluded-class actors 2/3 with scripted/discretized motion).
+Reported as an **unresolved actor-composition confound**, not as evidence
+against T-12's finding.
+
+**Velocity result reported but flagged as not a clean signal**:
+KalmanNet's lower RMSE (10.00 m/s vs. 16.7-18.6 m/s classical) against
+GT velocity for actors 2/3 is **not** claimed as a real accuracy win —
+these actors' finite-differenced GT velocity is the same
+kinematically-inconsistent signal T-12 already flagged as its reason for
+excluding them; matching a noisy target better is not evidence of better
+velocity estimation.
+
+**Identity-consistency (secondary context only)**: KalmanNet shows the
+most ID switches on actor 3 (10 vs. 4-7 for the others, n=14 matched
+frames) — consistent with T-12.1/T-12.3's documented fragmentation
+sensitivity, but on a different actor population and too small a sample
+to be confirmatory alone.
+
+**Classification: CASE B** — GT-based ROS metrics partly agree with the
+offline picture (no estimator catastrophically fails) but do not
+reproduce T-12's KalmanNet-fragmentation headline on this window, for a
+traceable, honest reason (actor-composition confound, not an integration
+defect — Phase 12 already proved the integration exact).
+
+**Tests**: full directly-relevant suite re-run, **214/214 pass**,
+unchanged (211 pre-existing + verified via the same run). `git status
+--short` at the end of this task shows only the same pre-existing
+unrelated dirty files (0 content diff, permission-mode only) from every
+prior session, plus this `STATUS.md` update — no repo/algorithm/config
+file was touched.
+
+**Limitations**: single fixed replay window (reused from T-9B per this
+task's own Phase 1 "reuse" decision) with zero TEST-split actors; GT
+velocity for both usable actors is inherently noisy (§ above); per-actor/
+per-regime samples are small (13-41); KalmanNet's own frame range is
+offset by 1 frame from the other three (residual, explained artifact of
+the QoS fix); the direct-trace phase reuses T-9B's already-exact Phase 12
+equivalence rather than re-deriving it on this specific actor.
+
+**Recommended next task**: a true apples-to-apples ROS-vs-offline
+comparison needs a replay window containing T-12's actual TEST actors
+(16, 20, 30) — locate their frame ranges in the full 1764-frame canonical
+dataset and repeat this exact pipeline on that window, which would let
+the offline-vs-ROS comparison test T-12's fragmentation finding directly
+in the live ROS path without the actor-composition confound found here.
+Not started this session, per explicit scope (this task's window was
+fixed before the actor-composition issue was discovered).
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-13 result: **PASS**
+
+---
+
+## T-9B: Opt-In ROS2 Integration of DENSE-KALMANNET-v2 — PASS, CASE A (with documented scope limits)
+
+Branch: `feat/kalmannet-tracker`. Goal: integrate T-12.3's frozen
+`DENSE-KALMANNET-v2` checkpoint as an opt-in AB3DMOT `state_estimator`.
+Full detail:
+`~/heven_presentation_assets/kalmannet_ros_integration/README.md`
+(23-section report). **No retraining, no KalmanNet redesign, no
+production/default change, no ROS-based tuning.** This task DID modify
+production repo source (`ab3dmot_core.py`, `ab3dmot_config.py`,
+`ab3dmot_tracker_node.py`, `ab3dmot_tracker.launch.py`) — the first
+T-9-series task to do so, since T-9A/T-9A.1/T-12/T-12.1/T-12.2/T-12.3
+were all offline-only.
+
+**Baseline**: repo was clean (only STATUS.md + 19 protected files dirty)
+at task start — no Phase 0.5 safe checkpoint was needed; baseline commit
+`e49c3d9`.
+
+**Interface**: new `KalmanNetEstimator` implements the exact same
+`predict`/`update`/`position`/`velocity`/`yaw`/`dimensions`/
+`*_covariance`/`predicted_bev_*`/`is_finite` interface as
+LinearKF/EKF/IMM. **State ownership**: `x,y,vx,vy` from KalmanNet;
+`z,vz,l,w,h,yaw` from an internally-composed `LinearKFEstimator` ("side"),
+never reporting the side's own x/y/vx/vy. **Covariance**: Option B —
+covariance fields populated from the side estimator only for message-
+schema completeness, never claimed as KalmanNet uncertainty;
+`state_estimator="kalmannet"` + `association_metric="mahalanobis"` is
+**structurally rejected** (`ValueError`, tested) — primary comparison
+uses Euclidean 3m + Hungarian throughout.
+
+**A real bug found and fixed**: `KalmanNetGRU` (unchanged, from
+`kalmannet_core.py`) stores its recurrent hidden state directly on the
+shared weight module — sharing one network across tracks silently leaked
+hidden state between them (confirmed empirically before the fix: running
+a second track measurably changed a first track's output). Fixed at the
+ROS-integration call site only (never editing `kalmannet_core.py`) by
+having each `KalmanNetEstimator` own its own hidden-state tensor,
+swapped onto the shared module only around the one call site that
+touches it. Verified by a dedicated isolation test (now passing:
+identical output whether run alone or interleaved; fresh zero hidden
+state after track death).
+
+**Lifecycle**: `predict()` caches (does not commit) the analytical
+`x_prior`; `update()` consumes it directly for the learned correction
+(no double-predict); a new `Track.finalize_predict_only()` (called for
+every unmatched track each frame) commits the cached prior with no
+network call — exactly mirroring offline missing-measurement handling.
+
+**Mandatory equivalence test (Phase 12): PASS, exact** — offline
+`KalmanNetFilter.step()` vs. the new online `KalmanNetEstimator` produce
+**bit-for-bit identical (0.00e+00 diff)** x/y/vx/vy on all 3 T-12 TEST
+sequences, including one with 24 missing-measurement frames.
+
+**Live ROS smoke test**: launches cleanly, checkpoint logged exactly
+once (hash `956604975e...fb7d48` matches T-12.3's frozen manifest
+exactly), publisher isolation verified (0 stray pre-launch, exactly 1
+publisher post-launch, every condition), 0 NaN/Inf, frame=odom, 100%
+finite velocity.
+
+**Canonical 4-way runtime comparison** (same 200-frame replay, same
+Euclidean+Hungarian association, only `state_estimator` varies) — live
+ROS latency (mean/p95 ms): Tuned KF 4.64/8.10, CTRV EKF 4.30/8.97, IMM
+6.38/14.22, **KalmanNet 7.13/14.55** — modestly higher (~1.1-1.7x) than
+every classical estimator but real-time practical. Offline controlled
+measurement: KalmanNet per-track cost ~0.35-0.5ms (roughly constant),
+total per-frame cost scales linearly with track count (0.5ms at 1 track
+-> 12.4ms at 35 tracks).
+
+**Not run this session (documented scope decisions, not omissions)**:
+GT cross-check (the replay's reassigned wall-clock stamps break the
+original frame-index-to-GT alignment; the exact offline/online
+equivalence result is a stronger guarantee than an approximate
+re-measurement would be); CUDA comparison (no engineering time spent,
+per explicit instruction); RViz screenshot (no screenshot capability,
+same precedent as every prior RViz-adjacent session).
+
+**Classification: CASE A** (full integration pass — per-track isolation
+correct after the found-and-fixed bug, offline/online equivalence exact,
+ROS runtime stable, latency practical, zero regression to existing
+estimators) **with the documented scope limits above** stated explicitly
+rather than silently treated as fully resolved.
+
+**Production interpretation (explicit, per this task's own instruction)**:
+production tracker remains Autoware; experimental AB3DMOT default
+remains `linear_kf`; KalmanNet remains strictly opt-in research. Passing
+integration tests and near-tied offline performance are **not** a claim
+that KalmanNet replaces KF.
+
+**Tests**: KalmanNet core 16/16, new `test_ab3dmot_kalmannet.py` 19/19
+(checkpoint loading/validation, config validation, multi-track isolation,
+lifecycle), T-12.1 ablation 7/7, T-12.2 dense-baseline 7/7, T-12.3
+training-stability 10/10, AB3DMOT core regression 154/154 — **213/213
+total, zero regressions** to the existing linear_kf/ekf/imm paths
+(verified: `ab3dmot_core.py` still imports cleanly with no torch
+installed, confirming the lazy-import design never requires torch
+unless `state_estimator="kalmannet"` is actually selected).
+
+**Limitations**: see "not run this session" above; latency-vs-track-count
+uses a controlled offline measurement, not live-ROS-instrumented data;
+the side-estimator composition means KalmanNet tracks pay the cost of
+two estimators' machinery, reflected in the measured latency gap.
+
+**Recommended next task**: either (a) a defensible GT cross-check using
+a replay method that preserves original frame-index-to-GT alignment
+(e.g. reusing T-11's own offline-replay-with-real-stamps convention
+instead of a fresh-wall-clock republish), or (b) if KalmanNet's opt-in
+research value is considered sufficient as-is, no further T-9-series
+work is required — this task's own success criteria are all met. ROS
+integration is not a basis for any production/default change. Not
+started this session.
+
+`git status --short` — see below for exact source-file diff (this task's
+own explicit modifications: `ab3dmot_core.py`, `ab3dmot_config.py`,
+`ab3dmot_tracker_node.py`, `ab3dmot_tracker.launch.py`,
+`test_ab3dmot_kalmannet.py` new — plus this `STATUS.md` update and the
+same 19 pre-existing protected files). Not committed/pushed, per this
+task's instruction (no explicit request to commit was given).
+
+## T-9B result: **PASS**
+
+---
+
+## T-12.3: KalmanNet Training Stability / Seed-Instability Root-Cause — PASS, CASE A / ROS-A
+
+Branch: `feat/kalmannet-tracker`. Goal: root-cause and fix T-12.2's
+unresolved 2/5-seed catastrophic-divergence problem. Full detail:
+`~/heven_presentation_assets/kalmannet_training_stability/README.md`
+(22-section report). **No architecture change, no TEST-based selection,
+no ROS integration.**
+
+**Reproduction/determinism**: T-12.2's 5 seeds reproduced to full
+floating-point precision (fully deterministic given a seed; CPU/CUDA/
+cudnn-deterministic all bit-identical across repeated trials — rules out
+nondeterministic execution).
+
+**Root cause (CASE A — gradient explosion)**: every non-zero seed's
+first abnormal event occurs at the identical point — epoch 0, step 0,
+the very first backward pass. `output_fc` (the gain head) is the largest
+gradient contributor (~73-82%) at every observed event. Severity, not
+mere occurrence, predicts outcome (clean dose-response: 4e4/6.8e6
+recover, 1.3e9/1.5e11 never recover). Hidden-state and gain norms stay
+bounded even in failed seeds (ruled out as the mechanism); the
+discriminating signal is the state-estimate magnitude on the actual
+training trajectory (52-53, physical, in stable seeds vs.
+2,332-543,202, unphysical, in failed ones).
+
+**Order vs. init (Phase 4)**: failure follows initialization, not data
+order — init=1 fails under every tested order; init=0 survives under
+every tested order, including the "failing" one.
+
+**LR sweep — a real, counter-intuitive negative result**: reducing LR
+makes stability monotonically *worse* (0.001: 3/5 stable -> 0.0001: 0/5,
+even seed 0 fails). LR reduction explicitly ruled out.
+
+**Gradient-clipping ablation**: every tested clip norm (10.0/5.0/1.0)
+achieves 5/5 stability with no performance tradeoff. Selected minimal
+fix: **`max_norm=10.0`** (gentlest of the three), LR/architecture/init
+unchanged.
+
+**10-seed validation (0-9) with the frozen fix**: **10/10 (100%)
+stable** — complete resolution. Validation loss mean 5.25, std 0.50
+(tight).
+
+**DENSE-KALMANNET-v2 frozen** (winner seed 1, val loss 4.215, manifest
+written before any TEST use). **Held-out TEST** (measurement-available,
+n=130) position RMSE: Measurement 1.451, Tuned KF 1.456, CTRV EKF 1.490,
+IMM 1.455, v1 1.467, **v2 1.467** — no regression vs. v1; velocity RMSE
+v2 2.462 is **better than v1's 2.657**, closer to Tuned KF's 2.416.
+**Secondary all-10-seed TEST check**: mean 1.465, std 0.012 — extremely
+tight deployment consistency, not used for selection. Runtime unaffected
+(v2 CPU mean 0.165ms, in the same range as v1).
+
+**Classification: CASE A (gradient explosion), ROS-A** (>=9/10 seeds
+stable, held-out performance competitive, inference practical) — T-9B
+opt-in ROS integration is now justified, using `DENSE-KALMANNET-v2`.
+
+**Tests**: KalmanNet 16/16, T-12.1 ablation 7/7, T-12.2 dense-baseline
+7/7, AB3DMOT core 154/154 — all unchanged/pass. 10 new focused tests
+(`test_training_stability.py`: deterministic seed control, gradient-
+clip bounding, objective failure-threshold classification,
+validation-only checkpoint-selection invariants) — all pass.
+
+**Limitations**: TEST still 3 actors; `clip=10.0` chosen from a
+30-epoch, 3-value sweep, not exhaustive; combined init+clip interaction
+not tested (correctly — clipping alone was already fully sufficient).
+
+**Recommended next task**: proceed to T-9B opt-in ROS integration using
+`DENSE-KALMANNET-v2` (`~/heven_presentation_assets/kalmannet_training_stability/checkpoint/`),
+explicitly as an opt-in state estimator alongside the tuned KF, never a
+default replacement. Not started this session.
+
+`git status --short` shows only the same 19 pre-existing dirty files
+from every prior session, plus this `STATUS.md` update — no repo source
+file touched. Not committed/pushed.
+
+## T-12.3 result: **PASS**
+
+---
+
+## T-12.2: Rebuild and Freeze the Dense-Trained KalmanNet Baseline — PASS, CASE B / ROS-D(->B)
+
+Branch: `feat/kalmannet-tracker`. Goal: turn T-12.1's fragmentation
+diagnosis into one official, reproducible, validation-selected
+KalmanNet checkpoint (`DENSE-KALMANNET-v1`). Full detail:
+`~/heven_presentation_assets/kalmannet_dense_baseline/README.md`
+(21-section report). **No architecture change, no ROS integration, no
+TEST-based tuning.**
+
+**Split/dense data**: T-12's frozen split reused unmodified, zero actor
+leakage confirmed in code. T-12.1's dense-run criterion reused unchanged
+(`min_contiguous_dense_run_len=15`), applied to **both** TRAIN (37 runs/
+1,273 transitions) and, new this task, **VALIDATION** (6 runs/225
+transitions) — T-12.1 had left VAL fragmented.
+
+**Critical new finding — multi-seed instability, previously only
+anecdotal**: trained 5 predefined seeds (0-4), identical architecture/
+data. **2 of 5 (40%) diverged catastrophically** (val pos RMSE 15,860
+and 145) while 3 converged well (1.05, 4.58, 1.24) — directly confirming
+T-12.1's own flagged small-sample-instability concern, now demonstrated
+systematically. Winner selected purely on validation loss (seed 0, val
+pos RMSE 1.053), before any TEST use — verified by a dedicated ordering
+test and a manifest-written-before-TEST-artifact timestamp test.
+
+**Primary result** (measurement-available TEST, n=130, position RMSE):
+Measurement 1.451, Tuned KF 1.456, CTRV EKF 1.490, IMM 1.455, **Dense
+KalmanNet v1 1.467** — essentially tied with every classical method
+(within ~1%), sometimes winning individually (actor 30: 0.433 vs KF's
+0.444; decelerating: 1.429 vs 1.447). Velocity: Dense KalmanNet's best
+individual result (2.657 vs Tuned KF's 3.028) — a real, modest edge.
+**T12_FULL (historical) remains at 3.065** — the fragmentation fix
+survives a properly frozen, validation-selected checkpoint, not just
+T-12.1's single hand-picked run (T12_FULL -> Dense v1: 3.065 -> 1.467).
+
+**Gain behavior**: Dense KalmanNet v1 applies 78.3% of innovation
+(T12_FULL: 24.3%, T9A original: 51.0%) — preserves/exceeds T-12.1's own
+restored measurement-trust finding.
+
+**Missing-measurement stress (synthetic, unchanged protocol)**: T-12.1's
+conclusion reproduced with the official checkpoint — Tuned KF still
+reacquires faster at long gaps (24-frame gap, post-gap RMSE: KF 1.23 vs
+Dense 5.62), though Dense KalmanNet tracks KF closely at short/medium
+gaps. No missing-measurement-superiority claim is supported.
+
+**Classification: CASE B** (near-tied with classical estimators, not a
+clear win) combined with **ROS-D taking priority as a gating concern**
+(seed instability must be addressed first) **transitioning to ROS-B**
+once stability is fixed — KalmanNet would then be justified as a
+demonstrable research-value alternative, not a baseline replacement.
+
+**Tests**: KalmanNet suite 16/16, T-12.1 ablation-harness suite 7/7,
+AB3DMOT core suite 154/154 — all unchanged/pass. 7 new focused tests
+this session (`test_dense_baseline.py`: no-GT-init guarantee,
+validation-only seed selection, checkpoint hash/provenance) — all pass.
+
+**Limitations**: seed instability unresolved (this task diagnosed and
+reported it, did not fix it — out of scope, a training-recipe
+improvement is the natural next step); TEST still only 3 actors;
+left-turn remains unevaluable; the good result depends on having
+correctly validation-selected the winning seed, not on "dense training"
+alone being reliably reproducible.
+
+**Recommended next task**: either (a) a training-stability follow-up
+(gradient clipping, learning-rate warmup, or a formalized multi-seed-
+and-validate-select step baked into the production recipe) before any
+T-9B ROS decision, or (b) if stability work is deferred, proceed to
+T-9B as an explicitly opt-in, demonstration-only integration (ROS-B),
+never as a default/baseline replacement for the tuned KF. Not started
+this session.
+
+`git status --short` shows only the same 19 pre-existing dirty files
+from every prior session, plus this `STATUS.md` update — no repo source
+file touched. Not committed/pushed. No ROS integration started.
+
+## T-12.2 result: **PASS**
+
+---
+
+## T-12.1: KalmanNet Data-Fragmentation / Missing-Measurement Ablation — PASS, CASE A
+
+Branch: `feat/kalmannet-tracker`. Goal: explain WHY KalmanNet reversed
+from a near-tie with tuned KF (T-9A.1: 0.854m vs. 0.855m) to a >2x loss
+(T-12: 3.065m vs. 1.456m). Full detail:
+`~/heven_presentation_assets/kalmannet_ablation/README.md` (20-section
+report). **No ROS integration, no association change, no architecture
+change in the primary experiment.**
+
+**Reproduction (Phase 1)**: both prior results reproduce cleanly. Found a
+previously-undocumented confound: T-9A's own eval initialized every
+sequence from **exact GT state** (verified empirically,
+`preds[0]==x_true[0]`); T-12 correctly avoids this. Quantified as a real
+but modest (1-25%) effect, not dominant.
+
+**Transfer matrix (run early, cheap, before any retraining)**: the
+untouched T-9A model already degrades ~3x just moving to T-12's test
+domain (2.90-2.94m, clean held-out check) — real domain-shift. But
+**T-12's own retrained model is worse than the untouched T-9A model on
+the same T-12 test set** (4.08-4.57m) — direct evidence retraining itself
+hurt, not just a harder domain.
+
+**Dataset audit**: T-9A's training data is **100% measurement-dense by
+construction** (0/1,011 missing); T-12's is 21.8% missing (up to 44-frame
+gaps) — the largest structural difference found. A methodological
+inconsistency was also found and fixed: T-12's own README compared an
+uncentered noise RMS (0.902m) against T-9A.1's centered sigma_z (0.546m)
+— different statistics. Computed identically, **T-9A and T-12 train noise
+are nearly the same** (0.546 vs 0.575m); the real shift is **T-12's own
+val/test actors being ~1.7x noisier than its own train actors** (0.97m) —
+a consequence of T-11's frozen split, not a T-9A-vs-T-12 vintage effect.
+The Tuned KF (never retrained) degrades by almost exactly this same 1.7x,
+isolating a residual ~2.1x that only affects KalmanNet.
+
+**Central ablation result**: 5 conditions, identical architecture/
+hyperparameters (7,016 params confirmed identical everywhere), only
+training-data construction varied. On the primary measurement-available
+TEST metric (n=130, position RMSE): Tuned KF 1.456, T9A_ORIGINAL 1.574,
+**T12_FULL 3.065**, **T12_DENSE 1.476**, **T12_DENSE_MATCHED 1.478**,
+T12_FULL_MATCHED 4.375. **Dense retraining (both full-size and
+transition-count-matched to T-9A's own 1,004) restores KalmanNet to
+within 1-2% of the tuned classical KF** — and since DENSE_MATCHED has
+*fewer* transitions than the fragmented full set yet performs far better,
+this rules out "just needs more data." Confirmed consistently across
+every evaluable regime (straight/accelerating/decelerating) and every
+individual TEST actor.
+
+**Mechanism (learned gain)**: T12_FULL applies only 24.3% of the
+innovation on average vs. T9A_ORIGINAL's 51.0% and T12_DENSE's 72.1% —
+it learned to systematically distrust normal measurements, a concrete
+explanation for the RMSE gap.
+
+**Gap-robustness re-examined (synthetic, controlled)**: T-12's original
+"KalmanNet's one advantage is long-gap robustness" claim rested on one
+natural anecdote (actor 16). A controlled synthetic dropout test (6 gap
+lengths x 2 actors, fixed methodology) found the **opposite** pattern
+consistently — Tuned KF reacquires fastest at every gap length (e.g. 24
+frames: KF post-gap 1.23m vs. T12_FULL's 28.92m). The anecdote does not
+generalize and should not be presented as a general KalmanNet property.
+
+**Classification: CASE A (fragmentation dominant)** — with the domain-
+noise-shift component (§8) and the now-doubtful gap-robustness claim
+(§12) as real nuances, not full unconditional dominance.
+
+**Next recommendation: NEXT A with caveat** — KalmanNet is competitive
+after fixing training-data construction alone; any future ROS
+integration should use a dense-trained checkpoint, never the current
+frozen `T12_FULL`, and the gap-robustness claim should be dropped from
+presentation until a larger study exists.
+
+**Tests**: KalmanNet suite 16/16 pass, AB3DMOT core suite 154/154 pass
+(both unchanged); T-9A's own pre-existing hidden-state-leakage regression
+test still passes; 7 new focused tests added this session
+(`test_ablation_harness.py`, all pass) covering predict-only/hidden-state
+isolation, dense-run extraction, and deterministic subsampling. Phase 3
+code audit found **no implementation bug** (rules out CASE E).
+
+**Limitations**: TEST still only 3 actors (unchanged, out of T-12.1's
+scope); T12_FULL_MATCHED's poor result may partly reflect small-subsample
+training instability, not fragmentation alone; synthetic gap test used
+only 2 actors/1 insertion point per length; controlled noise-transfer
+(Phase 10) was not run, judged lower value than the gap curve given the
+noise-shift finding already has a clean quantitative decomposition.
+
+`git status --short` shows only the same 19 pre-existing dirty files from
+every prior session, plus this `STATUS.md` update — no repo source file
+touched. Not committed/pushed. No ROS integration started.
+
+## T-12.1 result: **PASS**
+
+---
+
+## T-12: GT-Based Controlled State Estimator Comparison — PASS, CASE D
+
+Branch: `feat/kalmannet-tracker`. Goal: a fair, common-state
+([x,y,vx,vy]) offline comparison of Tuned Linear KF, CTRV EKF, CV+CTRV
+IMM, and KalmanNet against independent MORAI GT, using T-11's frozen
+canonical dataset/split (no new capture, per explicit instruction). Full
+detail: `~/heven_presentation_assets/state_estimator_gt_comparison/README.md`
+(21-section report, figures/CSV/JSON/checkpoint — outside repo, not
+committed). **No association/lifecycle/detector/ROS change, no AB3DMOT
+10D-state reuse — a genuinely common 4D problem for all four methods.**
+
+**Dataset/split**: T-11's `split_policy.json` reused unmodified (train 12
+/ val 4 / test 3 actors). **Real fairness bug found and fixed**: one
+actor's whole 79-frame run had zero matched Euclidean detections —
+untruncated init would have silently leaked GT position as the
+"measurement-based" init. Fixed by truncating every sequence to its first
+valid measurement and dropping sequences with none (3 dropped). Final: 29
+sequences / 18 actors / 2,618 observations / 22.7% missing measurements
+(real, not synthesized).
+
+**Estimators**: CTRV EKF Jacobian verified against numerical
+finite-difference gradient before use; synthetic constant-turn test
+confirms correct convergence (yaw 2.248 vs. true 2.250 rad). IMM is a new
+6D common-state (`[x,y,vx,vy,yaw,yaw_rate]`) mixing implementation
+(T-7B's own common state was 11D and AB3DMOT-tied) that deliberately
+reuses T-7B's own documented fix (CTRV reseed copies yaw from the common
+anchor, never re-derives via `atan2` every cycle — the fix that resolved
+T-7B's ±8 rad/s instability). Tuned KF recalibrated from scratch on T-11's
+train/val population (`sigma_a=5.0`, isotropic R `sigma_z=0.902m` —
+larger/noisier than T-9A.1's own 0.546m). KalmanNet: T-9A's exact
+architecture (7,016 params, confirmed identical), retrained on the new
+train split (60/60 epochs, early stop not triggered, val loss
+524.4→65.2 monotonic).
+
+**Central finding**: the pooled TEST metric (all 154 frames) makes
+KalmanNet look best (RMSE 4.57 vs. Tuned KF's 4.73) — but this is
+**entirely an artifact of one actor's 23-frame measurement gap**. On the
+apples-to-apples subset (measurement-available frames only, n=130,
+identical basis for every method): **Tuned KF and IMM are essentially
+tied with raw detector measurement** (1.456/1.455 vs. 1.451m) and
+**KalmanNet is more than 2x worse** (3.065m) — confirmed consistently
+across every individually-evaluable regime (straight/accelerating/
+decelerating, §12-14 of the README). KalmanNet's one genuine, reproducible
+advantage is **robustness during the long gap itself** (9.27m vs. Tuned
+KF's 11.73m dead-reckoning drift) — real but narrow, not a general
+accuracy win.
+
+**Left-turn**: **not evaluable on TEST** (0 frames — T-11's split
+deliberately put no turn-validated actors in test); a secondary,
+explicitly-labeled non-primary VAL-split analysis (actor 31, n=28) is
+reported separately. **Right-turn/stationary/transition**: not evaluable,
+consistent with T-11's own finding.
+
+**IMM model probability**: mean `mu_CV` is *higher* during GT-validated
+`left_turn` (0.724) than `straight` (0.719) — does **not** cleanly track
+genuine turning here, echoing T-7B's own real-data finding; reported as
+found, not spun.
+
+**Runtime (CPU)**: Tuned KF 0.014ms mean, EKF 0.026ms (1.9x), IMM 0.121ms
+(8.8x), KalmanNet 0.290ms (21x) — same ordering as every prior task.
+
+**Classification: CASE D** — no global winner. Classical methods
+(essentially tied with each other) clearly win the primary
+measurement-available regime across every evaluable motion regime;
+KalmanNet's only advantage is long-gap robustness. CTRV/IMM's
+turning-specific value remains unconfirmed (no validated TEST left turns).
+
+**Tests**: KalmanNet suite 16/16 pass, AB3DMOT core suite 154/154 pass,
+both unchanged (no source file touched — this task built new, standalone
+code under `~/heven_presentation_assets/`, reusing `kalmannet_core.py`
+and referencing `ab3dmot_core.py`'s IMM design only as read-only
+reference).
+
+**Limitations**: TEST is only 3 actors/154 frames, one dominates the
+pooled metric (directly addressed via the available-only comparison);
+KalmanNet trained on only 22 (smaller, more fragmented) sequences vs.
+T-9A's 41 — may partly explain its weaker available-frame result, not
+disentangled from a genuine limitation; bootstrap uncertainty explicitly
+small-sample caveated (3 actors, ≤27 unique resamples); far-range TEST
+coverage is 0 frames.
+
+**Recommended next task**: either (a) run T-11B's still-pending manual
+MORAI capture protocol to add right-turn/stationary/second-scene data,
+then re-run this same T-12 harness for a fuller regime comparison, or (b)
+investigate why the retrained KalmanNet underperforms its own T-9A
+result on measurement-available frames (smaller/more fragmented train set
+vs. genuine architecture/data-fit limit) before drawing a final KalmanNet
+verdict. Not started this session, per explicit scope.
+
+`git status --short` at the end of this task shows only the same 19
+pre-existing dirty files from every prior session, plus this `STATUS.md`
+update — no repo source file was touched. Not committed/pushed.
+
+## T-12 result: **PASS**
+
+---
+
+## T-11B: Targeted MORAI Motion Capture — BLOCKED at manual capture checkpoint
+
+Branch: `feat/kalmannet-tracker`. Continues T-11 (CASE B) to close the
+right-turn/stationary/transition/second-scene gaps before T-12. New output
+root created (`~/heven_presentation_assets/motion_gt_expansion_v2/`), T-11's
+`canonical/` v1 dataset untouched/preserved.
+
+**Pipeline audit (Phase 2) found T-11's own Phase 8 protocol was not fully
+executable**: it referenced `tools/morai_dataset_exporter/` from
+`metadata.json`'s `config` path, which lives in a workspace
+(`heven_ad_2026_ws`) that does not exist on this machine and has no
+equivalent anywhere in this repo — corrected this session with tooling
+actually verified present: `/ad/dev/objects` GT topic (`ad_morai_bridge_dev`,
+`development.yaml`), and a real, already-built, tested recorder
+(`ros2 run ad_morai_bridge_dev ad_morai_perception_bag`, fail-closed,
+provenance-tracked, records GT + Euclidean detections + TF + ego status
+together). Also found a promising pre-provenanced scripted-actor route,
+`kcity-roundabout-loop` (`ad_morai_bridge_dev/config/actor_presets.yaml`,
+via `ad_morai_actor spawn-npc`/`route-npc`) — a closed roundabout loop that
+should provide sustained turning in a consistent direction without manual
+driving, pending live verification that the spawned actor's state actually
+surfaces on `/ad/dev/objects` (not yet confirmed — no live simulator
+available in this environment).
+
+**Blocked at Phase 3 (manual capture checkpoint), per explicit task
+instruction not to fake capture completion.** MORAI is a GPU/Unity
+simulator process not present in this sandboxed environment. Full exact
+terminal-by-terminal protocol (bridge, LiDAR/Euclidean, recorder, NPC-actor
+spawn commands with verification, manual-driving fallback route, stop/
+verify steps) written to
+`~/heven_presentation_assets/motion_gt_expansion_v2/phase3_manual_capture_protocol.md`.
+Resumes at Phase 6 once the user reports a real captured `run_directory`.
+
+**Tests**: none run (no source changed). No AB3DMOT/KalmanNet file touched.
+
+`git status --short` shows only the same 19 pre-existing dirty files from
+every prior session, plus this `STATUS.md` update — no repo file modified
+otherwise. Not committed/pushed. T-12 not started.
+
+## T-11B result: **BLOCKED (awaiting real user MORAI capture)**
+
+---
+
+## T-11: Motion-Rich / GT-Rich MORAI Evaluation Dataset Expansion — PASS, CASE B
+
+Branch: `feat/kalmannet-tracker`. Goal: T-9A.1/T-10/T-10.1 all hit a data
+ceiling (800-frame GT window, 12 actors, 0 pedestrians; 2 right-turn
+segments; T-9A.1's 221-frame/9-turning-frame test set) — this task audits
+and expands the underlying MORAI GT/detector dataset **before** any further
+estimator comparison (deferred to T-12). Full detail:
+`~/heven_presentation_assets/motion_gt_expansion/README.md` (18-section
+report, figures/CSV/JSON/canonical dataset — outside repo, not committed).
+**No new tracking algorithm, no association tuning, no KalmanNet ROS
+integration, no headline KF/EKF/IMM/KalmanNet comparison (that is T-12).**
+
+**Existing-data audit (before any new capture)**: `~/datasets/morai_heven/`
+contains **1764** label files (not just the 800-frame window T-8A/T-10
+used) — a single scene (`static_20260805_003151`), all in `train` split
+(val/test empty by the exporter's own design). GT ordering by
+`header_stamp_ns` is 0-duplicate/0-rollback and identical to
+`splits/train.txt`'s own file order (direct `diff`, confirmed). 21
+distinct `actor_id`s total vs. 12 in the old window; 9 actors are
+**entirely** outside the old window (including the dataset's only
+pedestrian- and obstacle-class actors, fully explaining T-10's zero-
+pedestrian finding).
+
+**Real finding, reported plainly**: actor 3 (`class_name=pedestrian`) and
+actor 2 (`class_name=obstacle`) both show smooth, continuous, vehicle-
+speed motion (9-31 m/s / 8-19 m/s over ~100-120m paths) — almost certainly
+a MORAI scenario class-slot mislabel, not genuine pedestrian/obstacle
+kinematics. This dataset has **effectively zero genuine pedestrian or
+static-obstacle GT**, independent of frame window.
+
+**Motion-regime classifier (GT-direct, thresholds fixed before viewing
+counts)**: a first unsmoothed attempt classified on raw ~0.13s
+consecutive-observation deltas and rejected 778/833 (93%) of candidate
+segments (median rejected duration ~0.13s — flapping almost every frame,
+the same jitter failure mode T-8A/T-7A.5 hit, now at the GT-derivative
+level). **Fixed** via a 0.6s centered rolling-window smoothed
+classification signal (segment duration/path/heading accounting still
+uses raw unsmoothed steps). Final accepted segments (full 1764-frame
+dataset): accelerating 42, decelerating 22, left_turn 16, straight 14,
+stationary 1, right_turn 1; 251 rejected candidates logged separately; **0
+straight<->turn transitions** (verified genuine — this route consistently
+enters/exits turns during accel/decel, not from constant-speed straight
+motion, not a classifier artifact).
+
+**Manual validation (Phase 15, 22-segment stratified sample, direct raw
+per-step trajectory inspection)**: 18/22 (81.8%) accepted; the dataset's
+**only** right_turn candidate (actor 31) **fails** manual validation (raw
+per-step speed spikes to 53.7 m/s against a 36.9 m/s segment median — a
+physically implausible artifact, not smooth motion) — **zero validated
+right turns exist in the entire dataset**, not one.
+
+**GT/detector domain mismatch (deepened on full dataset)**: mean 9.39
+detector objects/frame vs. mean 1.63 in-domain (vehicle+pedestrian) GT
+objects/frame; of 16,567 detector objects, 11.3% match a GT vehicle, 0.16%
+match the pedestrian, 88.4% unmatched — **not** assumed to be false
+positives (GT only labels scripted actors), consistent with T-10's own
+DetA-collapse explanation.
+
+**Range coverage** (2.0m threshold, full dataset): near 88.7% (n=956), mid
+70.3% (n=1352), far **5.5%** (n=569) — notably worse than T-10.1's
+tracker-matched ~18-19% far coverage (different methodology: raw
+single-frame nearest-detection vs. tracker-association match fraction —
+not directly comparable, both reported honestly). Not root-caused this
+session, per explicit scope (no association-gate tuning).
+
+**Canonical dataset built** at
+`~/heven_presentation_assets/motion_gt_expansion/canonical/` (`gt/`,
+`detections/`, `frame_map.csv`, `actor_manifest.csv`, `motion_segments.csv`,
+`split_policy.json`, `provenance.json`, `hashes.txt`) — does **not**
+overwrite T-8A/T-9A/T-10/T-10.1 canonical inputs. Detections are a
+**freshly captured** 1764-frame Euclidean ROS replay this session
+(`euclidean_clustering.launch.py` + `ad_publish_morai_frames --count 1764`,
+recorded on `/ad/perception/objects/detected`): 1764/1764 messages, 0
+duplicate, 6 replay-wall-clock rollbacks (publish-timing jitter, does not
+affect the positional frame-index join). Phase 18 smoke test (loader
+join, NaN/Inf check, split-actor presence check) **PASS** — no estimator
+comparison run, per explicit scope.
+
+**Actor-level train/val/test split policy** (frozen before any T-12 score,
+`phase6_split_policy.md`/`canonical/split_policy.json`): 12 train / 4 val /
+3 test vehicle actors (2 class-mislabeled actors excluded from the primary
+pool); route-level separation not possible with the current single-scene
+data.
+
+**New-capture decision: CASE EXISTING-B.** Existing data substantially
+improves left-turn/accel/decel/straight/actor coverage but right-turn (0
+validated), stationary (1 accepted), genuine pedestrian (0), and
+second-scene/route diversity remain clearly insufficient and require new
+capture. A full manual capture checkpoint (terminals, commands, target
+route including deliberate right-turn/stationary/pedestrian content,
+verification steps, output location) is written in
+`phase8_manual_capture_protocol.md` — **not executed this session**, per
+this task's explicit instruction to stop at a manual checkpoint rather
+than simulate a drive.
+
+**Old vs. expanded**: GT observations (vehicle+pedestrian) grow from 1,147
+(old 800-window) to 2,877 (full dataset, 2.5x); actor pool 12 -> 21 total
+(19 usable vehicle). Old regime counts (T-8A) came from a tracker-
+trajectory classifier, not GT-direct — the two are methodologically
+different, not a strict apples-to-apples delta (stated explicitly in the
+README).
+
+**Figures**: all 10 required figures generated under
+`~/heven_presentation_assets/motion_gt_expansion/`.
+
+**Classification: CASE B** — coverage improved substantially (actor
+count, GT observation count, left-turn/accel/decel/straight richness) but
+right-turn/stationary/pedestrian/cross-route gaps remain. T-12 may proceed
+on the expanded dataset with these limitations stated explicitly (e.g. a
+straight/left-turn/accel/decel-focused comparison using the frozen
+actor-level split), or a targeted new capture (Phase 8 protocol) can be
+run first to close the right-turn/stationary/pedestrian gaps before a
+fully general T-12 claim.
+
+**Tests**: no AB3DMOT/KalmanNet source file touched (dataset-construction
+task only); this session's only ROS activity was a fresh Euclidean
+detector replay capture (existing built node, no code change) — cleaned up
+via exact-PID kill after capture, verified no stray processes remained.
+
+**Limitations**: single scene, no val/test route in current data; the 2
+class-mislabeled actors reduce real per-class diversity below nominal
+count; manual validation covered a 22-segment stratified sample (81.8%
+accept), not exhaustive; far-range coverage (5.5%) not root-caused; 0
+straight<->turn transitions limits any future transition-specific
+IMM-mode-switching evaluation; 6 replay-wall-clock rollbacks in the fresh
+capture are publish-timing artifacts, not physically meaningful.
+
+**Recommended next task**: either (a) run the Phase 8 manual capture
+protocol to close the right-turn/stationary/pedestrian/cross-route gaps,
+then proceed to T-12, or (b) proceed directly to T-12 (KF/EKF/IMM/
+KalmanNet comparison) on the expanded dataset using the frozen actor-level
+split, explicitly scoped to straight/left-turn/accel/decel regimes with
+the right-turn/stationary/pedestrian limitations stated up front. Not
+started this session, per explicit scope.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched; this
+session's only repo-adjacent activity was launching an existing, unmodified
+ROS node (`euclidean_clustering.launch.py`) for a fresh detection capture,
+fully cleaned up afterward. Not committed/pushed, per this task's
+instruction.
+
+## T-11 result: **PASS**
+
+---
+
+## T-10.1: GT association ranking robustness — PASS, CASE B (mostly robust)
+
+Branch: `feat/kalmannet-tracker`. Goal: test whether T-10's central
+finding (Euclidean 3m+Hungarian > Mahalanobis Hybrid 10m > GIoU on
+GT-based identity metrics, contradicting the old churn-based ranking)
+survives (a) the semantically-correct yaw handling
+(`yaw_measurement_mode=unobserved`, T-7A.5) and (b) evaluator sensitivity
+checks. Full detail:
+`~/heven_presentation_assets/gt_mot_eval_yaw_unobserved/README.md`
+(16-section report, figures/CSV/JSON — outside repo, not committed). **No
+new tracking algorithm, no ROS/KalmanNet integration, no association
+hyperparameter tuned against a GT metric, no estimator retuning
+(T-9A.1's separately-tuned KF explicitly not reused here).**
+
+**T-10 reproduction**: exact — re-evaluated T-10's own stored tracker
+outputs, byte-identical HOTA/IDSW to T-10 (0.0488/0.0574/0.0555,
+88/50/54) before any yaw-mode change.
+
+**Yaw-observability finding — a clean, mechanistically-explained
+no-op**: `LinearKFEstimator`'s `unobserved` mode drops the yaw
+measurement row entirely, freezing yaw at its birth value forever; birth
+yaw is always `0.0` (the detector's own placeholder) in both modes, and
+`detector` mode's fed-in yaw is also always `0.0` — so both modes
+converge to the same value. **Empirically confirmed to floating-point
+precision**: tracker output (position, yaw, track IDs, unique-track
+counts) is byte-identical between `detector` and `unobserved` modes for
+all 3 association configs — every GT-based metric is therefore also
+identical (delta=0.0 everywhere).
+
+**Threshold-sensitivity sweep** (predefined {1.0,1.5,2.0,2.5,3.0}m, fixed
+before viewing results): **HOTA and IDSW rankings are fully robust**
+(Euclidean wins 5/5 thresholds on both). **AssA is mostly robust**
+(Euclidean 3/5, GIoU competitive at the two tightest thresholds).
+**IDF1 is genuinely not robust** — the Euclidean-vs-Mahalanobis-Hybrid
+ordering on IDF1 flips depending on threshold (Mahalanobis Hybrid wins
+IDF1 at tight thresholds; margins are small everywhere).
+
+**Spatial-bias secondary check**: the T-10 radial (-0.7 to -0.74m) /
+tangential (+0.55 to +0.61m) bias is consistent across all 3 configs
+(a detector/GT-geometry effect, confirmed again, not an association
+artifact). A uniform, non-tuned bias correction raises all metrics
+substantially but **preserves the HOTA/AssA/IDSW ranking**; IDF1 flips
+slightly toward Mahalanobis Hybrid under correction — reinforcing that
+IDF1 specifically is the least robust metric here. Primary (uncorrected)
+result remains official.
+
+**Actor/range coverage**: per-actor and per-range match *coverage* (does
+a GT observation get matched to any track at all) is nearly identical
+across all 3 configs (near ~99%, mid ~81-82%, far ~18-19%, dropping with
+range as expected) — confirms Euclidean's edge is about identity
+continuity given a match, not about detecting more objects. Zero
+pedestrian coverage in this specific 800-frame window (real limitation).
+
+**Representative-case search**: no "wrong-but-long" Mahalanobis Hybrid
+failure was found in its single longest run (residual stayed bounded
+0.68-2.0m throughout, no anomalous jump) — reported honestly as not
+found, not fabricated; suggests the effect (if real) is distributed
+across many medium tracks rather than one dramatic failure, consistent
+with Mahalanobis Hybrid having the **worst fragmentation count of all 3**
+(73, above even GIoU's 72) despite its lowest raw churn — track
+persistence != correct identity persistence.
+
+**Classification: CASE B (mostly robust)** — GIoU-worst is the most
+robust finding in the whole task (never wins HOTA/IDSW at any threshold).
+Euclidean-beats-Mahalanobis-Hybrid is robust on HOTA/AssA(mostly)/IDSW
+but explicitly **not** robust on IDF1. The T-10 headline remains useful
+with this qualification, not as an unconditional per-metric claim.
+
+**Tests**: no AB3DMOT/KalmanNet source file touched (evaluation-only
+task); T-10's own TrackEval adapter reused unchanged.
+
+**Limitations**: small GT sample (12 actors, unchanged from T-10); IDF1
+specifically not robust; case-3 forensic search checked only one track,
+not exhaustive; bias correction is a diagnostic only, not validated as
+objectively correct.
+
+**Recommended next task**: (a) an exhaustive (not single-track)
+Mahalanobis Hybrid forensic sweep to settle the "wrong-but-long"
+question, (b) grow GT coverage (more scenes/pedestrian frames) before
+treating the IDF1-specific margin as resolved, or (c) if T-9B proceeds,
+prioritize an association-method ablation over further estimator tuning,
+since association method dominates identity quality far more than yaw
+semantics or (for HOTA/IDSW) matching threshold. Not started this
+session, per explicit scope.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-10.1 result: **PASS**
+
+---
+
+## T-10: MORAI GT-based MOT evaluation — PASS, CASE B
+
+Branch: `feat/kalmannet-tracker`. Goal: every prior association/tracker
+comparison (T-1 through T-8A) used descriptive metrics only (unique
+tracks, lifetime, very-short fraction) — no identity GT had been
+connected. T-10 builds a GT-based MOT evaluation harness using the
+independent MORAI simulator labels (`~/datasets/morai_heven/labels/*.json`,
+persistent `actor_id`) via the project's pinned `references/trackeval`
+submodule, and re-evaluates GIoU/Euclidean/Mahalanobis-Hybrid association
+with real HOTA/IDF1/MOTA/IDSW metrics. Full detail:
+`~/heven_presentation_assets/gt_mot_eval/README.md` (18-section report +
+audit/alignment/adapter docs, figures/CSV/JSON — outside repo, not
+committed). **No tracking algorithm changed, no parameter tuned against a
+GT metric, no KalmanNet change.**
+
+**GT/alignment**: 1,764-label full-dataset audit (21 actors, 3 classes;
+`obstacle` class found to be 0% inside the detector's own z-crop, `vehicle`/
+`pedestrian` kept — target policy fixed before any tracker score).
+Reused T-9A's frame-index join (`window_sample_ids.txt`, T-8A's 800-frame
+window) — 800/800 matched, 0 missing, 0 duplicates, numerically
+cross-checked (median nearest GT-detection distance 1.34m). Ran the
+tracker **offline** (no ROS/TF) so GT and tracker output share
+`lidar_link` natively — avoided a TF chain entirely; validated a -0.74m
+radial bias (expected LiDAR near-surface clustering effect, not a bug)
+and a +0.67m tangential bias (smaller, not fully explained).
+
+**Adapter**: calls TrackEval's own `HOTA`/`CLEAR`/`Identity` classes
+directly with a hand-built per-sequence data dict (BEV-distance
+similarity, 2.0m threshold) rather than reimplementing metrics or
+building a full on-disk MOTChallenge adapter. **5/5 mandatory synthetic
+hand-checkable cases passed** (perfect/missed/FP/ID-switch/fragmentation)
+— found and documented a genuine TrackEval quirk along the way (`CLEAR.Frag`
+does not increment for a totally-empty gap frame, only a gap frame with
+an unrelated other hypothesis).
+
+**Primary result (800 frames, 12 GT actors, association fixed
+estimator=linear_kf/yaw=detector, only association metric varies)**: HOTA
+— GIoU 0.049, **Euclidean 3m+Hungarian 0.057 (best)**, Mahalanobis Hybrid
+10m 0.056. IDF1/AssA/IDSW all rank Euclidean best, GIoU clearly worst
+(88 IDSW vs Euclidean's 50). **DetA is crushed for all 3 (0.025-0.030)**
+from a detector-vs-GT domain mismatch (detector ~14-17 objects/frame vs.
+GT's 1.43 in-domain objects/frame — MORAI only labels its own scripted
+actors, not all clusterable scene geometry) — affects all 3 configs
+almost identically (DetRe/DetPr nearly constant), so AssA/IDF1/IDSW
+remain the informative axis for comparing association methods despite
+the crushed DetA/negative MOTA.
+
+**Central finding — direct answer to T-10's own question**: Mahalanobis
+Hybrid's previously-lowest churn (T-6: 592 vs Euclidean's 701 unique
+tracks) does **not** correspond to better GT-based identity quality —
+Euclidean is marginally ahead of Mahalanobis Hybrid on HOTA/AssA/IDF1/IDSW
+despite more raw churn, and Mahalanobis Hybrid has the **worst**
+fragmentation count of all 3 (73, above even GIoU's 72). GIoU's own
+previously-reported extreme churn **is** confirmed as real identity
+instability (worst on every GT metric, 205 directly-traced ID switches
+vs Euclidean's 81/Mahalanobis's 89 via an independent corroborating
+method). Margins between Euclidean and Mahalanobis Hybrid are small
+relative to the tiny GT sample (12 actors) — reported as a real reversal,
+not a decisive one.
+
+**Optional estimator comparison** (association fixed to Euclidean 3m):
+Linear KF marginally best/tied on every identity metric vs CTRV EKF/IMM
+(HOTA range 0.053-0.057, ~7% relative spread) — estimator choice matters
+far less than association-method choice here, consistent with every
+prior finding that this scene's turning content is modest.
+
+**Classification: CASE B** — GT metrics partly agree with prior
+descriptive conclusions (GIoU-worst is confirmed) but reveal an important
+tradeoff (Mahalanobis Hybrid's low-churn "win" over Euclidean does not
+hold up against GT-based identity metrics) — not a full CASE A
+confirmation, not a full CASE C contradiction (GIoU's ranking is
+confirmed, not contradicted).
+
+**Not attempted**: Autoware comparison (Phase 16) — would need a new
+`odom`-frame TF/GT-alignment pipeline, disproportionate new engineering
+per this task's own explicit permission to skip.
+
+**Tests**: TrackEval adapter validated via 5 mandatory synthetic
+hand-checkable cases (5/5 pass, `phase9_synthetic_validation.py`). No
+AB3DMOT/KalmanNet source file was touched — regression suites unaffected
+(not re-run this session; no algorithm code changed).
+
+**Limitations**: DetA/MOTA absolute values are not meaningful in
+isolation (domain mismatch, only relative comparison across the 3 configs
+is defensible); 12-actor GT sample is small; `yaw_measurement_mode=detector`
+used deliberately to match T-6's original convention, not the T-7A.5 fix;
+BEV-only (no height/IoU-3D) matching.
+
+**Recommended next task**: either (a) re-run this same GT-based
+evaluation with `yaw_measurement_mode=unobserved` and/or the T-9A.1 tuned
+KF to see whether the T-7A.5/T-9A.1 corrections change the identity-metric
+ranking, or (b) grow GT coverage (more scenes/actors) before treating the
+Euclidean-vs-Mahalanobis-Hybrid margin as decided, or (c) if T-9B ROS
+integration proceeds, reuse this task's TrackEval adapter to give
+KalmanNet's eventual ROS-integrated tracking output a real identity-aware
+evaluation instead of only the offline position/velocity RMSE T-9A/T-9A.1
+already have. Not started this session, per explicit scope.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-10 result: **PASS**
+
+---
+
+## T-9A.1: Fair classical-KF calibration vs. KalmanNet — PASS, CASE B
+
+Branch: `feat/kalmannet-tracker`. Goal: T-9A's classical KF baseline was
+deliberately **untuned** (`sigma_a=2.0`, `r_std=1.1`) and lost even to raw
+measurement (RMSE 1.115m vs 0.866m) — not a fair opponent for KalmanNet.
+This task builds a **defensibly calibrated** KF (Q/R selected on
+train/validation only, test actors 1/18 never touched during tuning) and
+re-runs the held-out comparison. Full detail:
+`~/heven_presentation_assets/kf_calibration/README.md` (19-section
+report + search/audit/failure-analysis docs, figures/CSV/JSON — outside
+repo, not committed). **No KalmanNet retraining, no repo file touched.**
+
+**Methodology**: exact T-9A split reused (verified via
+`kalmannet_split.json` hash + actor/frame-count cross-check against
+`training_provenance.json`). Untuned KF reproduced exactly (RMSE 1.1154 /
+2.1200, matching T-9A's 1.115/2.120). Train-only measurement-residual
+analysis (n=1,011) found empirical `sigma_z=0.546m` — isotropic R
+justified (x/y std ratio 0.94, correlation -0.26). Reused T-9A's own
+structured white-noise-acceleration `Q(dt,sigma_a)` unchanged (only
+`sigma_a` free). Bounded log-grid search (45 candidates: `sigma_a` in
+[0.1,20], R scale in [0.25x,4x] of train-derived sigma_z) on validation
+(164 frames) only, selection metric fixed in advance (validation position
+RMSE). **Selected and frozen**: `sigma_a=10.0`, isotropic `R`
+(`sigma_z=0.137m`), `P0` unchanged — written to `selected_kf_config.json`
+before test evaluation was unlocked.
+
+**Held-out test (n=221, test actors 1/18, single evaluation, frozen
+params)**: position RMSE — measurement 0.866, untuned KF 1.115, **tuned
+KF 0.855**, KalmanNet 0.854. **The tuned KF closes the entire position
+gap to KalmanNet** (0.001m difference — statistically indistinguishable,
+actor-level bootstrap ranges overlap almost completely) and now clearly
+beats raw measurement, unlike the untuned baseline. Velocity: KalmanNet
+retains a real but modest ~5% edge (1.371 vs 1.446 m/s).
+
+**Regime-specific (turn-rate >0.5 rad/s)**: genuinely mixed, not spun —
+KalmanNet wins straight motion (both position and velocity), the
+**tuned KF wins turning** (both position and velocity), n=9 turning
+frames explicitly flagged as too small to trust either direction.
+
+**Why the untuned KF lost to measurement — root-caused, not just "Q/R
+were untuned"**: untuned R variance was 4.05x the train-measured value;
+validation selected `sigma_a` 5x larger than the untuned guess; direct
+steady-state evidence — the untuned filter applied only 28.0% of each
+innovation vs. 77.0% for the tuned filter (structural under-correction/
+lag), full derivation in `untuned_kf_failure_analysis.md`.
+
+**Generalization stress test (reconstructed — original generator script
+no longer exists, reconstruction validated by reproducing the original
+untuned-KF numbers within 0.286m mean absolute deviation, flagged as
+approximate)**: a genuine, mechanistically-explained reversal — T-9A's
+untuned KF beat KalmanNet in 2/3 synthetic stress conditions; the
+**tuned** KF loses to KalmanNet in all 3, because calibrating R down to
+the real (low) in-distribution noise floor makes the filter over-trust
+measurements when out-of-distribution noise triples. A KF tuned tightly
+to one noise regime is less robust to a regime shift than a conservative
+one — reported as found.
+
+**Classification: CASE B** — KalmanNet retains a small held-out
+advantage (essentially tied on position, a real but modest edge on
+velocity) but the result is genuinely mixed by regime and the tuned KF
+is now a legitimate near-tie on the primary (position) metric that T-9A's
+headline was built on. T-9A's original "KalmanNet clearly beats KF" claim
+does **not** survive fair calibration on position; it survives partially
+on velocity.
+
+**Tests**: existing KalmanNet suite (`test_kalmannet_core.py`, via the
+torch-enabled venv) 16/16 pass, unchanged. AB3DMOT core suite (8 modules
+runnable without a full ROS environment: `test_ab3dmot_core`,
+`_geometry`, `_association`, `_association_metrics`, `_ekf`, `_heading`,
+`_hybrid_gate`, `_imm`) 154/154 pass, unchanged (the 2 remaining modules
+needing `rclpy` were not runnable in this session, consistent with every
+prior session's documented ROS-sourcing requirement — not a regression).
+
+**Limitations**: test sample is small (2 actors, 221 frames, turning
+n=9); validation selection sits on a broad, flat loss plateau (`sigma_a`
+itself is not narrowly identified, only the qualitative direction —
+trust measurements more — is robust); stress-test numbers are
+approximate (reconstructed generator, not byte-identical replay).
+
+**Recommended next task**: either (a) grow the real dataset (more
+actors/scenes) so the turning regime and the stress test can be evaluated
+without the current small-n/reconstruction caveats, or (b) if T-9B ROS
+integration proceeds, use this task's frozen tuned KF (not the untuned
+T-9A baseline) as the classical-filter comparison point going forward.
+Not started this session, per explicit scope (calibration/fairness
+experiment only, no algorithm change, no ROS integration).
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update — no repo algorithm/config file was touched. Not
+committed/pushed, per this task's instruction.
+
+## T-9A.1 result: **PASS**
+
+---
+
+## T-9A: KalmanNet offline dataset + prototype — PASS, CASE A (qualified)
+
+Branch: `feat/kalmannet-tracker` (branched from `e5f6beb` on
+`feat/ab3dmot-tracker`). Goal: establish a defensible KalmanNet training/
+eval dataset and build an OFFLINE prototype before any ROS integration.
+**No ROS integration, no change to the production Linear KF/EKF/IMM
+baseline.** Full detail: `~/heven_presentation_assets/kalmannet/README.md`
+(17-section report + `kalmannet_architecture_audit.md` +
+`ground_truth_audit.md`, figures/JSON/CSV/checkpoint — outside repo, not
+committed).
+
+**GT audit (highest-priority phase)**: `~/datasets/morai_heven/labels/*.json`
+(1,764 files) contain independent MORAI simulator GT per object
+(persistent `actor_id`, x/y/z/yaw/dims, own real `header_stamp_ns`) via a
+`map->odom->base_link->rear_axle_link->lidar_link` transform chain --
+**structurally independent of the Euclidean detector**. Verified the
+detection stream's own `stamp_ns` is a replay-time artifact (not usable
+for dt); `window_sample_ids.txt` (T-8A's own capture-order record) gives
+the correct frame-index join key instead. **PATH A selected** (real GT
+available and synchronizable).
+
+**Reference**: new pinned submodule `references/kalmannet`
+(KalmanNet_TSP, commit `828a2cf5`, architecture #2; no LICENSE file,
+reference-only). This task's own module
+(`ad_lidar_perception/ad_lidar_perception/kalmannet_core.py`, new,
+ROS-independent) implements a documented single-GRU simplification
+(7,016 params) preserving the reference's structural property: analytical
+`f`/`h`, only the Kalman gain is learned.
+
+**Dataset**: 4-state CV problem (`[x,y,vx,vy]`/`[x,y]`), GT-derived
+velocity via real (non-uniform) dt finite-differencing. 56 segments /
+1,396 frames / 11 actors after gate+length filtering. **Actor-level
+train(7)/val(2)/test(2) split, zero leakage** -- train 1,011 frames, val
+164, test 221 (held-out actors 1 [strong turn] and 18 [straight]).
+
+**Training**: seed 0, bounded 60 epochs (early-stop not triggered, val
+loss still improving), all Phase-13 sanity checks passed (overfit-one-
+sequence 7038.9->7.3, monotonic train loss, checkpoint-reload verified
+byte-identical, 0 NaN/Inf, real-dt-variation stable, no hidden-state leak
+across sequence boundaries).
+
+**Held-out test (real, n=221, never-tuned Q/R baseline)**: KalmanNet beats
+both the classical KF baseline and the raw-measurement baseline on every
+position/velocity metric (position RMSE 0.854 KalmanNet vs 1.115 KF vs
+0.866 measurement-only; velocity RMSE 1.371 vs 2.120). **Honestly
+reported, not spun**: the untuned classical KF is actually *worse* than
+raw measurement on position here -- not re-tuned post hoc, per this
+task's explicit "do not over-tune Q/R against test data" instruction.
+
+**Generalization stress test (SYNTHETIC, explicitly labeled)**: at 2.7x
+training-calibrated measurement noise, KalmanNet stays numerically stable
+in all 3 conditions (no divergence) but does **not** uniformly beat KF
+out-of-distribution -- wins only the turning condition, loses both
+straight conditions. Reported as found, not smoothed over.
+
+**Runtime**: KalmanNet CPU ~8x slower than classical KF (0.18ms vs
+0.02ms mean) but sub-millisecond; CUDA slower than CPU at this tiny
+per-step scale (kernel-launch overhead dominates) -- reported despite
+being counter-intuitive.
+
+**Tests**: new `test_kalmannet_core.py` (16/16 pass, run via the
+torch-enabled `heven-centerpoint` venv -- deliberately **not** wired into
+`CMakeLists.txt`/`colcon test`, since `kalmannet_core.py` imports torch at
+module level and the system ROS Python has no torch, mirroring
+`centerpoint_ros.py`'s own established torch-isolation pattern). Full
+pre-existing AB3DMOT suite re-run as regression: **195/195 pass**,
+unchanged.
+
+**KalmanNet readiness: CASE A, qualified** -- real independent GT exists
+and offline evaluation is meaningful (genuine held-out win), but the
+real-data sample (11 actors) is small and generalization is mixed, so
+T-9B should proceed as an **experimental, opt-in path only** (same
+pattern as CTRV EKF/IMM), not a baseline replacement.
+
+**Recommended next task**: T-9B experimental opt-in ROS integration of
+this same 4-state KalmanNet CV model (mirroring the `state_estimator`
+config pattern already used for `linear_kf`/`ekf`/`imm`), explicitly
+scoped to the demonstrated real-data regime and carrying forward both the
+small-sample and mixed-generalization caveats -- or, before that, capture
+additional real MORAI actor trajectories (more scenes/routes) to grow
+PATH A's sample size beyond 11 actors.
+
+`git status --short` at the end of this task shows only the same
+pre-existing unrelated dirty files from every prior session, plus this
+`STATUS.md` update, `.gitmodules`/`references/README.md` (new
+`references/kalmannet` submodule), and the two new
+`kalmannet_core.py`/`test_kalmannet_core.py` files -- no AB3DMOT/tracking
+production source file was touched. Not committed/pushed, per this
+task's instruction.
+
+## T-9A result: **PASS**
+
+---
+
 ## T-8A: Motion-regime evaluation dataset — PASS, CASE B (KalmanNet readiness)
 
 Branch: `feat/ab3dmot-tracker`. Goal: build a reusable MORAI motion-regime

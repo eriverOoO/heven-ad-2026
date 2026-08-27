@@ -42,6 +42,7 @@ reference submodule's own `KF.compute_innovation_matrix()`
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import math
 import sys
@@ -1162,6 +1163,254 @@ class IMMEstimator:
         )
 
 
+def load_kalmannet_network(checkpoint_path: str, device: str = "cpu"):
+    """T-9B Phase 4: load the SHARED, immutable DENSE-KALMANNET-v2 weight
+    module once (never per-track -- see `KalmanNetEstimator`'s own
+    docstring for the per-track/shared-weight split). Deferred/lazy
+    imports of `torch`/`kalmannet_core` here (not at this module's top
+    level) so `state_estimator in {"linear_kf","ekf","imm"}` never
+    requires torch to be installed -- preserves T-15's "no regression"
+    requirement for every non-KalmanNet path.
+
+    Fails clearly (never silently falls back to random weights) on:
+    missing file, architecture-metadata mismatch, or a state_dict that
+    does not load cleanly.
+    """
+    try:
+        import torch
+    except ImportError as exc:
+        raise RuntimeError(
+            "state_estimator='kalmannet' requires torch, which is not installed "
+            "in this Python environment. Run the tracker node from a torch-enabled "
+            "environment (see kalmannet_ros_integration/README.md section 6)."
+        ) from exc
+    from ad_lidar_perception.kalmannet_core import KalmanNetGRU, STATE_DIM, MEAS_DIM
+
+    path = Path(checkpoint_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"kalmannet_checkpoint {checkpoint_path!r} does not exist")
+
+    raw = torch.load(path, map_location=device)
+    state_dict = raw["state_dict"] if isinstance(raw, dict) and "state_dict" in raw else raw
+    if not isinstance(state_dict, dict):
+        raise RuntimeError(f"kalmannet_checkpoint {checkpoint_path!r} did not contain a state_dict")
+
+    # architecture-metadata check: infer hidden_size from the checkpoint's
+    # own output_fc weight shape (out_features == STATE_DIM*MEAS_DIM,
+    # in_features == hidden_size) rather than trusting an external claim.
+    try:
+        output_fc_weight = state_dict["output_fc.weight"]
+    except KeyError as exc:
+        raise RuntimeError(
+            f"kalmannet_checkpoint {checkpoint_path!r} is missing expected key "
+            "'output_fc.weight' -- not a compatible KalmanNetGRU checkpoint"
+        ) from exc
+    expected_out = STATE_DIM * MEAS_DIM
+    if output_fc_weight.shape[0] != expected_out:
+        raise RuntimeError(
+            f"kalmannet_checkpoint {checkpoint_path!r} has output_fc out_features="
+            f"{output_fc_weight.shape[0]}, expected {expected_out} (STATE_DIM*MEAS_DIM) "
+            f"-- state-dimension mismatch, refusing to load"
+        )
+    hidden_size = int(output_fc_weight.shape[1])
+
+    net = KalmanNetGRU(hidden_size=hidden_size)
+    net.load_state_dict(state_dict)  # raises cleanly on any remaining mismatch
+    net.eval()
+    net.to(device)
+
+    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    n_params = sum(p.numel() for p in net.parameters())
+    return net, {"checkpoint_path": str(path), "checkpoint_sha256": checksum,
+                 "hidden_size": hidden_size, "n_trainable_params": n_params, "device": device}
+
+
+class KalmanNetEstimator:
+    """T-9B: opt-in, experimental hybrid estimator.
+
+    State ownership (see kalmannet_ros_integration/README.md section 4 for
+    the full design doc):
+
+    - **KalmanNet-owned** (`[x, y, vx, vy]`): the frozen DENSE-KALMANNET-v2
+      network, unchanged from T-12.3, with a per-track recurrent hidden
+      state (`_kn`, a `KalmanNetFilter` instance constructed fresh per
+      track -- see Phase 6/13). The network's own *weights* (`net`,
+      passed in) are shared, immutable, and loaded exactly once by
+      `AB3DMOTTracker.__init__` via `load_kalmannet_network` -- never
+      per-track (Phase 10).
+    - **Conventional/deterministic side** (`z`, `yaw`, `l`, `w`, `h`,
+      `vz`): an internally-composed `LinearKFEstimator`, byte-identical
+      mechanism to the default estimator, including its own
+      `yaw_measurement_mode` handling (never treats detector yaw=0 as a
+      real observation when `yaw_measurement_mode="unobserved"`, per this
+      task's explicit instruction). `x`/`vx`/`y`/`vy` from the side
+      estimator are computed (needed internally for its own KF math) but
+      **never reported** -- KalmanNet's own values are reported instead.
+
+    Covariance policy (Phase 3, Option B): KalmanNet provides no
+    calibrated posterior covariance. `position_covariance`/`yaw_variance`/
+    `velocity_covariance` are populated from the side `LinearKFEstimator`
+    ONLY so the `TrackedObjects` message schema stays populated (every
+    other estimator publishes real covariance there) -- these values are
+    **not** KalmanNet uncertainty and must never be used for Mahalanobis
+    association; `AB3DMOTConfig.__post_init__` already rejects
+    `state_estimator="kalmannet"` + `association_metric="mahalanobis"`
+    outright so this is enforced structurally, not just documented.
+
+    Predict/update lifecycle (Phase 6/7): `KalmanNetFilter.step()` performs
+    one analytical predict + one learned correction in a single call, but
+    `Track.predict()`/`Track.update()` are two separate calls (predict
+    fires for every track every frame; update only for matched tracks).
+    To preserve exact offline-training semantics without double-predicting,
+    `predict()` computes but does NOT commit the analytical `x_prior`
+    (cached in `_pending_x_prior`); `update()` (if called this frame)
+    consumes that cached `x_prior` directly to run the learned correction
+    without a second `_f` call. If `update()` is NOT called this frame
+    (unmatched/coasting track), `AB3DMOTTracker.step()` calls
+    `finalize_predict_only()` on every unmatched track, which commits
+    `_pending_x_prior` as the new `x_post` with **no network/gain call** --
+    exactly mirroring the offline "predict-only on a missing measurement"
+    convention from T-9A/T-12/T-12.3 (never re-derives a heuristic gap
+    policy; T-12.1/T-12.3 explicitly found no robust KalmanNet long-gap
+    advantage, so this deliberately does not try to be clever about gaps).
+    """
+
+    def __init__(
+        self,
+        detection: Detection,
+        kf_class: type,
+        track_id: int,
+        yaw_measurement_mode: str = "unobserved",
+        kalmannet_net=None,
+        kalmannet_device: str = "cpu",
+    ) -> None:
+        if kalmannet_net is None:
+            raise ValueError(
+                "KalmanNetEstimator requires a loaded kalmannet_net (see "
+                "AB3DMOTTracker.__init__ / load_kalmannet_network) -- never constructs its own weights"
+            )
+        import torch
+        from ad_lidar_perception.kalmannet_core import KalmanNetFilter
+
+        self._KalmanNetFilter = KalmanNetFilter  # bound for use in predict/update below
+        self._torch = torch
+        self._device = kalmannet_device
+        self._side = LinearKFEstimator(detection, kf_class, track_id, yaw_measurement_mode)
+
+        self._kn = KalmanNetFilter(kalmannet_net, device=kalmannet_device)
+        x0 = torch.tensor([detection.x, detection.y, 0.0, 0.0], dtype=torch.float32, device=kalmannet_device)
+        self._kn.init_sequence(x0.unsqueeze(0), batch_size=1)
+        # T-9B Phase 10/13: KalmanNetGRU (kalmannet_core.py, unchanged --
+        # never edited for this task) stores its recurrent hidden state as
+        # `self.h` directly ON the shared weight module itself, not on the
+        # per-track KalmanNetFilter wrapper. Sharing one `net` across
+        # tracks would therefore silently leak hidden state between them
+        # (confirmed directly by this task's own Phase 13 isolation test
+        # before this fix: running a second track measurably changed a
+        # first track's output). Fixed here, at the ROS-integration call
+        # site only (kalmannet_core.py itself is left untouched, per this
+        # task's "do not redesign KalmanNet" instruction) by owning this
+        # track's own hidden-state tensor and explicitly swapping it onto
+        # the shared module immediately before, and back off immediately
+        # after, the ONE call site that actually reads/writes it
+        # (`update()`'s gain computation, `self._kn.net(...)` below;
+        # `predict()`/`finalize_predict_only()` never touch the network).
+        self._hidden_state = kalmannet_net.h.clone()
+        self._pending_x_prior = None  # set by predict(), consumed by update()/finalize_predict_only()
+
+    def predict(self, dt_seconds: float) -> None:
+        if not math.isfinite(dt_seconds) or dt_seconds <= 0.0:
+            raise ValueError(f"predict() requires a finite, positive dt_seconds, got {dt_seconds!r}")
+        self._side.predict(dt_seconds)
+        with self._torch.no_grad():
+            self._pending_x_prior = self._KalmanNetFilter._f(self._kn.x_post, dt_seconds)
+
+    def update(self, detection: Detection) -> None:
+        if self._pending_x_prior is None:
+            raise RuntimeError("update() called without a preceding predict() this frame")
+        self._side.update(detection)
+        with self._torch.no_grad():
+            z = self._torch.tensor([detection.x, detection.y], dtype=self._torch.float32,
+                                    device=self._device).unsqueeze(0)
+            x_prior = self._pending_x_prior
+            y_pred = self._KalmanNetFilter._h(x_prior)
+            obs_diff = z - self._kn.y_prev
+            obs_innov_diff = z - y_pred
+            fw_evol_diff = self._kn.x_post - self._kn.x_post_prev
+            fw_update_diff = self._kn.x_post - self._kn.x_prior_prev
+            self._kn.net.h = self._hidden_state  # restore THIS track's own hidden state (Phase 10/13)
+            gain = self._kn.net(obs_diff, obs_innov_diff, fw_evol_diff, fw_update_diff)
+            self._hidden_state = self._kn.net.h  # save it back before another track can touch the shared module
+            innovation = z - y_pred
+            correction = self._torch.bmm(gain, innovation.unsqueeze(-1)).squeeze(-1)
+            x_post = x_prior + correction
+            self._kn.x_post_prev = self._kn.x_post
+            self._kn.x_prior_prev = x_prior
+            self._kn.x_post = x_post
+            self._kn.y_prev = z
+        self._pending_x_prior = None
+
+    def finalize_predict_only(self) -> None:
+        """Called by `AB3DMOTTracker.step()` for every track that did NOT
+        receive a matched detection this frame -- commits the pure
+        analytical advance already computed in `predict()`, with no
+        network/gain call, exactly mirroring offline missing-measurement
+        handling. A no-op if `update()` already consumed the pending
+        prior this frame (i.e. this track WAS matched)."""
+        if self._pending_x_prior is not None:
+            self._kn.x_post = self._pending_x_prior
+            self._pending_x_prior = None
+
+    @property
+    def position(self) -> tuple[float, float, float]:
+        kn = self._kn.x_post[0].detach().cpu().numpy()
+        _, _, z = self._side.position
+        return float(kn[0]), float(kn[1]), z
+
+    @property
+    def velocity(self) -> tuple[float, float, float]:
+        kn = self._kn.x_post[0].detach().cpu().numpy()
+        _, _, vz = self._side.velocity
+        return float(kn[2]), float(kn[3]), vz
+
+    @property
+    def yaw(self) -> float:
+        return self._side.yaw
+
+    @property
+    def dimensions(self) -> tuple[float, float, float]:
+        return self._side.dimensions
+
+    @property
+    def position_covariance(self) -> np.ndarray:
+        # side-estimator covariance ONLY -- not KalmanNet uncertainty, see class docstring.
+        return self._side.position_covariance
+
+    @property
+    def yaw_variance(self) -> float:
+        return self._side.yaw_variance
+
+    @property
+    def velocity_covariance(self) -> np.ndarray:
+        return self._side.velocity_covariance
+
+    def predicted_bev_position(self) -> np.ndarray:
+        if self._pending_x_prior is not None:
+            kn = self._pending_x_prior[0].detach().cpu().numpy()
+        else:
+            kn = self._kn.x_post[0].detach().cpu().numpy()
+        return np.array([float(kn[0]), float(kn[1])])
+
+    def predicted_bev_innovation_covariance(self) -> np.ndarray:
+        # side-estimator innovation covariance ONLY -- documented limitation,
+        # never used for Mahalanobis association (config-level guard above).
+        return self._side.predicted_bev_innovation_covariance()
+
+    def is_finite(self) -> bool:
+        kn_finite = bool(self._torch.isfinite(self._kn.x_post).all().item())
+        return kn_finite and self._side.is_finite()
+
+
 class Track:
     """One tracked object: a pluggable state estimator (`LinearKFEstimator`,
     the default, or `EKFEstimator`, T-7A opt-in) plus HEVEN's own explicit
@@ -1183,6 +1432,8 @@ class Track:
         yaw_measurement_mode: str = "detector",
         imm_cv_to_cv_probability: float = 0.95,
         imm_ctrv_to_ctrv_probability: float = 0.95,
+        kalmannet_net=None,
+        kalmannet_device: str = "cpu",
     ) -> None:
         self.track_id = track_id
         if state_estimator == "imm":
@@ -1192,6 +1443,14 @@ class Track:
             )
         elif state_estimator == "ekf":
             self._estimator = EKFEstimator(detection, kf_class, track_id, yaw_measurement_mode)
+        elif state_estimator == "kalmannet":
+            # T-9B: kalmannet_net is the SHARED, immutable network weights
+            # loaded once by AB3DMOTTracker.__init__; KalmanNetEstimator
+            # itself owns this track's own private recurrent hidden state
+            # (Phase 6/10 -- see KalmanNetEstimator's own docstring).
+            self._estimator = KalmanNetEstimator(
+                detection, kf_class, track_id, yaw_measurement_mode, kalmannet_net, kalmannet_device,
+            )
         else:
             self._estimator = LinearKFEstimator(detection, kf_class, track_id, yaw_measurement_mode)
         self.hits = 1
@@ -1232,6 +1491,18 @@ class Track:
         self.label = detection.label
         self.label_probability = detection.label_probability
         self.existence_probability = detection.existence_probability
+
+    def finalize_predict_only(self) -> None:
+        """T-9B: called by `AB3DMOTTracker.step()` for every track that did
+        NOT receive a matched detection this frame. A no-op for every
+        estimator except `KalmanNetEstimator` (whose `predict()` defers
+        committing its analytical advance until it knows whether `update()`
+        will follow this frame -- see that class's own docstring); other
+        estimators fully commit inside `predict()` itself and expose no
+        such method, so this is a harmless no-op for them."""
+        finalize = getattr(self._estimator, "finalize_predict_only", None)
+        if finalize is not None:
+            finalize()
 
     def is_confirmed(self, min_hits: int, frame_index: int) -> bool:
         """Output-eligibility rule, exactly AB3DMOT's own `output()` condition:
@@ -1300,6 +1571,17 @@ class AB3DMOTTracker:
         self._next_id = 1
         self._frame_index = 0
         self._last_timestamp: float | None = None
+        # T-9B Phase 4/10: the shared, immutable KalmanNet network is loaded
+        # exactly ONCE here (never per-track) -- and ONLY when actually
+        # selected, so linear_kf/ekf/imm never require torch to be
+        # installed. self.kalmannet_provenance is populated for one-time
+        # startup logging (Phase 16) whenever it is loaded.
+        self._kalmannet_net = None
+        self.kalmannet_provenance: dict | None = None
+        if config.state_estimator == "kalmannet":
+            self._kalmannet_net, self.kalmannet_provenance = load_kalmannet_network(
+                config.kalmannet_checkpoint, config.kalmannet_device,
+            )
         # T-3 Phase 11/12: opt-in, additive-only per-frame instrumentation
         # (never read by predict/update/lifecycle/association math itself).
         # When enabled, `self.diagnostics` gains one dict per `step()` call
@@ -1336,6 +1618,15 @@ class AB3DMOTTracker:
         for det_index, track_index in zip(matched_det_indices, matched_track_indices):
             self._tracks[track_index].update(detections[det_index])
 
+        # T-9B Phase 6: every track that did NOT receive a matched update
+        # this frame must still commit its already-computed predict() --
+        # a no-op for every estimator except KalmanNetEstimator, which
+        # defers committing until it knows whether update() follows.
+        matched_track_idx_set = set(matched_track_indices.tolist())
+        for track_index, track in enumerate(self._tracks):
+            if track_index not in matched_track_idx_set:
+                track.finalize_predict_only()
+
         matched_dets = set(matched_det_indices.tolist())
         for det_index, detection in enumerate(detections):
             if det_index in matched_dets:
@@ -1344,6 +1635,7 @@ class AB3DMOTTracker:
                 self._next_id, detection, self._kf_class,
                 self.config.state_estimator, self.config.yaw_measurement_mode,
                 self.config.imm_cv_to_cv_probability, self.config.imm_ctrv_to_ctrv_probability,
+                self._kalmannet_net, self.config.kalmannet_device,
             )
             new_track.birth_frame_index = self._frame_index
             self._tracks.append(new_track)

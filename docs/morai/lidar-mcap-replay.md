@@ -121,6 +121,49 @@ ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume '{}'
 
 ## RViz에서 객체 보기
 
+### 카메라와 트래킹 원클릭 동시 재생
+
+`morai_cam4_20260813_163222`처럼 전방 압축 카메라와 LiDAR를 함께 담은
+MCAP은 저장소 루트에서 아래 실행 파일 하나로 연다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh \
+  /absolute/path/to/morai_cam4_20260813_163222
+```
+
+인자를 생략하면 저장소 안의 로컬 전용 기본 위치
+`morai_cam4_20260813_163222/morai_cam4_20260813_163222`를 찾는다. 두 번째
+인자는 재생 배속이며 기본값은 이 PC에서 안정적으로 검증한 `0.5`다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh /absolute/path/to/bag 1.0
+```
+
+이 실행은 한 ROS launch에서 다음을 함께 시작한다.
+
+- MCAP `/clock`, front compressed camera, raw LiDAR, TF 재생
+- 기존 MORAI classical LiDAR 경로와 기본 Autoware tracker (`A-`)
+- 명시적 opt-in AB3DMOT frozen baseline (`B-`: Linear KF, Euclidean 3 m,
+  Hungarian, yaw unobserved)
+- front camera, cropped LiDAR, detection, 두 tracker marker가 켜진 RViz
+- localization TF가 없는 bag을 위한 replay-only identity
+  `odom -> base_link` anchor
+
+다른 PC에서는 먼저 저장소 표준 `./scripts/bootstrap_workspace.sh`를
+완료해야 한다. `package.xml`의 `rosbag2_storage_mcap`과
+`compressed_image_transport` runtime dependency도 bootstrap의 `rosdep`
+단계에서 설치된다. workspace가 저장소의 표준 상위 경로가 아니라면
+`HEVEN_AD_WS_PATH=/absolute/path/to/workspace`를 지정한다.
+
+MCAP은 3.6 GB 대용량 실험 데이터라 Git/GitHub에 포함하지 않는다. 다른
+PC에는 bag 폴더를 별도 복사한 뒤 위 실행 파일에 절대경로를 넘긴다.
+`.mcap`과 `/morai_cam4_*/`는 `.gitignore`로 차단돼 있다.
+
+이 보기는 정성적 cross-check 전용이다. 이 bag에는 camera annotation,
+`CameraInfo`, perception output, dynamic localization TF가 없으며 기존
+T-series와도 다른 moving-ego sequence다. 화면 일치를 accuracy나 기존
+실험 수치의 재검증으로 해석하지 않는다.
+
 `DetectedObjects`, `TrackedObjects`, `PredictedObjectArray`는 RViz 기본
 display가 직접 그리지 못하는 custom message다. `ad_viz`의 marker node가 이를
 `visualization_msgs/MarkerArray`로 변환하므로, RViz를 직접 실행하지 말고 아래

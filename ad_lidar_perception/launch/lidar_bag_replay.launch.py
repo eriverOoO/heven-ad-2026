@@ -25,6 +25,7 @@ SOURCE_TOPICS = (
     "/ad/localization/input/wheel_speed",
     "/ad/sensors/imu/data",
 )
+FRONT_CAMERA_TOPIC = "/ad/sensors/camera/front/compressed"
 _MCAP_MAGIC = b"\x89MCAP0\r\n"
 
 
@@ -217,6 +218,9 @@ def _launch_setup(context):
     start_paused = _parse_bool(
         "start_paused", _perform(context, "start_paused")
     )
+    include_front_camera = _parse_bool(
+        "include_front_camera", _perform(context, "include_front_camera")
+    )
 
     # Reformat the validated number to prevent passing non-numeric shell-like
     # input through to the subprocess while retaining a readable command line.
@@ -240,7 +244,10 @@ def _launch_setup(context):
     ]
     if start_paused:
         command.append("--start-paused")
-    command.extend(["--topics", *SOURCE_TOPICS])
+    replay_topics = list(SOURCE_TOPICS)
+    if include_front_camera:
+        replay_topics.append(FRONT_CAMERA_TOPIC)
+    command.extend(["--topics", *replay_topics])
 
     description = IncludeLaunchDescription(
         _launch_file("ad_description", "description.launch.py")
@@ -333,6 +340,14 @@ def generate_launch_description():
                 "start_paused",
                 default_value="false",
                 description="Start rosbag paused; must be true or false",
+            ),
+            DeclareLaunchArgument(
+                "include_front_camera",
+                default_value="false",
+                description=(
+                    "Also replay the front compressed-camera topic; opt-in "
+                    "so the LiDAR-only replay contract stays unchanged"
+                ),
             ),
             DeclareLaunchArgument(
                 "composition_config",
