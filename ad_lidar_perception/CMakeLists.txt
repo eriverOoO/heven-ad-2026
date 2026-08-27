@@ -357,6 +357,14 @@ install(PROGRAMS
   ad_lidar_perception/record_detected_objects.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME ad_record_detected_objects)
+install(PROGRAMS
+  ad_lidar_perception/ab3dmot_tracker_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_ab3dmot_tracker)
+install(PROGRAMS
+  ad_lidar_perception/camera_lidar_fusion_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_camera_lidar_fusion)
 install(DIRECTORY
   ../tools/centerpoint_offline/
   DESTINATION share/${PROJECT_NAME}/centerpoint_offline
@@ -438,7 +446,36 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_detection_recording test/test_detection_recording.py)
   ament_add_pytest_test(
+    test_ab3dmot_geometry test/test_ab3dmot_geometry.py)
+  ament_add_pytest_test(
+    test_ab3dmot_core test/test_ab3dmot_core.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ros test/test_ab3dmot_ros.py)
+  ament_add_pytest_test(
+    test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)
+  ament_add_pytest_test(
+    test_ab3dmot_association test/test_ab3dmot_association.py)
+  ament_add_pytest_test(
+    test_ab3dmot_association_metrics test/test_ab3dmot_association_metrics.py)
+  ament_add_pytest_test(
+    test_ab3dmot_hybrid_gate test/test_ab3dmot_hybrid_gate.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ekf test/test_ab3dmot_ekf.py)
+  ament_add_pytest_test(
+    test_ab3dmot_heading test/test_ab3dmot_heading.py)
+  ament_add_pytest_test(
+    test_ab3dmot_imm test/test_ab3dmot_imm.py)
+  ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_tracking_replay_launch
+    test/test_camera_lidar_tracking_replay_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_experiment_launch
+    test/test_camera_lidar_fusion_experiment_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_node
+    test/test_camera_lidar_fusion_node.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
   ament_add_pytest_test(

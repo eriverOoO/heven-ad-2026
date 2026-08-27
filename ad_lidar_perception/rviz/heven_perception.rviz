@@ -82,7 +82,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: Tracked Objects
+      Name: Tracked Objects (Autoware)
       Namespaces: {}
       Topic:
         Depth: 1
@@ -91,6 +91,18 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /ad/visualization/tracked_objects
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Tracked Objects (AB3DMOT)
+      Namespaces: {}
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /experiment/visualization/tracked_objects_ab3dmot
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true

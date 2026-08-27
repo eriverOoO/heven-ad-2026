@@ -38,9 +38,28 @@ def generate_launch_description():
                 parameters=[
                     {
                         "use_sim_time": use_sim_time,
+                        "id_prefix": "A-",
                         "visualize_predictions": ParameterValue(
                             LaunchConfiguration("visualize_predictions"),
                             value_type=bool,
+                        ),
+                    }
+                ],
+            ),
+            Node(
+                package="ad_viz",
+                executable="perception_visualizer_node",
+                name="perception_visualizer_ab3dmot",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "id_prefix": "B-",
+                        "visualize_detections": False,
+                        "visualize_predictions": False,
+                        "tracked_input_topic": "/experiment/tracked/ab3dmot",
+                        "tracked_output_topic": (
+                            "/experiment/visualization/tracked_objects_ab3dmot"
                         ),
                     }
                 ],

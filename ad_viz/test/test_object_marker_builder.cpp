@@ -6,12 +6,16 @@
 #include <autoware_perception_msgs/msg/object_classification.hpp>
 #include <autoware_perception_msgs/msg/shape.hpp>
 #include <autoware_perception_msgs/msg/tracked_object.hpp>
+#include <geometry_msgs/msg/point.hpp>
+#include <std_msgs/msg/header.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -117,7 +121,7 @@ TEST(ObjectMarkerBuilder, TrackUsesUuidAndOnlyPublishesAvailableVelocity)
   EXPECT_EQ(
     moving.markers[1].ns,
     "tracked/0102030405060708090a0b0c0d0e0f10");
-  EXPECT_EQ(moving.markers[2].text, "TRUCK 0.91 #01020304");
+  EXPECT_EQ(moving.markers[2].text, "TRUCK 0.91 090a0b0c0d0e0f10");
   EXPECT_EQ(moving.markers[3].type, Marker::ARROW);
   ASSERT_EQ(moving.markers[3].points.size(), 2U);
   EXPECT_DOUBLE_EQ(moving.markers[3].points[1].x, 4.0);
@@ -125,6 +129,39 @@ TEST(ObjectMarkerBuilder, TrackUsesUuidAndOnlyPublishesAvailableVelocity)
   const auto stationary = ad_viz::perception::build_tracked_markers(tracks(false));
   ASSERT_EQ(stationary.markers.size(), 3U);
   EXPECT_EQ(stationary.markers[0].action, Marker::DELETEALL);
+}
+
+TEST(ObjectMarkerBuilder, TrackLabelUsesConfiguredIdPrefix)
+{
+  ad_viz::perception::ObjectMarkerConfig config;
+  config.id_prefix = "B-";
+  const auto output = ad_viz::perception::build_tracked_markers(tracks(true), config);
+  EXPECT_EQ(output.markers[2].text, "TRUCK 0.91 B-090a0b0c0d0e0f10");
+}
+
+TEST(ObjectMarkerBuilder, TrajectoryMarkersSkipShortHistoriesAndUsePrefixedNamespace)
+{
+  std_msgs::msg::Header header;
+  header.frame_id = "odom";
+  header.stamp.sec = 10;
+
+  geometry_msgs::msg::Point point_a;
+  point_a.x = 1.0;
+  geometry_msgs::msg::Point point_b;
+  point_b.x = 2.0;
+
+  std::vector<std::pair<std::string, std::vector<geometry_msgs::msg::Point>>> histories{
+    {"single", {point_a}},
+    {"pair", {point_a, point_b}}};
+
+  ad_viz::perception::ObjectMarkerConfig config;
+  config.id_prefix = "B-";
+  const auto output = ad_viz::perception::build_trajectory_markers(histories, header, config);
+
+  ASSERT_EQ(output.markers.size(), 1U);
+  EXPECT_EQ(output.markers[0].type, Marker::LINE_STRIP);
+  EXPECT_EQ(output.markers[0].ns, "trajectory/B-pair");
+  ASSERT_EQ(output.markers[0].points.size(), 2U);
 }
 
 TEST(ObjectMarkerBuilder, EmptyArraysDeleteAllAndUnsupportedGeometryIsRejected)

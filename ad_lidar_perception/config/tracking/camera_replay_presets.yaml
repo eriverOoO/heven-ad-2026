@@ -1,0 +1,75 @@
+schema_version: 1
+default_mode: "3"
+
+# Qualitative replay presets. Lifecycle parameters remain in ab3dmot.yaml.
+# yaw_measurement_mode is intentionally fixed so each adjacent comparison
+# changes only the variables named here.
+common:
+  yaw_measurement_mode: unobserved
+  euclidean_gate_m: 3.0
+  mahalanobis_gate: 11.62
+  mahalanobis_max_distance_m: 0.0
+
+presets:
+  "1":
+    label: Euclidean / GIoU / Greedy / Linear KF
+    detector: euclidean
+    association: giou_3d
+    matcher: greedy
+    estimator: linear_kf
+  "2":
+    label: Euclidean / GIoU / Hungarian / Linear KF
+    detector: euclidean
+    association: giou_3d
+    matcher: hungarian
+    estimator: linear_kf
+  "3":
+    label: Euclidean / Euclidean 3m / Hungarian / Linear KF
+    detector: euclidean
+    association: euclidean
+    matcher: hungarian
+    estimator: linear_kf
+  "4":
+    label: Euclidean / Mahalanobis Hybrid 10m / Hungarian / Linear KF
+    detector: euclidean
+    association: mahalanobis
+    matcher: hungarian
+    estimator: linear_kf
+    mahalanobis_max_distance_m: 10.0
+  "5":
+    label: Euclidean / Euclidean 3m / Hungarian / CTRV EKF
+    detector: euclidean
+    association: euclidean
+    matcher: hungarian
+    estimator: ekf
+  "6":
+    label: Euclidean / Euclidean 3m / Hungarian / IMM
+    detector: euclidean
+    association: euclidean
+    matcher: hungarian
+    estimator: imm
+  "7":
+    label: Euclidean / Euclidean 3m / Hungarian / KalmanNet
+    detector: euclidean
+    association: euclidean
+    matcher: hungarian
+    estimator: kalmannet
+  "8":
+    label: CenterPoint / Euclidean 3m / Hungarian / Linear KF
+    detector: centerpoint
+    association: euclidean
+    matcher: hungarian
+    estimator: linear_kf
+  "9":
+    label: CenterPoint / GIoU / Hungarian / Linear KF
+    detector: centerpoint
+    association: giou_3d
+    matcher: hungarian
+    estimator: linear_kf
+  "10":
+    label: CenterPoint / Mahalanobis Hybrid 10m / Hungarian / Linear KF
+    detector: centerpoint
+    association: mahalanobis
+    matcher: hungarian
+    estimator: linear_kf
+    mahalanobis_max_distance_m: 10.0

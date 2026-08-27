@@ -25,6 +25,7 @@ SOURCE_TOPICS = (
     "/ad/localization/input/wheel_speed",
     "/ad/sensors/imu/data",
 )
+FRONT_CAMERA_TOPIC = "/ad/sensors/camera/front/compressed"
 _MCAP_MAGIC = b"\x89MCAP0\r\n"
 
 
@@ -39,6 +40,13 @@ def _parse_bool(name, value):
     if normalized == "false":
         return False
     raise RuntimeError(f"{name} must be exactly 'true' or 'false'")
+
+
+def _parse_detector_backend(value):
+    normalized = str(value).strip()
+    if normalized not in {"euclidean", "centerpoint"}:
+        raise RuntimeError("detector_backend must be euclidean or centerpoint")
+    return normalized
 
 
 def _parse_number(name, value):
@@ -217,6 +225,12 @@ def _launch_setup(context):
     start_paused = _parse_bool(
         "start_paused", _perform(context, "start_paused")
     )
+    include_front_camera = _parse_bool(
+        "include_front_camera", _perform(context, "include_front_camera")
+    )
+    detector_backend = _parse_detector_backend(
+        _perform(context, "detector_backend")
+    )
 
     # Reformat the validated number to prevent passing non-numeric shell-like
     # input through to the subprocess while retaining a readable command line.
@@ -240,7 +254,10 @@ def _launch_setup(context):
     ]
     if start_paused:
         command.append("--start-paused")
-    command.extend(["--topics", *SOURCE_TOPICS])
+    replay_topics = list(SOURCE_TOPICS)
+    if include_front_camera:
+        replay_topics.append(FRONT_CAMERA_TOPIC)
+    command.extend(["--topics", *replay_topics])
 
     description = IncludeLaunchDescription(
         _launch_file("ad_description", "description.launch.py")
@@ -249,6 +266,10 @@ def _launch_setup(context):
         _launch_file("ad_lidar_perception", "lidar_perception.launch.py"),
         launch_arguments={
             "composition_config": str(composition_config),
+            "detector_backend": detector_backend,
+            "checkpoint_path": _perform(context, "checkpoint_path"),
+            "device": _perform(context, "device"),
+            "openpcdet_root": _perform(context, "openpcdet_root"),
             "cluster_config": str(cluster_config),
             "ground_config": str(ground_config),
             "crop_clearance_m": format(crop_clearance, ".15g"),
@@ -262,7 +283,11 @@ def _launch_setup(context):
             "finite_filter_enabled": "true",
             "densifier_enabled": "false",
             "point_layout_adapter_enabled": "false",
-            "start_ground_segmentation": "true",
+            # CenterPoint's validated contract is cropped-only; the classical
+            # Euclidean detector consumes the post-ground stream.
+            "start_ground_segmentation": (
+                "false" if detector_backend == "centerpoint" else "true"
+            ),
         }.items(),
     )
     player = ExecuteProcess(
@@ -334,6 +359,22 @@ def generate_launch_description():
                 default_value="false",
                 description="Start rosbag paused; must be true or false",
             ),
+            DeclareLaunchArgument(
+                "include_front_camera",
+                default_value="false",
+                description=(
+                    "Also replay the front compressed-camera topic; opt-in "
+                    "so the LiDAR-only replay contract stays unchanged"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "detector_backend",
+                default_value="euclidean",
+                description="euclidean (default) or opt-in centerpoint",
+            ),
+            DeclareLaunchArgument("checkpoint_path", default_value=""),
+            DeclareLaunchArgument("device", default_value="cuda:0"),
+            DeclareLaunchArgument("openpcdet_root", default_value=""),
             DeclareLaunchArgument(
                 "composition_config",
                 default_value=str(default_composition),
