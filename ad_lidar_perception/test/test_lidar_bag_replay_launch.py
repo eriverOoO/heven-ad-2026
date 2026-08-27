@@ -56,6 +56,10 @@ def launch_context(bag, **overrides):
         "startup_delay_sec": "2.0",
         "start_paused": "false",
         "include_front_camera": "false",
+        "detector_backend": "euclidean",
+        "checkpoint_path": "",
+        "device": "cuda:0",
+        "openpcdet_root": "",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -128,6 +132,10 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "startup_delay_sec",
         "start_paused",
         "include_front_camera",
+        "detector_backend",
+        "checkpoint_path",
+        "device",
+        "openpcdet_root",
         "composition_config",
         "cluster_config",
         "ground_config",
@@ -145,6 +153,10 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "startup_delay_sec": "2.0",
         "start_paused": "false",
         "include_front_camera": "false",
+        "detector_backend": "euclidean",
+        "checkpoint_path": "",
+        "device": "cuda:0",
+        "openpcdet_root": "",
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
@@ -339,6 +351,10 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
         ),
+        "detector_backend": "euclidean",
+        "checkpoint_path": "",
+        "device": "cuda:0",
+        "openpcdet_root": "",
         "cluster_config": str(
             PACKAGE
             / "config"
@@ -394,6 +410,42 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
     assert not any(
         "/ad/perception/" in token for token in command
     )
+
+
+def test_centerpoint_replay_uses_cropped_only_detector_contract(
+    tmp_path, monkeypatch
+):
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    checkpoint = tmp_path / "centerpoint.pth"
+    checkpoint.write_bytes(b"checkpoint")
+    openpcdet = tmp_path / "OpenPCDet"
+    openpcdet.mkdir()
+    group = record_setup(
+        module,
+        monkeypatch,
+        launch_context(
+            bag,
+            detector_backend="centerpoint",
+            checkpoint_path=checkpoint,
+            openpcdet_root=openpcdet,
+        ),
+    )[0]
+    perception_arguments = dict(
+        group.kwargs["actions"][2].kwargs["launch_arguments"]
+    )
+
+    assert perception_arguments["detector_backend"] == "centerpoint"
+    assert perception_arguments["checkpoint_path"] == str(checkpoint)
+    assert perception_arguments["openpcdet_root"] == str(openpcdet)
+    assert perception_arguments["start_ground_segmentation"] == "false"
+
+
+@pytest.mark.parametrize("value", ["", "center_point", "both"])
+def test_rejects_unknown_detector_backend(value):
+    module = load_launch_module()
+    with pytest.raises(RuntimeError, match="detector_backend"):
+        module._parse_detector_backend(value)
 
 
 def test_start_paused_flag_is_explicit_and_precedes_topics(

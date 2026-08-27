@@ -1,0 +1,23 @@
+# POST-FREEZE EXTENSION 2 — RESEARCH ONLY — DISABLED BY DEFAULT.
+# The fuller provenance/configuration ledger is the Stage-4
+# camera_lidar_extension2_research_config.yaml artifact. This installed ROS
+# parameter file contains only parameters consumed by the fusion node.
+camera_lidar_fusion:
+  ros__parameters:
+    enabled: false
+    lidar_detections_topic: /ad/perception/objects/detected
+    camera_detections_topic: /vision/dynamic_obstacle/detections
+    fused_topic: /experiment/perception/objects/camera_lidar_fused
+    association_measure: iou
+    iou_gate: 0.10
+    center_distance_gate: 0.10
+    camera_min_confidence: 0.25
+    max_sync_dt_ms: 50.0
+    include_lidar_only: true
+    conservative_geometry_filter_enabled: true
+    geometry_min_dimension_m: 0.15
+    tf_static_json: ""
+    image_width: 1280
+    image_height: 720
+    horizontal_fov_deg: 90.0
+    calibration_quality: B_reconstructed

@@ -1,5 +1,631 @@
 # STATUS
 
+## POST-FREEZE EXTENSION 2 — Camera + LiDAR Fusion, Stage 3 — COMPLETE (CASE B)
+
+Branch `feat/tracking-preset-replay`, HEAD
+`471e510a2dd387dd26940675ba183f30bc7f1f7a`. **GT-free,
+research-only, opt-in, disabled by default. No camera information was wired
+into production launch; Autoware remains the production tracker; no commit or
+push.** Full artifacts:
+`~/heven_presentation_assets/postfreeze_research_extension2/stage3/` and
+`POSTFREEZE_EXTENSION2_STAGE3_SUMMARY.md` in its parent.
+
+**Implementation / insertion:** the only existing tracker-source change is a
+protected no-op `AB3DMOTTracker._association_solver_cost_matrix()` seam after
+the original geometric cost is constructed and before the existing
+Greedy/Hungarian dispatch. The base returns the original matrix object;
+metric construction, matcher, post-solver geometry gate, KF, lifecycle,
+`min_hits`, and `max_age` are unchanged. New untracked
+`camera_lidar_semantic_association_core.py` provides a separate
+`SemanticAB3DMOTTracker`; it is not installed or launch-wired. Its research
+config defaults `semantic_association_enabled=False`.
+
+**Evidence / memory / cost:** semantic evidence is sourced only from Stage
+2's conservative-geometry, IoU-accepted camera↔LiDAR matches and carries
+class, camera confidence, fusion IoU, validity, and timestamp. Reliability is
+the transparent bounded product `camera_confidence * camera_lidar_iou`.
+Track-private semantic memory is outside the KF vector: decayed weighted class
+counts (0.95/frame), activated after >=2 valid updates and total decayed
+weight >=0.20; missing evidence adds no contradiction. The explicit
+compatibility matrix makes exact/broad road-vehicle classes compatible,
+car/truck/bus differences 0.25, motorcycle/bicycle 0.5, cross-family 1, and
+unknown neutral. Semantic cost is finite/additive only; same class is zero;
+no hard semantic rejection.
+
+**Controlled baseline:** same fixed Stage-2 clip (LiDAR bag indices
+1094–1273, 180 frames, 21.130 s), all 2,614 unchanged LiDAR detections. The
+geometry rule controls semantic eligibility only; it does not filter tracker
+inputs. Both arms reuse the established camera-replay research baseline:
+Euclidean BEV 3 m + Hungarian + Linear KF + yaw unobserved, `min_hits=1`,
+`max_age=2`. Camera bag lacks actor GT and dynamic localization TF; all
+tracker IDs/durations/churn are descriptive, not identity.
+
+**Shadow / lambda result (negative):** 105 semantic LiDAR observations on 99
+frames; 5,412 geometry-valid AB3DMOT candidate pairs; only 80/5,412 (1.478%)
+have both a semantic detection and mature track memory. Only 3/5,412 (0.055%)
+receive a nonzero penalty, all low-reliability truck observations against a
+car-modal history. Lambda 0/0.1/0.25/0.5/1.0 changes **zero** of 2,536
+assignments and avoids zero contradictions. Selected diagnostic lambda=0.1
+is merely the smallest positive tested value, not best. Camera information
+actually matters to 0/2,536 decisions.
+
+**Controlled comparison / ablations:** baseline and selected semantic arms
+are numerically identical: 2,536 assignments, 78 births, 61 deletions, 78
+unique tracker IDs, 17 live at end, median/p95/max duration 10/137.5/180
+frames, 11 tracks <=2 frames. Repeated-evidence AB3DMOT trajectories have
+94.10% mean modal consistency over 12 trajectories, 2 adjacent camera-class
+flips, and 38 matched↔unmatched transitions (not GT identity). Unweighted
+class-only, confidence-weighted memory, and no-memory ablations affect 6, 3,
+and 2 candidate costs respectively, but all change zero assignments. There
+are no changed counterfactual cases to categorize; the empty schema and
+negative-result figure are retained rather than inventing examples.
+
+**Safety / calibration / determinism:** semantic disabled and lambda=0 are
+full-clip state-equivalent to original AB3DMOT. No-camera-frame,
+no-camera-detection, no-fusion-match, low-confidence, and delayed-camera
+conditions all have exact baseline pair/state fallback and zero affected
+pairs. Geometry-rejected pole-like detections receive zero semantic evidence;
+one-to-one assignment is preserved. Selected replay pair signature is
+deterministic. Focal ±5% sensitivity changes semantic inputs to 99/106 from
+105, but all 2,536 tracker assignments remain identical — evidence of
+non-influence here, not general calibration invariance.
+
+**Latency:** diagnostics-disabled, 7 full repetitions with 5 warmup frames
+excluded per run (1,225 samples/mode): median total tracker step
+1.355→1.461 ms, +0.106 ms / 7.83%; p95 2.455→2.551 ms. Instrumented median
+semantic cost construction 0.042 ms and memory update 0.019 ms. No new GPU
+feature extraction.
+
+**Readiness: CASE B.** The implementation is mechanically safe and bounded,
+but current camera evidence is too sparse/non-discriminative to justify an
+independent-GT tracking evaluation yet. No tracking improvement, HOTA, AssA,
+IDSW, detection accuracy, or identity-accuracy claim.
+
+**Tests:** curated directly relevant/broad safe suite **328/328 unittest**
+(all Stage-1/2 fusion, 16 new Stage-3 semantic tests, AB3DMOT association/
+tracker/estimator and related regressions) plus camera-replay launch
+**17/17 pytest** = **345 pass / 0 code failures**. ROS Humble + heven/autoware
+overlays, `ROS_LOG_DIR=/tmp/heven_stage3_ros_logs`, heven-centerpoint venv,
+and explicit repo/test `PYTHONPATH`. One superseded attempt imported three
+pytest-only modules through the venv unittest loader (pytest absent), producing
+three harness-only import errors; excluded from valid counts and documented.
+
+**Repo footprint:** modified tracked `ab3dmot_core.py` (minimal no-op seam)
+and this shared status file. New untracked Stage-3 semantic core + test; prior
+Stage-1/2 and Extension-1 dirty/untracked research files preserved. No config,
+launch, node, detector, CenterPoint, Autoware, prediction, occupancy, motion
+model, or lifecycle file changed. Nothing staged/committed/pushed.
+
+**Recommended next experiment:** collect a mixed-class camera+LiDAR sequence
+with measured intrinsics, dynamic ego pose/localization, and independent actor
+identity GT. Freeze this implementation and evaluate it without tuning lambda
+on evaluation identities.
+
+## POST-FREEZE EXTENSION 2 Stage 3 result: **COMPLETE — CASE B**
+
+---
+
+## POST-FREEZE EXTENSION 2 — Camera + LiDAR Fusion, Stage 2 — COMPLETE (CASE A, NARROW)
+
+Branch `feat/tracking-preset-replay`, HEAD
+`471e510a2dd387dd26940675ba183f30bc7f1f7a`. **GT-free,
+research-only, opt-in. No camera information was integrated into AB3DMOT;
+no production source/config/launch/default changed; nothing committed or
+pushed.** Full artifacts:
+`~/heven_presentation_assets/postfreeze_research_extension2/stage2/` and
+`POSTFREEZE_EXTENSION2_STAGE2_SUMMARY.md` in its parent.
+
+**Stage-1 reproduction gate: PASS.** Existing offline repro was run from a
+private `/tmp` copy against the same repository fusion core (SHA-256
+`ff767a06…409`) and same YOLO weight (`646f8bc3…a1b`). Exact substantive
+reproduction: 29 frames, 55 raw/24 kept camera, 234 LiDAR/164 degenerate,
+150 projectable, IoU=4, center=22, mean IoU=0.2724, identical score and
+degenerate-match counts, deterministic. Timing varied normally only. No
+Stage-1 artifact overwritten.
+
+**Fixed contiguous clip**: bag LiDAR indices **1094–1273**, 180 consecutive
+frames, stamps `1786606472358099221`–`1786606493488090754` ns
+(2026-08-13 16:34:32.358–16:34:53.488 KST), 21.129991533 s. Chosen before
+Stage-2 matching around Stage-1 f11's vehicle-rich roundabout; no frame
+cherry-picking. 421 camera messages inside interval, 172 unique nearest
+camera images; LiDAR 8.471 Hz, camera 19.936 Hz; nearest-camera |dt| median
+24.569 ms / p95 40.812 / max 45.129, **180/180 within 50 ms**. Unmodified
+RANSAC + Euclidean ROS graph returned **180/180** detector messages.
+
+**Detections / raw candidates**: 2,614 LiDAR detections; across the 180
+LiDAR-triggered observations YOLO produced 814 raw / 587 kept camera
+detections (780/563 when each unique camera image is counted once); 5,696
+no-filter candidate pairs. Same Stage-1 YOLO 8.4.47, weight, class map,
+confidence 0.20, reconstructed K0 (`fx=fy=640,cx=640,cy=360`), exact
+extrinsic, and fusion core. Camera detector, association rerun, temporal
+linker, and full match signatures all deterministic. Warmed Stage-1 IoU
+`fuse()` over 180 frames: median **0.507 ms**, p95 0.694, max 1.188
+(excludes YOLO and offline multi-condition sweeps; execution evidence only).
+
+**Geometry regime / experimental pre-filter**: actual distribution inspected
+first. 1,899/2,614 (72.65%) have minimum dimension ≤0.15 m, with the 10th,
+25th, and 50th percentiles all at the detector floor 0.10 m and the 75th
+percentile jumping to 0.326 m. Conservative LiDAR-only rule
+`min(length,width,height)>0.15m` retains 715 (27.35%), rejects 1,899; strict
+diagnostic `min_dim>0.40m && footprint>=0.75m²` retains 401 (15.34%). Camera
+outcomes were not used to choose either rule; rejected boxes are not called
+false positives. Conservative filter reduces projected candidates
+5,696→1,700 and retains 105/130 (80.77%) of no-filter IoU matches; mean IoU
+0.276→0.313; projected-degenerate eligible boxes 229→0. Visuals show rejected
+0.10 m pole/guardrail/flat-fragment regimes, with the caveat that sparse real
+objects may also be removed.
+
+**Association robustness** (conservative geometry): IoU 0.10 = 105 accepted,
+mean/median paired IoU 0.313/0.309, pre-assignment camera-many-LiDAR=7 and
+LiDAR-many-camera=8. Center gates 0.03/0.05/0.075/0.10 accept
+82/112/160/223; their mean paired IoU falls 0.345/0.262/0.191/0.145 and
+competition rises 0/1, 4/10, 16/24, 28/44. Gate 0.10 median paired IoU is
+0.022 and remains permissive/degenerate. Without geometry filtering even
+center 0.03 accepts 489 clutter-dominated pairs. No “best” gate selected
+without GT; IoU remains the declared next-experiment baseline.
+
+**Analysis-only temporal linking**: production trackers untouched. Adjacent
+frames only; BEV center ≤1.5 m, sorted box sizes ≤2× change, one-to-one
+Hungarian, no coast/gap bridge. IDs named `analysis_track_id`, never GT.
+73 links total; 22 last ≥5 frames (minimum inclusion), max 96 frames. Primary
+conservative-IoU trajectories: 628 link-frames, 79 camera matches = **12.58%
+semantic availability**, 10/22 links with any evidence; **97.27% mean modal
+consistency** among links with repeated evidence; five fully stable visible
+`car` runs of 15/15, 14/14, 11/11, 9/9, 5/5. One link has two adjacent
+`car↔truck` class flips, visibly a partial image-edge case; class flip is not
+IDSW. Eleven matched↔unmatched transitions. All qualifying median ranges are
+near (<20 m); medium/far temporal stability remains unmeasured. Modal classes
+9 car / 1 truck: diversity still weak.
+
+**K sensitivity sweep** (not an uncertainty interval): with conservative
+IoU, focal 0.95/1.05 retains 90.5%/97.1% of baseline matches (Jaccard
+0.872/0.936); 0.90/1.10 retains 84.8%/86.7% (Jaccard 0.802/0.805).
+Principal-point ±2% offsets give Jaccard 0.836–0.924 and can introduce/remove
+matches (notably `cy−2%` adds 17). Temporal consistency remains 96.7–100%
+but availability varies 10.67–14.65%. Mechanically bounded at ±5%, not
+calibration-invariant; reconstructed K remains a limitation.
+
+**Visual audit**: 8 required cases plus MP4 in `stage2/figures/`: stable
+vehicle sequence, stable semantic timeline, class flip, geometry-rejected
+pole, ambiguity, K-induced match change, IoU/center disagreement, permissive
+center zero-IoU/rejected-geometry match. Failures were deliberately retained.
+
+**Readiness: CASE A, narrowly.** Consecutive operation, non-degenerate IoU
+evidence, repeated semantic stability, moderate-K set retention, bounded
+ambiguity, deterministic mechanics, and lack of systemic projection failure
+justify a separately designed **opt-in** tracker-association experiment.
+This is not production readiness: semantic availability is sparse, evidence
+is near-range and nearly all `car`, K is reconstructed, object GT absent.
+No accuracy/HOTA/IDSW/identity claim.
+
+**Repo footprint**: two new untracked opt-in files only for Stage 2:
+`camera_lidar_fusion_stage2_core.py` (geometry rule, analysis linker, K
+perturbation, match-set and semantic statistics) and
+`test_camera_lidar_fusion_stage2_core.py` (11 tests). Existing Stage-1 and
+Extension-1 dirty/untracked files preserved. `docs/agent/STATUS.md` remains
+the only modified tracked file. No CMake/package/launch wiring.
+
+**Tests**: curated 20-module unittest suite **312/312 pass** (includes all
+39 Stage-1 fusion + 11 Stage-2 tests and the established 262-test regression),
+plus pytest-only camera/LiDAR replay-launch **17/17 pass** = **329 pass / 0
+code fail**. Environment: ROS Humble + heven/autoware overlays,
+`ROS_LOG_DIR=/tmp/heven_stage2_ros_logs`, heven-centerpoint venv, and appended
+`PYTHONPATH=~/projects/heven-ad-2026/ad_lidar_perception:$PYTHONPATH`; system
+pytest for the pytest-only module. Two superseded broad-discovery attempts
+hit harness-only missing-pytest/read-only-log errors and are retained in logs.
+
+**Next experiment**: change one major variable only — add a tracker-level,
+opt-in semantic association/update path using conservative geometry + the
+existing IoU baseline. Keep detector, motion model, lifecycle, prediction,
+occupancy, production launches/defaults unchanged. Stage 2 explicitly stops
+before this work.
+
+## POST-FREEZE EXTENSION 2 Stage 2 result: **COMPLETE — CASE A (NARROW)**
+
+---
+
+## POST-FREEZE EXTENSION 2 — Camera + LiDAR Fusion, Stage 1 — COMPLETE (CASE B)
+
+Branch `feat/tracking-preset-replay`. Second post-freeze research
+extension, begun after EXTENSION 1 was formally closed (section below).
+**RESEARCH-ONLY, OPT-IN, DISABLED BY DEFAULT. No production default
+changed, no frozen T-series / EXTENSION-1 handoff / presentation artifact
+modified, not committed/pushed.** Camera is **not** ground truth. The
+`morai_cam4_20260813_163222` bag is a **DIFFERENT-SEQUENCE** from T-14/T-15
+— no HOTA/AssA/IDSW/CenterPoint number is attached to it. Full detail:
+`~/heven_presentation_assets/postfreeze_research_extension2/`
+(`POSTFREEZE_EXTENSION2_STAGE1_SUMMARY.md`, `EXTENSION2_RESULT_LEDGER.csv`,
+and `camera_lidar_fusion/` with 8 docs + figures + data).
+
+**Scope of Stage 1**: (1) sensor/calibration/data audit, (2) a defensible
+fusion architecture, (3) a minimal geometry-based **late-fusion** baseline,
+(4) mechanics + sync validation, (5) an explicit statement of what cannot
+be evaluated (no independent GT). Not done, by design: no multimodal NN,
+no detector/tracker replacement, no custom ROS message, no production
+change.
+
+**Repo footprint — 5 new untracked opt-in files, 0 tracked source files
+modified**:
+`ad_lidar_perception/ad_lidar_perception/camera_lidar_fusion_core.py`,
+`camera_lidar_fusion_ros.py`, `camera_lidar_fusion_node.py`, and
+`ad_lidar_perception/test/test_camera_lidar_fusion_core.py`,
+`test_camera_lidar_fusion_ros.py`. The node (`camera_lidar_fusion`,
+`enabled` param default **False**) is not wired into any production launch
+and has no `CMakeLists.txt` install entry (same treatment as EXTENSION-1's
+`kalmannet_arch2_core`). `ab3dmot_config.py` production defaults
+(`association_metric="giou_3d"`, `matcher="greedy"`,
+`state_estimator="linear_kf"`) verified unchanged; default detector
+Euclidean, default tracker Autoware, unchanged.
+
+**Audit (Phase 1, independently recomputed, not copied from P-E1)**:
+- Only one camera+LiDAR bag exists project-wide (`morai_cam4_20260813_163222`,
+  moving-ego highway loop, GT-free). The T-series scene has no camera.
+- Camera `/ad/sensors/camera/front/compressed`: 1280×720 JPEG, 19.89 Hz,
+  7038 msgs, monotonic, 0 dup/0 rollback. LiDAR `/ad/sensors/lidar/points`:
+  VLP-16 layout, 8.42 Hz, 2982 msgs, monotonic, 0 dup/0 rollback,
+  intensity present.
+- **Extrinsic: A_exact** — bag `/tf_static` (13 transforms, `/tf` empty,
+  no `odom` frame), chain
+  `lidar_link→rear_axle_link→camera_front_link→camera_front_optical_frame`,
+  cross-validated vs `ad_description/config/sensor_mounts.yaml`;
+  `camera_lidar_fusion_core.rigid_transform_from_tf_chain` reproduces
+  P-E1's independent projection math to 3.6e-15.
+- **Intrinsics: B_reconstructed** — no `CameraInfo` anywhere; fx=fy=640,
+  cx=640, cy=360 from documented HFOV 90° + resolution under a
+  pinhole/zero-distortion assumption. Not a measured K → all projection
+  results are qualitative/mechanical only.
+- **Object GT: C — none** on this bag.
+- **Sync (LiDAR-triggered, operative direction)**: median 20.0 ms, p95
+  39.1 ms, max 49.7 ms, **100% within 50 ms** over all 2982 LiDAR frames;
+  reproduces P-E1's `sensor_sync_summary.json` exactly.
+
+**Architecture (Phase 2)**: geometry-based **late fusion** — both sensors
+keep their own unmodified detector; project each LiDAR 3D box to the image
+plane (exact extrinsic + reconstructed intrinsics), pre-filter camera
+boxes (confidence / area / ego-hood vertical ROI), score with **2D IoU or
+normalized center distance** (configurable, ≥2 measures), and associate
+with the **existing** `ab3dmot_core._hungarian_matching` (no second
+matcher). Fused object = LiDAR geometry authoritative + camera class +
+association confidence + blended `existence_probability`; output is a
+plain `autoware_perception_msgs/DetectedObjects` on
+`/experiment/perception/objects/camera_lidar_fused` (no custom message);
+`/ad/perception/objects/detected` untouched.
+
+**Camera detector (Phase 3)**: the project's own documented COCO weight
+`yolo26s.pt` (Ultralytics; SHA-256 `646f8bc3…84a1b`; referenced by
+`ad_camera_perception/config/dynamic_obstacle.yaml`), conf 0.20, CPU. COCO
+classes mapped to `car/truck/bus/motorcycle/bicycle/person`, rest dropped.
+**External opt-in runtime dependency** (`ultralytics 8.4.47`, installed
+into the `heven-centerpoint` venv, imported lazily, not in any
+`package.xml`). **Weight never committed.** Recorded finding: COCO YOLO
+detects the ego vehicle's own hood as a "car" in 24/29 frames — mitigated
+by a vertical ROI pre-filter, not a GT judgment.
+
+**Mechanical/descriptive results (Phases 6-7, n=29 synchronized frames,
+GT-free)**: unmodified RANSAC + Euclidean produced 234 LiDAR detections,
+**164 (70%) with a degenerate dimension** (Euclidean over-segmenting
+guardrail poles on a highway — flagged, not dropped). Camera: 55 raw
+vehicle/person → 24 kept after pre-filter. Fusion:
+- **IoU gate 0.10: 4 fused** (mean IoU 0.27, min 0.13, max 0.40; 1 of 4
+  matched degenerate LiDAR). The ~3 defensible matches per run are
+  near-range (11-15 m), vehicle-sized, unambiguous (runner-up ≈ 0).
+- **center-distance gate 0.10: 22 fused — but 18 of 22 (82%) matched a
+  degenerate LiDAR box.** The gate (~147 px allowed center separation) is
+  too permissive on this cluttered scene to constitute correspondence
+  evidence; NOT to be read as "more correspondences than IoU".
+- All 29 frames deterministic on rerun (both measures). Fuse latency
+  steady-state median 0.54 ms / max 1.5 ms (the first `fuse()` call in a
+  process pays a ~87 ms one-time numpy/branch cost; warmed once before the
+  offline loop). Every fused semantic class is `car` (+ 2 long-range
+  low-confidence `truck`) — no class diversity, no semantic
+  disambiguation demonstrable on this scene.
+6 qualitative figures (camera view + BEV), each labelled GT-FREE /
+reconstructed-intrinsics.
+
+**Tracking-fusion readiness (Phase 8): CASE B** (mechanics work; LiDAR
+detection geometry and association-gate calibration must improve first) —
+leaning toward the CASE C boundary on this scene. Operative blockers:
+(a) 70% degenerate LiDAR geometry → clutter-dominated association;
+(b) IoU unusable at that quality (4/24); (c) the center-distance gate that
+"works" is 82% clutter matches; (d) B_reconstructed intrinsics;
+(e) 29 non-consecutive frames (~11.5 s apart) → semantic-stability-over-
+time, the property a tracker consumes, has zero evidence (rules out CASE A
+alone); (f) no class diversity. Full reasoning + 5 readiness questions in
+`camera_lidar_fusion/FUSION_TRACKING_READINESS.md`.
+
+**Not live-tested this stage**: host lacks `rosbag2_storage_mcap` (no
+`ros2 bag play`) and `vision_msgs` is not in the sourced overlay — the
+fusion **node** is implemented and unit-tested; the offline pipeline
+exercises the same fusion **core**.
+
+**Tests**: 39 new (30 `test_camera_lidar_fusion_core` + 9
+`test_camera_lidar_fusion_ros`), all pass. Full directly-relevant
+regression **313 pass / 0 fail** (274 pre-existing across the AB3DMOT /
+KalmanNet / arch2 / uncertainty suites, confirmed unaffected + 39 new);
+torch/ROS modules via the `heven-centerpoint` venv + `PYTHONPATH` per the
+established `test_kalmannet_core.py` precedent.
+
+**Recommended next experiment**: a consecutive-frame clip (~150-200
+contiguous LiDAR frames, vehicle-rich f08-f23 region) to measure
+per-object semantic-label stability across frames, plus an intrinsics
+sensitivity sweep and a LiDAR geometry pre-filter / cleaner detector so
+the association problem becomes object-vs-object. Still GT-free. A
+genuinely disjoint annotated camera+LiDAR scene remains the only thing
+that unblocks quantitative fusion evaluation.
+
+`git status --short` at the end of this task: `docs/agent/STATUS.md`
+modified (this entry + the EXTENSION-1 close from the prior task); the 5
+new untracked fusion files above plus the 4 pre-existing untracked
+EXTENSION-1 files. No tracked source/config/launch/production file
+touched. Not committed/pushed.
+
+## POST-FREEZE EXTENSION 2 Stage 1 result: **COMPLETE — CASE B**
+
+---
+
+## POST-FREEZE EXTENSION 1 — CLOSED, CANONICAL HANDOFF FROZEN
+
+Branch `feat/tracking-preset-replay` (descendant of the T-16 freeze point
+`0f463a9`). This entry formally closes and freezes the completed first
+post-freeze research extension (Phases 0-7, logged in the section below)
+so all later work — Camera + LiDAR fusion first — starts from one clean
+canonical handoff. **No new experiment run, no model retrained, no
+production default changed, no frozen T-series result reinterpreted, not
+committed/pushed.**
+
+**Canonical handoff created**:
+`~/heven_presentation_assets/postfreeze_research/final_handoff/` — the
+single source of truth for all future extensions. Nine files plus an
+audit: `README.md`, `POSTFREEZE_EXPERIMENT_TIMELINE.csv`,
+`POSTFREEZE_FINAL_RESULTS.csv`, `POSTFREEZE_CLAIM_LEDGER.csv`,
+`POSTFREEZE_SUPERSEDED_OR_CORRECTED_ASSUMPTIONS.md`,
+`POSTFREEZE_DATA_LIMITATIONS.csv`, `POSTFREEZE_SYSTEM_ARCHITECTURE.md`,
+`POSTFREEZE_ENGINEERING_FORENSICS.csv`, `POSTFREEZE_NEXT_STEP.md`,
+`FINAL_HANDOFF_AUDIT.md`.
+
+**Final audit verdict: PASS WITH CORRECTIONS.** The extension's work is
+sound and its scientific boundaries hold; three items were made precise
+during closure because the prior narrative omitted them: (1) the
+all-frames position metric (arch2 C=3.32m is *worse* than frozen v2
+B=2.55m at n=157 — the prior summary cited only the measurement-available
+near-tie); (2) the 262/262 regression run needs an explicit `PYTHONPATH`
+prefix or a `colcon build` because `kalmannet_uncertainty_core.py` has no
+`--symlink-install` symlink in the installed overlay (build staleness,
+not a code defect); (3) the n=133 (Phase 4) vs n=130 (frozen T-16 doc /
+Phase 7) TEST-frame counts reconciled as a documented join-basis
+artifact, not a restatement of any frozen number.
+
+**Regression status**: full directly-relevant Python suite, 17 modules,
+re-verified `2026-08-27` via the `heven-centerpoint` venv + ROS Humble +
+`heven_ros_ws` + `autoware_tracker_ws` +
+`PYTHONPATH=~/projects/heven-ad-2026/ad_lidar_perception` —
+**262/262 pass** (242 pre-existing byte-unchanged + 14
+`test_kalmannet_arch2_core` + 6 `test_kalmannet_uncertainty_core`).
+
+**Production defaults**: unchanged. `AB3DMOTConfig`
+(`association_metric="giou_3d"`, `matcher="greedy"`,
+`state_estimator="linear_kf"`) and `SUPPORTED_STATE_ESTIMATORS =
+("linear_kf","ekf","imm","kalmannet")` byte-unchanged; `ab3dmot_config.py`
+not in the git diff. The two new opt-in modules are standalone research
+code, not registered or wired into the live tracker.
+
+**Git state**: `git status --short` shows exactly 1 modified tracked file
+(`docs/agent/STATUS.md`, this + the prior extension entry) plus the same 4
+untracked opt-in files
+(`ad_lidar_perception/ad_lidar_perception/kalmannet_arch2_core.py`,
+`kalmannet_uncertainty_core.py`, `ad_lidar_perception/test/test_kalmannet_arch2_core.py`,
+`test_kalmannet_uncertainty_core.py`). Frozen
+`~/heven_presentation_assets/final_development_handoff/` untouched (mtime
+`2026-08-22`). Reference submodules at pinned commits.
+
+**Next major research phase**: Camera + LiDAR fusion (can begin now on
+existing data for architecture/runtime/qualitative work). **Multi-scene,
+GT-capable MORAI data remains the major scientific dependency** for
+CenterPoint validation, the Phase 6 tracker headline, Architecture-2
+generalization, a real Phase 5 TEST evaluation, and the full
+Detection × Association × Estimator factorial — unchanged from T-11B
+onward. Full continuation plan: `final_handoff/POSTFREEZE_NEXT_STEP.md`.
+
+## POST-FREEZE EXTENSION 1 result: **CLOSED**
+
+---
+
+## POST-FREEZE Research Extension (Phases 0-7) — COMPLETE
+
+Branch `feat/tracking-preset-replay` (descendant of the T-16 freeze point
+`0f463a9`). This is a POST-FREEZE research extension: no frozen T-1..T-16
+result was modified, no production default changed. Full detail in
+`~/heven_presentation_assets/postfreeze_research/` (`POSTFREEZE_RESEARCH_SUMMARY.md`,
+`POSTFREEZE_RESULT_LEDGER.csv`, `claim_ledger.csv`, and one directory per
+phase). Repo footprint: exactly 4 new, untracked, opt-in files --
+`ad_lidar_perception/ad_lidar_perception/kalmannet_arch2_core.py`,
+`kalmannet_uncertainty_core.py`, and their two test files. No existing
+tracked file modified; `AB3DMOTConfig`'s production defaults and
+`SUPPORTED_STATE_ESTIMATORS` are unchanged (the two new modules are
+standalone research code, not yet wired into the live ROS
+`AB3DMOTTracker`).
+
+**Phase 0 (data inventory)**: exactly one GT-capable scene exists
+(`morai_heven`, unchanged since T-11) and one sensor-only bag with no
+object GT (`morai_cam4_20260813_163222`, already fully used by P-E1/P-E2
+for qualitative illustration only). Gates Phase 2's terrain-diversity
+request and Phase 6's final evaluation as DATA-BLOCKED, per
+`dataset_limitations.csv`'s own already-established constraints.
+
+**Phase 1/2 (ground-filter audit + Patchwork++)**: found the
+source-configured default ground-filter backend (`ground_segmentation.yaml`'s
+`algorithm: patchwork`, `ground_segmentation.launch.py`'s own `backend`
+default) was never actually fetched, built, or run anywhere in this
+project before this session -- `src/patchwork-plusplus/` was an empty
+vcs-import placeholder, directly contradicting this task's own stated
+premise that Patchwork++ was "already integrated and previously
+benchmarked." Fetched the pinned source this session (exact commit
+match), found it ships a real ROS2 wrapper matching HEVEN's launch file's
+topic/parameter contract exactly, and built it cleanly (43.3s, 0 missing
+system dependencies) into a new sibling workspace
+(`~/projects/patchwork_ws`). Live-launched and confirmed all three
+backends (RANSAC, Classic Patchwork, Patchwork++) against the same
+100-frame window of the single available static scene: RANSAC and
+Patchwork++ pass a similar nonground-point population through (1642 vs.
+1978 pts/frame; 4.74 vs. 4.63 downstream Euclidean detections/frame);
+Classic Patchwork is markedly more aggressive at ground removal (991
+pts/frame, 3.25 detections/frame). Descriptive only, no GT, no accuracy
+ranking. The task's own 80m/105m range and intensity-passthrough
+sub-questions are explicitly BLOCKED (no terrain-diverse data exists;
+intensity audit out of this bounded phase's time budget) rather than
+approximated.
+
+**Phase 3/4 (KalmanNet Architecture-2 + fair comparison)**: new opt-in
+`kalmannet_arch2_core.py` implements the KalmanNet reference's genuine
+three-GRU (`GRU_Q -> GRU_Sigma -> GRU_S`) Architecture-2 topology with
+its backward-flow feedback into the Sigma-GRU's hidden state -- not
+"three stacked GRUs," and does not modify `kalmannet_core.py`.
+Track-private recurrent state (passed functionally, never attached to
+the shared weight module) makes the T-9B hidden-state-leakage bug class
+structurally impossible by construction. 30/30 tests pass (14 new + 16
+pre-existing unaffected). Fair A(tuned KF)/B(frozen DENSE-KALMANNET-v2)/
+C(new arch2) comparison, identical split/data/recipe, A and B's numbers
+reused verbatim from the frozen handoff: 10/10 seeds stable; on the
+primary measurement-available TEST metric (n=133) position RMSE is
+essentially tied (A=1.443m, B=1.455m, C=1.437m) and C shows a modest
+velocity-RMSE edge (A=2.612, B=2.654, **C=2.382** m/s) -- small-sample,
+same-scene/same-protocol comparison only, not a generalization claim.
+
+**Phase 5 (bounded sweep)**: 18 configs (hidden_size 16/32/64 x
+num_layers 1/2 x feature_set innovation/current/fuller) x 3 seeds = 54
+runs, 0 catastrophic. Two real findings: (1) the reduced `innovation`
+feature set (drops the state-side diffs) is best-or-tied-best at 5/6
+hidden/layer combos, while adding an explicit `dt` feature (`fuller`) is
+worst-or-near-worst at 5/6 -- counter-intuitive, not acted on; (2)
+holding `feature_set=current` fixed, capacity improves loss monotonically
+at 1 layer but is non-monotonic at 2 layers (32,2 beats 64,2) --
+consistent with this problem being close to data-limited beyond ~2-4x the
+frozen architecture's own size. No config recommended as a default
+change (3-seed screen, not the 10-seed final-recipe budget).
+
+**Phase 6 (CenterPoint-aware tracker tuning)**: HARD DATA-BLOCKED for any
+final headline, exactly as this task's own gate anticipated -- no
+independent CenterPoint-unseen scene exists. Built the full tuning
+infrastructure (every knob this task named); mechanics validation (19
+one-knob-at-a-time configs against the frozen CenterPoint detection
+stream, no GT read) -- 19/19 constructed, ran to completion, 0 NaN/Inf,
+deterministic reruns. A small, fixed, pre-declared (never searched)
+diagnostic-sensitivity set reproduces T-14/T-15's own published B1
+baseline (HOTA=0.0529/IDSW=443) exactly and T-15's own Phase 13
+score-threshold finding almost exactly, confirming the harness is
+correct; no configuration in that table is recommended or ranked.
+
+**Phase 7 (KalmanNet uncertainty)**: NEGATIVE RESULT. New opt-in
+`kalmannet_uncertainty_core.py` (`InnovationCovarianceHead`, a
+Cholesky-factor covariance head guaranteed positive-definite by
+construction) trained on top of the frozen DENSE-KALMANNET-v2 (its
+weights never updated). Training NLL diverges (2.57 -> 35.97 over 10
+epochs) rather than converging; the selected checkpoint is the network's
+own random initialization (`best_epoch=0`). TEST calibration (n=130):
+mean calibration error 22.2 percentage points across 4 confidence levels
+(e.g. 65.4% empirical coverage at nominal 90%); predicted covariance is
+3-8x smaller than empirical innovation variance in both x/y --
+systematically overconfident. Per this task's own explicit instruction,
+the KalmanNet-state + calibrated-covariance -> Mahalanobis-association
+integration was correctly **not attempted**.
+
+**Real engineering issues found and fixed this session** (process/
+tooling only, no repo/algorithm file touched): a QoS durability/
+reliability mismatch silently dropped 100% of RANSAC's ground-filter
+messages on the first attempt; a missing `autoware_tracker_ws` overlay
+silently crashed the RANSAC launch (masked by discarded stderr) on a
+separate attempt; stray `ad_finite_point_filter_node` processes
+accumulated across successive downstream-detection runs, inflating
+message counts up to ~3x; and a `nohup ... &` background sweep launch
+survived its wrapper shell's exit (believed dead, was not) and ran as an
+undetected duplicate process for ~35 minutes alongside a second,
+properly-tracked run of the identical sweep, both racing to write the
+same output file -- found via `ps aux`, fixed by killing the stray
+process; the sweep's full determinism meant no result validity was lost.
+
+**Tests**: full directly-relevant suite re-run, **262/262 pass** (242
+pre-existing unmodified and confirmed unaffected + 20 new: 14 in
+`test_kalmannet_arch2_core.py`, 6 in `test_kalmannet_uncertainty_core.py`).
+
+**Safe new claims**: Patchwork/Patchwork++ is now genuinely buildable and
+launchable on this machine; arch2 is seed-stable and not worse than the
+frozen estimator on this scene's TEST split; the Phase 6 tuning
+infrastructure is mechanically sound; feature-set choice matters more
+than raw capacity for this KalmanNet problem.
+
+**Unsafe claims (explicitly not made)**: any Patchwork++-vs-RANSAC
+accuracy ranking; any claim that arch2 "beats" the frozen KalmanNet
+estimator; any CenterPoint-aware tracker "improvement"; any claim that
+KalmanNet's uncertainty is usable for Mahalanobis association; any
+CenterPoint generalization claim.
+
+**Recommended next action**: capture a genuinely disjoint MORAI scene
+with independent actor GT (T-11B's own written, never-executed manual
+capture protocol remains the concrete plan) -- this remains the single
+highest-leverage next step, unchanged from every prior data-blocked
+finding in this project. Until then: (a) audit Patchwork++'s intensity-
+passthrough parameter (Phase 2's own scoped-out sub-question), and (b)
+diagnose the Phase 7 covariance head's NLL training divergence directly
+before any future Mahalanobis-integration attempt.
+
+`git status --short` at the end of this task shows only the same
+pre-existing state from every prior session (clean at session start on
+this branch) plus this `STATUS.md` update and the 4 new opt-in files
+listed above -- no repo algorithm/config/launch/production file was
+touched anywhere. Not committed/pushed, per this task's instruction. No
+stray background process remained running at session end (verified via
+`ps aux`).
+
+## POST-FREEZE result: **COMPLETE**
+
+---
+
+## 10-mode camera + LiDAR tracking preset replay — PASS (source/install), LIVE BLOCKED BY HOST PACKAGES
+
+Branch `feat/tracking-preset-replay` adds a validated, configuration-owned
+10-mode qualitative comparison matrix to the existing camera/LiDAR replay.
+`scripts/run_camera_lidar_tracking.sh --list-modes` lists the matrix and
+`--mode 1` through `--mode 10` selects Euclidean/CenterPoint detection,
+GIoU/Euclidean-3m/Mahalanobis-Hybrid-10m association, Greedy/Hungarian
+matching, and Linear-KF/CTRV-EKF/IMM/KalmanNet estimation exactly as documented
+in `config/tracking/camera_replay_presets.yaml`. Mode 3 remains the safe
+backward-compatible default. All modes keep yaw unobserved and preserve the
+existing AB3DMOT lifecycle; no detector, tracker, estimator, prediction,
+occupancy, QoS, frame, timestamp, or production Autoware algorithm changed.
+
+The launch now forwards the selected detector through bag replay. Euclidean
+keeps the existing ground-segmentation path; CenterPoint automatically uses
+its validated cropped-only input. Modes 4/10 explicitly apply Mahalanobis gate
+11.62 plus the 10 m physical cap. Model modes fail before graph startup when
+their external artifact/runtime is missing. The wrapper verifies the frozen
+CenterPoint and DENSE-KALMANNET-v2 SHA-256 values, while checkpoints and the
+3.6 GB MCAP remain ignored and must be copied separately.
+
+Portability: official OpenPCDet is now the pinned `references/openpcdet`
+submodule at `233f849829b6ac19afb8af8837a0246890908755`; `references/COLCON_IGNORE`
+prevents research repositories from being misidentified as ROS packages.
+The standard recursive submodule bootstrap therefore obtains the exact source
+on another PC. Runtime still requires the documented CUDA/PyTorch environment
+and externally supplied model weights for modes 7-10.
+
+Verification: 230 directly relevant Python tests pass, including every mode's
+exact launch wiring, invalid-mode/artifact rejection, detector preprocessing
+contract, all AB3DMOT association/estimator/KalmanNet regressions, runner CLI,
+and RViz topics. Shell syntax, Python compile, `git diff --check`, and a full
+repository-root `colcon list` pass. Isolated installed build of
+`ad_lidar_perception` passes; installed launch reports default mode 3 and ten
+installed presets; both relevant installed CTests pass. A new live GUI replay
+was not claimed because this host still lacks `rosbag2_storage_mcap` and
+`compressed_image_transport`; the runner reports those exact missing packages
+instead of starting a partial graph.
+
+This interface provides controlled qualitative replay, not a new unified
+10-condition quantitative experiment. Historical T-series results still span
+different offline/online datasets and protocols and must retain their existing
+caveats.
+
+---
+
 ## One-click camera + LiDAR tracking RViz replay — PASS
 
 Added the portable, opt-in `scripts/run_camera_lidar_tracking.sh` entrypoint,

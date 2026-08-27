@@ -10,3 +10,6 @@
 [submodule "references/kalmannet"]
 	path = references/kalmannet
 	url = https://github.com/KalmanNet/KalmanNet_TSP.git
+[submodule "references/openpcdet"]
+	path = references/openpcdet
+	url = https://github.com/open-mmlab/OpenPCDet.git

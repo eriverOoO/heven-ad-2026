@@ -9,11 +9,11 @@ Autoware tracker, or change the production perception pipeline.
 The selected framework is the official OpenPCDet repository at immutable
 commit `233f849829b6ac19afb8af8837a0246890908755` (its setup metadata reports
 `0.6.0`). The commit is recorded in
-`tools/centerpoint_offline/upstream.lock.yaml`. OpenPCDet is kept as an external
-checkout and the MORAI class is registered at runtime; no upstream file is
-patched or vendored. This choice provides the upstream CenterPoint model and a
-documented unified LiDAR box convention while keeping repository ownership
-clear.
+`tools/centerpoint_offline/upstream.lock.yaml` and the
+`references/openpcdet` Git submodule. The MORAI class is registered at runtime;
+no upstream file is patched or copied into HEVEN. This choice provides the
+upstream CenterPoint model and a documented unified LiDAR box convention while
+keeping repository ownership clear.
 
 ## Audited host state (2026-08-15)
 
@@ -51,7 +51,7 @@ No minimum VRAM is asserted here: it depends on the future batch size, voxel
 population, model configuration, and training policy, none of which may be
 tuned on the current static-only dataset.
 
-Installation, from a directory outside the HEVEN repository:
+Installation, after cloning the HEVEN repository:
 
 ```bash
 python3 -m venv centerpoint-env
@@ -61,11 +61,10 @@ python -m pip install \
   --extra-index-url https://download.pytorch.org/whl/cu118 \
   -r /path/to/heven-ad-2026/tools/centerpoint_offline/requirements-cu118.txt
 
-git clone https://github.com/open-mmlab/OpenPCDet.git OpenPCDet
-git -C OpenPCDet checkout --detach 233f849829b6ac19afb8af8837a0246890908755
-test "$(git -C OpenPCDet rev-parse HEAD)" = \
+git submodule update --init --recursive references/openpcdet
+test "$(git -C references/openpcdet rev-parse HEAD)" = \
   233f849829b6ac19afb8af8837a0246890908755
-python -m pip install -e ./OpenPCDet
+python -m pip install -e ./references/openpcdet
 ```
 
 Before smoke execution, all of these must succeed:
