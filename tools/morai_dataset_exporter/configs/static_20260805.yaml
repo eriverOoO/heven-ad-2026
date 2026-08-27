@@ -1,0 +1,54 @@
+dataset:
+  name: morai_heven
+  # All bags merged in one invocation must use this exact versioned contract.
+  version: morai_heven_v1
+topics:
+  points: /ad/sensors/lidar/points
+  actor_gt: /ad/dev/objects
+  ego_status: /ad/dev/vehicle/ego_status
+  tf: /tf
+  tf_static: /tf_static
+expected_types:
+  points: sensor_msgs/msg/PointCloud2
+  actor_gt: ad_morai_interfaces_dev/msg/ObjectStatusArray
+  ego_status: ad_morai_interfaces/msg/EgoVehicleStatus
+  tf: tf2_msgs/msg/TFMessage
+  tf_static: tf2_msgs/msg/TFMessage
+lidar_frame: lidar_link
+map_frame: map
+alignment:
+  actor_max_delta_ms: 30.0
+  ego_max_delta_ms: 30.0
+  tf_max_delta_ms: 30.0
+transform:
+  dynamic_edge: [odom, base_link]
+  static_edges:
+    - [base_link, rear_axle_link]
+    - [rear_axle_link, lidar_link]
+evaluation_roi_lidar_m:
+  x: [-4.0, 100.0]
+  y: [-25.0, 25.0]
+  z: [-3.0, 5.0]
+classes:
+  0:
+    name: pedestrian
+    center_policy: ground_center_to_box_center
+  1:
+    name: vehicle
+    center_policy: rear_axle_ground_to_box_center
+    # The audited bag's maximum abs(size.x - summed geometry) is 0.180001 m.
+    length_tolerance_m: 0.25
+  2:
+    name: obstacle
+    center_policy: ground_center_to_box_center
+class_evidence:
+  scenario: ad_data/morai/SaveFile/Scenario/R_KR_PR_K-city_2025/checkpoint14.json
+  matches:
+    - {unique_id: 3, scenario_list: pedestrianList, raw_object_type: 0}
+    - {unique_id: 13, scenario_list: vehicleList, raw_object_type: 1}
+    - {unique_id: 2, scenario_list: objectList, raw_object_type: 2}
+scenes:
+  static_20260805_003151:
+    # Preserve the established single-bag result. No frame-random split.
+    split: train
+    scenario: ad_data/morai/SaveFile/Scenario/R_KR_PR_K-city_2025/checkpoint14.json

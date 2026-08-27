@@ -225,6 +225,7 @@ def _launch_setup(context):
     start_paused = _parse_bool(
         "start_paused", _perform(context, "start_paused")
     )
+    loop = _parse_bool("loop", _perform(context, "loop"))
     include_front_camera = _parse_bool(
         "include_front_camera", _perform(context, "include_front_camera")
     )
@@ -254,6 +255,9 @@ def _launch_setup(context):
     ]
     if start_paused:
         command.append("--start-paused")
+    if loop:
+        command.append("--loop")
+    command.extend(["--topics", *SOURCE_TOPICS])
     replay_topics = list(SOURCE_TOPICS)
     if include_front_camera:
         replay_topics.append(FRONT_CAMERA_TOPIC)
@@ -358,6 +362,11 @@ def generate_launch_description():
                 "start_paused",
                 default_value="false",
                 description="Start rosbag paused; must be true or false",
+            ),
+            DeclareLaunchArgument(
+                "loop",
+                default_value="true",
+                description="Replay the bag repeatedly; must be true or false",
             ),
             DeclareLaunchArgument(
                 "include_front_camera",

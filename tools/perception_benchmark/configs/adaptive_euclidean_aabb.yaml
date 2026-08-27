@@ -1,0 +1,24 @@
+experiment: adaptive_euclidean_aabb_static_20260805
+algorithm: Adaptive Euclidean + AABB
+topics:
+  source: /ad/sensors/lidar/points
+  detections: /ad/perception/objects/detected
+  actor_gt: /ad/dev/objects
+  tf: /tf
+  tf_static: /tf_static
+expected_types:
+  source: sensor_msgs/msg/PointCloud2
+  detections: autoware_perception_msgs/msg/DetectedObjects
+  actor_gt: ad_morai_interfaces_dev/msg/ObjectStatusArray
+alignment:
+  actor_max_delta_ms: 50.0
+  tf_max_delta_ms: 50.0
+  identity_frame_aliases:
+    - [map, odom]
+evaluation:
+  roi:
+    x: [-4.0, 100.0]
+    y: [-25.0, 25.0]
+  center_thresholds_m: [1.5, 2.5, 4.0]
+  primary_threshold_m: 2.5
+  distance_bin_edges_m: [20.0, 40.0, 60.0]

@@ -337,13 +337,13 @@ def test_invalid_sensor_profile_fails_closed(monkeypatch, tmp_path, mutate, mess
         module._launch_setup(launch_context(sensor_config=sensor_config))
 
 
-def test_ground_segmentation_keeps_configured_patchwork_thresholds():
+def test_ground_segmentation_defaults_to_patchworkpp_with_pinned_thresholds():
     parameters = yaml.safe_load(GROUND_CONFIG.read_text(encoding="utf-8"))[
         "/**"
     ]["ros__parameters"]
 
     assert parameters == {
-        "algorithm": "patchwork",
+        "algorithm": "patchworkpp",
         "num_iter": 3,
         "num_lpr": 20,
         "num_min_pts": 5,
