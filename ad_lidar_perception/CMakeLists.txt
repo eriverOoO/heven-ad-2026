@@ -361,6 +361,10 @@ install(PROGRAMS
   ad_lidar_perception/ab3dmot_tracker_node.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME ad_ab3dmot_tracker)
+install(PROGRAMS
+  ad_lidar_perception/camera_lidar_fusion_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_camera_lidar_fusion)
 install(DIRECTORY
   ../tools/centerpoint_offline/
   DESTINATION share/${PROJECT_NAME}/centerpoint_offline
@@ -466,6 +470,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_camera_lidar_tracking_replay_launch
     test/test_camera_lidar_tracking_replay_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_experiment_launch
+    test/test_camera_lidar_fusion_experiment_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_node
+    test/test_camera_lidar_fusion_node.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
   ament_add_pytest_test(

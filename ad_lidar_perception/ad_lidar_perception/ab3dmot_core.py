@@ -1594,6 +1594,25 @@ class AB3DMOTTracker:
     def tracks(self) -> Sequence[Track]:
         return tuple(self._tracks)
 
+    def _association_solver_cost_matrix(
+        self,
+        detections: Sequence[Detection],
+        metric_matrix: np.ndarray,
+        cost_matrix: np.ndarray,
+    ) -> np.ndarray:
+        """Return the lower-is-better matrix consumed by the matcher.
+
+        The base implementation is an intentional no-op: it returns the
+        original geometric cost matrix object unchanged.  POST-FREEZE
+        EXTENSION 2 Stage 3 uses this narrow protected seam from a separate,
+        opt-in research subclass to add a bounded semantic auxiliary term.
+        Keeping the seam here avoids duplicating or restructuring the
+        established metric construction, matcher selection, and post-solver
+        geometric gates.  Production/default ``AB3DMOTTracker`` instances
+        therefore continue to execute the original geometric association.
+        """
+        return cost_matrix
+
     def step(self, detections: Sequence[Detection], timestamp_seconds: float) -> list[TrackedState]:
         """Process one frame of detections at ``timestamp_seconds`` (a
         monotonic real-time clock in seconds; units are the caller's
@@ -1704,10 +1723,16 @@ class AB3DMOTTracker:
             cost_matrix = -metric_matrix
         t1 = time.perf_counter()
 
+        solver_cost_matrix = self._association_solver_cost_matrix(
+            detections, metric_matrix, cost_matrix
+        )
+        if solver_cost_matrix.shape != cost_matrix.shape:
+            raise ValueError("association solver cost matrix shape must remain unchanged")
+
         if self.config.matcher == "hungarian":
-            raw_matches = _hungarian_matching(cost_matrix)
+            raw_matches = _hungarian_matching(solver_cost_matrix)
         else:
-            raw_matches = _greedy_matching(cost_matrix)
+            raw_matches = _greedy_matching(solver_cost_matrix)
         t2 = time.perf_counter()
 
         if metric == "giou_3d":
