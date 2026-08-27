@@ -121,6 +121,122 @@ ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume '{}'
 
 ## RViz에서 객체 보기
 
+### 카메라와 트래킹 원클릭 동시 재생
+
+`morai_cam4_20260813_163222`처럼 전방 압축 카메라와 LiDAR를 함께 담은
+MCAP은 저장소 루트에서 아래 실행 파일 하나로 연다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh \
+  /absolute/path/to/morai_cam4_20260813_163222
+```
+
+인자를 생략하면 저장소 안의 로컬 전용 기본 위치
+`morai_cam4_20260813_163222/morai_cam4_20260813_163222`를 찾는다. 두 번째
+인자는 재생 배속이며 기본값은 이 PC에서 안정적으로 검증한 `0.5`다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh /absolute/path/to/bag 1.0
+```
+
+### 10개 추적 프리셋
+
+프리셋 목록은 ROS 실행이나 bag 없이 확인할 수 있다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh --list-modes
+```
+
+`--mode`와 `--bag`으로 한 조건을 선택한다. 기본 모드는 3번이며 기존
+원클릭 실행과 같은 조합이다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh \
+  --mode 6 \
+  --bag /absolute/path/to/morai_cam4_20260813_163222 \
+  --rate 0.5
+```
+
+| 모드 | Detector | Association | Matcher | Estimator |
+| ---: | --- | --- | --- | --- |
+| 1 | Euclidean | GIoU | Greedy | Linear KF |
+| 2 | Euclidean | GIoU | Hungarian | Linear KF |
+| 3 | Euclidean | Euclidean 3 m | Hungarian | Linear KF |
+| 4 | Euclidean | Mahalanobis Hybrid 10 m | Hungarian | Linear KF |
+| 5 | Euclidean | Euclidean 3 m | Hungarian | CTRV EKF |
+| 6 | Euclidean | Euclidean 3 m | Hungarian | IMM |
+| 7 | Euclidean | Euclidean 3 m | Hungarian | KalmanNet |
+| 8 | CenterPoint | Euclidean 3 m | Hungarian | Linear KF |
+| 9 | CenterPoint | GIoU | Hungarian | Linear KF |
+| 10 | CenterPoint | Mahalanobis Hybrid 10 m | Hungarian | Linear KF |
+
+모든 프리셋은 기존 `ab3dmot.yaml` lifecycle을 바꾸지 않고
+`yaw_measurement_mode=unobserved`, Euclidean gate 3 m, Mahalanobis gate
+11.62를 공유한다. 4번과 10번의 Hybrid만 추가로 절대거리 10 m cap을
+사용한다. 따라서 프리셋 간 차이는 표에 기재한 변수로 제한된다.
+
+7번은 체크포인트와 PyTorch 환경을 명시해야 한다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh \
+  --mode 7 --bag /absolute/path/to/bag \
+  --kalmannet-checkpoint /absolute/path/to/dense_kalmannet_v2.pt
+```
+
+8~10번은 CenterPoint 체크포인트, CUDA 가능한 PyTorch 환경이 필요하다.
+OpenPCDet 소스는 `references/openpcdet` 서브모듈의 검증된 커밋으로
+고정되며 `git submodule update --init --recursive` 또는 표준 bootstrap이
+준비한다. 실행 전에 CenterPoint용 Python venv를 활성화한다.
+
+```bash
+source /absolute/path/to/centerpoint-venv/bin/activate
+./scripts/run_camera_lidar_tracking.sh \
+  --mode 10 --bag /absolute/path/to/bag \
+  --centerpoint-checkpoint /absolute/path/to/checkpoint.pth \
+  --centerpoint-device cuda:0
+```
+
+경로는 환경변수 `HEVEN_KALMANNET_CHECKPOINT`,
+`HEVEN_CENTERPOINT_CHECKPOINT`, `HEVEN_OPENPCDET_ROOT`로도 제공할 수 있다.
+옵션과 환경변수가 없으면 각각 저장소의 로컬 전용
+`models/experimental/dense_kalmannet_v2.pt`,
+`models/experimental/centerpoint_t14_reproduction.pth`를 찾는다.
+체크포인트와 bag은 저장소에 커밋하지 않는다. 다른 PC에는 별도로 복사하고
+해시와 provenance를 확인한다. 기존 10모드 연구 자산의 SHA-256은
+CenterPoint `466c8181a377682e032bb32579c8ddb65807b5feebd8625a750b1d5538ddbc95`,
+KalmanNet `956604975e5204b2c584c3e8fe16a7ba9346097980566ecbbb22c2001fbf7d48`이다.
+
+CenterPoint는 설계된 cropped-only 입력을 사용하므로 해당 모드에서는 지면
+분리를 자동으로 끈다. Euclidean 모드는 기존 지면 분리 경로를 그대로 쓴다.
+각 조건을 공정하게 비교하려면 실행을 완전히 종료한 뒤 다른 모드로 같은
+bag을 처음부터 재생한다. 이 프리셋 화면은 정성 비교이며 과거 여러 데이터와
+오프라인 프로토콜에서 얻은 수치를 온라인으로 재현했다는 의미가 아니다.
+
+이 실행은 한 ROS launch에서 다음을 함께 시작한다.
+
+- MCAP `/clock`, front compressed camera, raw LiDAR, TF 재생
+- 기존 MORAI classical LiDAR 경로와 기본 Autoware tracker (`A-`)
+- 명시적으로 선택한 AB3DMOT 프리셋 (`B-`; 기본은 Linear KF,
+  Euclidean 3 m, Hungarian, yaw unobserved)
+- front camera, cropped LiDAR, detection, 두 tracker marker가 켜진 RViz
+- localization TF가 없는 bag을 위한 replay-only identity
+  `odom -> base_link` anchor
+
+다른 PC에서는 먼저 저장소 표준 `./scripts/bootstrap_workspace.sh`를
+완료해야 한다. `package.xml`의 `rosbag2_storage_mcap`과
+`compressed_image_transport` runtime dependency도 bootstrap의 `rosdep`
+단계에서 설치된다. workspace가 저장소의 표준 상위 경로가 아니라면
+`HEVEN_AD_WS_PATH=/absolute/path/to/workspace`를 지정한다.
+
+MCAP은 3.6 GB 대용량 실험 데이터라 Git/GitHub에 포함하지 않는다. 다른
+PC에는 bag 폴더를 별도 복사한 뒤 위 실행 파일에 절대경로를 넘긴다.
+`.mcap`과 `/morai_cam4_*/`는 `.gitignore`로 차단돼 있다.
+
+이 보기는 정성적 cross-check 전용이다. 이 bag에는 camera annotation,
+`CameraInfo`, perception output, dynamic localization TF가 없으며 기존
+T-series와도 다른 moving-ego sequence다. 화면 일치를 accuracy나 기존
+실험 수치의 재검증으로 해석하지 않는다.
+
 `DetectedObjects`, `TrackedObjects`, `PredictedObjectArray`는 RViz 기본
 display가 직접 그리지 못하는 custom message다. `ad_viz`의 marker node가 이를
 `visualization_msgs/MarkerArray`로 변환하므로, RViz를 직접 실행하지 말고 아래

@@ -338,13 +338,38 @@ install(TARGETS
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME}
+install(DIRECTORY config launch rviz DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)
 ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   ../scripts/check_autoware_perception.py
   DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS
+  ad_lidar_perception/centerpoint_detector_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_centerpoint_detector)
+install(PROGRAMS
+  ad_lidar_perception/publish_morai_frames.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_publish_morai_frames)
+install(PROGRAMS
+  ad_lidar_perception/record_detected_objects.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_record_detected_objects)
+install(PROGRAMS
+  ad_lidar_perception/ab3dmot_tracker_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_ab3dmot_tracker)
+install(PROGRAMS
+  ad_lidar_perception/camera_lidar_fusion_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_camera_lidar_fusion)
+install(DIRECTORY
+  ../tools/centerpoint_offline/
+  DESTINATION share/${PROJECT_NAME}/centerpoint_offline
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "test_*.py" EXCLUDE)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -415,7 +440,42 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_lidar_perception_launch test/test_lidar_perception_launch.py)
   ament_add_pytest_test(
+    test_centerpoint_ros test/test_centerpoint_ros.py)
+  ament_add_pytest_test(
+    test_morai_replay test/test_morai_replay.py)
+  ament_add_pytest_test(
+    test_detection_recording test/test_detection_recording.py)
+  ament_add_pytest_test(
+    test_ab3dmot_geometry test/test_ab3dmot_geometry.py)
+  ament_add_pytest_test(
+    test_ab3dmot_core test/test_ab3dmot_core.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ros test/test_ab3dmot_ros.py)
+  ament_add_pytest_test(
+    test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)
+  ament_add_pytest_test(
+    test_ab3dmot_association test/test_ab3dmot_association.py)
+  ament_add_pytest_test(
+    test_ab3dmot_association_metrics test/test_ab3dmot_association_metrics.py)
+  ament_add_pytest_test(
+    test_ab3dmot_hybrid_gate test/test_ab3dmot_hybrid_gate.py)
+  ament_add_pytest_test(
+    test_ab3dmot_ekf test/test_ab3dmot_ekf.py)
+  ament_add_pytest_test(
+    test_ab3dmot_heading test/test_ab3dmot_heading.py)
+  ament_add_pytest_test(
+    test_ab3dmot_imm test/test_ab3dmot_imm.py)
+  ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_tracking_replay_launch
+    test/test_camera_lidar_tracking_replay_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_experiment_launch
+    test/test_camera_lidar_fusion_experiment_launch.py)
+  ament_add_pytest_test(
+    test_camera_lidar_fusion_node
+    test/test_camera_lidar_fusion_node.py)
   ament_add_pytest_test(
     test_ground_segmentation_launch test/test_ground_segmentation_launch.py)
   ament_add_pytest_test(
@@ -426,6 +486,9 @@ if(BUILD_TESTING)
     test_object_detection_launch test/test_object_detection_launch.py)
   ament_add_pytest_test(
     test_tracking_launch test/test_tracking_launch.py)
+  ament_add_pytest_test(
+    test_perception_visualization_launch
+    test/test_perception_visualization_launch.py)
   ament_add_pytest_test(
     test_check_autoware_perception
     "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/tests/test_check_autoware_perception.py"

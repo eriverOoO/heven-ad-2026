@@ -1,0 +1,85 @@
+{
+  "ground_truth": {
+    "boxes": [
+      {
+        "actor_id": 2,
+        "center_policy": "ground_center_to_box_center",
+        "class_name": "obstacle",
+        "forward_center_offset_m": 0.0,
+        "height": 0.4300000071525574,
+        "length": 0.75,
+        "raw_object_type": 2,
+        "source_heading_rad": -1.4289414882659912,
+        "source_position_map": [
+          -60.610294342041016,
+          -142.17852783203125,
+          28.374374389648438
+        ],
+        "source_size_xyz": [
+          0.75,
+          0.75,
+          0.4300000071525574
+        ],
+        "width": 0.75,
+        "x": 84.07085101300228,
+        "y": 23.334282330827374,
+        "yaw": -2.522960431278952,
+        "z": -1.735793757053969
+      }
+    ],
+    "header_stamp_ns": 1785857513334160616,
+    "source_delta_ns": -16404017,
+    "source_frame": "map",
+    "target_frame": "lidar_link",
+    "topic": "/ad/dev/objects"
+  },
+  "points": {
+    "dtype": "float32_little_endian",
+    "fields": [
+      "x",
+      "y",
+      "z",
+      "intensity"
+    ],
+    "finite_count": 14171,
+    "nonfinite_removed": 14629,
+    "path": "points/static_20260805_003151_1785857513350564633.bin",
+    "raw_count": 28800
+  },
+  "sample_id": "static_20260805_003151_1785857513350564633",
+  "scene": "static_20260805_003151",
+  "schema_version": 1,
+  "source": {
+    "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+    "frame_id": "lidar_link",
+    "header_stamp_ns": 1785857513350564633,
+    "record_timestamp_ns": 1785857513360897598,
+    "topic": "/ad/sensors/lidar/points"
+  },
+  "transform_alignment": {
+    "chain": [
+      "map",
+      "odom",
+      "base_link",
+      "rear_axle_link",
+      "lidar_link"
+    ],
+    "ego_delta_ns": -17317071,
+    "ego_header_stamp_ns": 1785857513333247562,
+    "map_to_odom": {
+      "quaternion_xyzw": [
+        0.0004897098771606888,
+        -0.0002705208358815878,
+        -0.011751749013762247,
+        0.9999307893038554
+      ],
+      "translation": [
+        5.3533712857844336,
+        -1.9265837206758931,
+        -28.468768113701035
+      ]
+    },
+    "tf_delta_ns": -9196227,
+    "tf_header_stamp_ns": 1785857513341368406
+  }
+}

@@ -180,6 +180,29 @@ export AD_DATA_DIR="$PWD/src/heven_ad_2026/ad_data"
 ros2 launch ad_bringup bringup.launch.py control_enabled:=false
 ```
 
+카메라가 포함된 MORAI MCAP을 RViz 트래킹과 함께 한 번에 확인한다.
+대용량 bag은 Git에 넣지 않고 다른 PC로 별도 복사한다.
+
+```bash
+cd "$HOME/heven_ad_2026_ws/src/heven_ad_2026"
+./scripts/run_camera_lidar_tracking.sh /absolute/path/to/extracted_bag
+```
+
+추적 비교 프리셋 1~10을 확인하거나 선택한다. 인자를 생략하면 검증된
+3번(Euclidean detector + Euclidean 3 m + Hungarian + Linear KF)이 실행된다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh --list-modes
+./scripts/run_camera_lidar_tracking.sh --mode 6 --bag /absolute/path/to/bag
+```
+
+KalmanNet과 CenterPoint 프리셋은 Git에 포함되지 않는 체크포인트가 필요하다.
+필요한 옵션과 동일 조건 비교 절차는 아래 상세 문서를 따른다.
+
+상세 계약과 제한은
+[`docs/morai/lidar-mcap-replay.md`](docs/morai/lidar-mcap-replay.md)의
+“카메라와 트래킹 원클릭 동시 재생”을 따른다.
+
 확인 후 주행할 때만 `control_enabled:=true`로 바꾼다. MORAI UDP 설정은
 [protocol coverage](docs/morai/protocol-coverage.md)를 참고한다.
 

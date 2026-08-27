@@ -1,0 +1,142 @@
+{
+  "alignment": {
+    "actor_max_delta_ms": 30.0,
+    "ego_max_delta_ms": 30.0,
+    "tf_max_delta_ms": 30.0
+  },
+  "class_evidence": {
+    "matches": [
+      {
+        "raw_object_type": 0,
+        "scenario_list": "pedestrianList",
+        "unique_id": 3
+      },
+      {
+        "raw_object_type": 1,
+        "scenario_list": "vehicleList",
+        "unique_id": 13
+      },
+      {
+        "raw_object_type": 2,
+        "scenario_list": "objectList",
+        "unique_id": 2
+      }
+    ],
+    "scenario": "ad_data/morai/SaveFile/Scenario/R_KR_PR_K-city_2025/checkpoint14.json"
+  },
+  "classes": {
+    "0": {
+      "center_policy": "ground_center_to_box_center",
+      "name": "pedestrian"
+    },
+    "1": {
+      "center_policy": "rear_axle_ground_to_box_center",
+      "length_tolerance_m": 0.25,
+      "name": "vehicle"
+    },
+    "2": {
+      "center_policy": "ground_center_to_box_center",
+      "name": "obstacle"
+    }
+  },
+  "config": "/home/didgang1203/heven_ad_2026_ws/src/heven_ad_2026/tools/morai_dataset_exporter/configs/static_20260805.yaml",
+  "config_sha256": "83f5f2bcddae83ca2e4830be11d9e88857a2c66f28d8af86b38a09e2db742953",
+  "evaluation_roi_lidar_m": {
+    "x": [
+      -4.0,
+      100.0
+    ],
+    "y": [
+      -25.0,
+      25.0
+    ],
+    "z": [
+      -3.0,
+      5.0
+    ]
+  },
+  "git_commit": "7828357ae1d87f077ae6c4f39e2783f77fa1109d",
+  "git_dirty": true,
+  "lidar_frame": "lidar_link",
+  "map_frame": "map",
+  "numpy": "1.26.4",
+  "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+  "python": "3.10.12",
+  "ros_distro": "humble",
+  "scenes": [
+    {
+      "bag": "/home/didgang1203/heven_ad_2026_ws/bags/static_20260805_003151",
+      "name": "static_20260805_003151",
+      "split": "train",
+      "summary": {
+        "class_distribution": {
+          "obstacle": 74,
+          "pedestrian": 33,
+          "vehicle": 2844
+        },
+        "exported_frames": 1764,
+        "finite_points": 24889568,
+        "gt_objects": 2951,
+        "invalid_objects": {},
+        "maximum_observed_delta_ms": {
+          "actor": 29.463972,
+          "ego": 29.736239,
+          "tf": 28.379109
+        },
+        "nonfinite_points_removed": 25913632,
+        "raw_points": 50803200,
+        "skip_reasons": {
+          "actor_timestamp_gap": 14
+        },
+        "skipped_frames": 14,
+        "source_frames": 1778
+      }
+    }
+  ],
+  "schema_version": 1,
+  "summary": {
+    "class_distribution": {
+      "obstacle": 74,
+      "pedestrian": 33,
+      "vehicle": 2844
+    },
+    "exported_frames": 1764,
+    "finite_points": 24889568,
+    "gt_objects": 2951,
+    "maximum_observed_delta_ms": {
+      "actor": 29.463972,
+      "ego": 29.736239,
+      "tf": 28.379109
+    },
+    "nonfinite_points_removed": 25913632,
+    "raw_points": 50803200,
+    "skip_reasons": {
+      "actor_timestamp_gap": 14
+    },
+    "skipped_frames": 14,
+    "source_frames": 1778
+  },
+  "topic_types": {
+    "/ad/dev/objects": "ad_morai_interfaces_dev/msg/ObjectStatusArray",
+    "/ad/dev/vehicle/ego_status": "ad_morai_interfaces/msg/EgoVehicleStatus",
+    "/ad/sensors/lidar/points": "sensor_msgs/msg/PointCloud2",
+    "/tf": "tf2_msgs/msg/TFMessage",
+    "/tf_static": "tf2_msgs/msg/TFMessage"
+  },
+  "transform": {
+    "dynamic_edge": [
+      "odom",
+      "base_link"
+    ],
+    "static_edges": [
+      [
+        "base_link",
+        "rear_axle_link"
+      ],
+      [
+        "rear_axle_link",
+        "lidar_link"
+      ]
+    ]
+  }
+}

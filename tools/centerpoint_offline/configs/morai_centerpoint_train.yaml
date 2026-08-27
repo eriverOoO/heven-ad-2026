@@ -1,0 +1,12 @@
+_BASE_CONFIG_: morai_centerpoint_smoke.yaml
+
+# Pipeline-smoke defaults only. These values are not tuned and must not be used
+# to claim performance on the current single-static-scene export.
+OPTIMIZATION:
+  OPTIMIZER: adam
+  LR: 0.001
+  WEIGHT_DECAY: 0.01
+  DECAY_STEP_LIST: [1]
+  LR_DECAY: 0.1
+  LR_CLIP: 0.00001
+

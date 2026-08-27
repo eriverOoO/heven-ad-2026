@@ -153,17 +153,8 @@ def collate_openpcdet_contract(
     }
 
 
-def register_with_openpcdet() -> type:
-    """Register the adapter at runtime without changing the upstream tree."""
-    try:
-        import pcdet.datasets as pcdet_datasets
-        from pcdet.datasets.dataset import DatasetTemplate
-    except (ImportError, OSError) as error:
-        raise RuntimeError(
-            "OpenPCDet/PyTorch is unavailable; install the pinned environment "
-            "and put the pinned OpenPCDet checkout on PYTHONPATH"
-        ) from error
-
+def make_openpcdet_dataset(DatasetTemplate: type) -> type:
+    """Create the adapter from an explicitly imported OpenPCDet dataset base."""
     class MoraiHevenDataset(DatasetTemplate):
         def __init__(
             self,
@@ -209,5 +200,4 @@ def register_with_openpcdet() -> type:
             )
 
     MoraiHevenDataset.__name__ = OPENPCDET_DATASET_NAME
-    pcdet_datasets.__all__[OPENPCDET_DATASET_NAME] = MoraiHevenDataset
     return MoraiHevenDataset

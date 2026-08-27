@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +16,9 @@ from morai_dataset import (
     CLASS_NAMES,
     MoraiHevenDatasetCore,
     collate_openpcdet_contract,
-    register_with_openpcdet,
+    make_openpcdet_dataset,
 )
+from openpcdet_runtime import import_smoke_components, load_batch_to_cuda
 
 
 HERE = Path(__file__).resolve().parent
@@ -78,15 +78,14 @@ def _attempt_model_smoke(
     data_config_path: Path,
     model_config_path: Path,
 ) -> dict[str, Any]:
-    sys.path.insert(0, str(openpcdet_root.resolve()))
     import torch
     from easydict import EasyDict
-    from pcdet.models import build_network, load_data_to_gpu
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available to PyTorch")
 
-    dataset_class = register_with_openpcdet()
+    dataset_template, centerpoint_class = import_smoke_components(openpcdet_root)
+    dataset_class = make_openpcdet_dataset(dataset_template)
     data_cfg = EasyDict(_load_yaml(data_config_path))
     model_cfg = EasyDict(_load_yaml(model_config_path))
     dataset = dataset_class(
@@ -98,12 +97,12 @@ def _attempt_model_smoke(
     )
     index = dataset.morai_core.first_nonempty_index()
     batch = dataset.collate_batch([dataset[index]])
-    model = build_network(
+    model = centerpoint_class(
         model_cfg=model_cfg.MODEL,
         num_class=len(model_cfg.CLASS_NAMES),
         dataset=dataset,
     ).cuda().eval()
-    load_data_to_gpu(batch)
+    load_batch_to_cuda(batch)
     with torch.no_grad():
         predictions, _ = model(batch)
     return {

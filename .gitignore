@@ -57,6 +57,7 @@ log/
 *.mcap
 *.pcap
 *.db3
+/morai_cam4_*/
 
 # Generated maps and MORAI-local data
 *.db
