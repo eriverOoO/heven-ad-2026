@@ -138,16 +138,6 @@ std::string class_name(const std::uint8_t label)
   return kNames[label];
 }
 
-std::string uuid_hex(const unique_identifier_msgs::msg::UUID & uuid)
-{
-  std::ostringstream stream;
-  stream << std::hex << std::nouppercase << std::setfill('0');
-  for (const std::uint8_t value : uuid.uuid) {
-    stream << std::setw(2) << static_cast<unsigned int>(value);
-  }
-  return stream.str();
-}
-
 ColorRGBA color(const float red, const float green, const float blue, const float alpha)
 {
   ColorRGBA result;
@@ -248,6 +238,18 @@ std::string probability_label(
   return stream.str();
 }
 
+Marker history_marker(
+  const std_msgs::msg::Header & header, const std::string & marker_namespace,
+  const std::vector<Point> & points, const ObjectMarkerConfig & config,
+  const ColorRGBA & marker_color)
+{
+  Marker marker = base_marker(header, marker_namespace, 3, config, marker_color);
+  marker.type = Marker::LINE_STRIP;
+  marker.scale.x = config.box_line_width_m * 0.5;
+  marker.points = points;
+  return marker;
+}
+
 Marker velocity_marker(
   const std_msgs::msg::Header & header, const std::string & marker_namespace,
   const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::Twist & twist,
@@ -278,6 +280,16 @@ Marker velocity_marker(
 }
 
 }  // namespace
+
+std::string uuid_hex(const unique_identifier_msgs::msg::UUID & uuid)
+{
+  std::ostringstream stream;
+  stream << std::hex << std::nouppercase << std::setfill('0');
+  for (const std::uint8_t value : uuid.uuid) {
+    stream << std::setw(2) << static_cast<unsigned int>(value);
+  }
+  return stream.str();
+}
 
 MarkerArray build_detection_markers(
   const autoware_perception_msgs::msg::DetectedObjects & input,
@@ -329,11 +341,19 @@ MarkerArray build_tracked_markers(
       box_marker(
         input.header, marker_namespace, pose, object.shape.dimensions,
         config, tracked_color));
+    // Last 16 hex chars (last 8 bytes), not first: AB3DMOT's UUID encoding
+    // (ab3dmot_ros.py::track_id_to_uuid) packs its small integer track id
+    // into the *low* 8 bytes (bytes[8:16]), so the first 16 hex chars are
+    // always "0000000000000000" for every AB3DMOT track and the id can
+    // occupy any of the low 8 bytes depending on its magnitude -- only the
+    // last 16 hex chars are guaranteed to show it in full. For Autoware
+    // this remains a stable, effectively-unique suffix of its own UUID.
+    const std::string id_suffix = uuid.substr(uuid.size() - 16U, 16U);
     output.markers.push_back(
       label_marker(
         input.header, marker_namespace, pose, object.shape.dimensions.z,
         probability_label(classification, object.existence_probability) +
-        " #" + uuid.substr(0, 8), config, tracked_color));
+        " " + config.id_prefix + id_suffix, config, tracked_color));
 
     const auto & twist = object.kinematics.twist_with_covariance.twist;
     const double speed = std::hypot(
@@ -345,6 +365,31 @@ MarkerArray build_tracked_markers(
         velocity_marker(
           input.header, marker_namespace, pose, twist, config, tracked_color));
     }
+  }
+  return output;
+}
+
+MarkerArray build_trajectory_markers(
+  const std::vector<std::pair<std::string, std::vector<geometry_msgs::msg::Point>>> & histories,
+  const std_msgs::msg::Header & header,
+  const ObjectMarkerConfig & config)
+{
+  validate_header(header);
+  validate_config(config);
+  MarkerArray output;
+  // Dimmer than the box/label/velocity color so the trajectory reads as a
+  // trailing history, not another current-frame marker; not a DELETEALL
+  // of its own -- callers append these into the same array/topic as
+  // build_tracked_markers, which already emits one per frame.
+  const auto trajectory_color = color(0.10F, 0.85F, 1.0F, 0.55F);
+  for (const auto & [track_key, points] : histories) {
+    if (points.size() < 2U) {
+      continue;
+    }
+    output.markers.push_back(
+      history_marker(
+        header, "trajectory/" + config.id_prefix + track_key, points, config,
+        trajectory_color));
   }
   return output;
 }

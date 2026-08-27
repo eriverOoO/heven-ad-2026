@@ -43,12 +43,20 @@ def test_launch_starts_diagnostic_node_and_keeps_rviz_opt_in(monkeypatch):
     nodes = [
         action for action in description.entities if isinstance(action, Node)
     ]
-    assert len(nodes) == 2
-    visualizer = next(
+    assert len(nodes) == 3
+    visualizers = [
         node for node in nodes if node.node_package == "ad_viz"
+    ]
+    assert len(visualizers) == 2
+    for visualizer in visualizers:
+        assert visualizer.node_executable == "perception_visualizer_node"
+        assert visualizer.condition is None
+    launch_source = LAUNCH.read_text(encoding="utf-8")
+    assert '"id_prefix": "A-"' in launch_source
+    assert '"id_prefix": "B-"' in launch_source
+    assert '"tracked_input_topic": "/experiment/tracked/ab3dmot"' in (
+        launch_source
     )
-    assert visualizer.node_executable == "perception_visualizer_node"
-    assert visualizer.condition is None
 
     rviz = next(node for node in nodes if node.node_package == "rviz2")
     assert rviz.node_executable == "rviz2"
@@ -74,7 +82,10 @@ def test_focused_rviz_config_has_exact_runtime_topics_and_frames():
     ] == "Best Effort"
     expected_markers = {
         "Detected Objects": "/ad/visualization/detected_objects",
-        "Tracked Objects": "/ad/visualization/tracked_objects",
+        "Tracked Objects (Autoware)": "/ad/visualization/tracked_objects",
+        "Tracked Objects (AB3DMOT)": (
+            "/experiment/visualization/tracked_objects_ab3dmot"
+        ),
         "Predicted Objects": "/ad/visualization/predicted_objects",
     }
     for name, topic in expected_markers.items():
