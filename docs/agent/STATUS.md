@@ -1,5 +1,53 @@
 # STATUS
 
+## Cut-in Risk v1 — COMPLETE
+
+Branch `feat/cut-in-risk-v1`, from merged PR #13 main `653fad390c3b41d5b56215d2ae271bb896d40916`.
+Added an opt-in, policy-free route-aware cut-in facts node:
+`/ad/planning/dynamic_object_risks` + exact-stamp
+`/ad/planning/drivable_mask` + odometry ->
+`/ad/planning/cut_in_risks`. The core reuses the checksum-verified
+`ReferenceCorridor` and `project_to_frenet`; the primary route's interpolated
+left/right widths define centroid membership. No lane IDs, generic lane
+width, score, braking, steering, path, BehaviorTree, or response behavior was
+added.
+
+`DynamicObjectRisk` now carries policy-free discrete ego-relative future
+centroids so the cut-in core remains on the canonical
+Prediction -> Dynamic Object Risk -> Cut-in Risk architecture. Candidate =
+outside adjacent centroid AND direction-aware lateral motion toward the
+nearest corridor boundary AND discrete predicted sustained route entry AND
+route-relative `s` in `[-5,80] m`. Left requires `d_dot < 0`; right requires
+`d_dot > 0`. TTC is copied as a fact and is not required. Stateless replay
+classification had one continuous candidate interval per true UUID, so no
+hysteresis was added.
+
+Runtime canonical replay through both production nodes: 31 risk messages ->
+31 cut-in messages, 155 objects, 46 candidate object-frames, 2 unique
+candidate UUIDs, 72 predicted-entry-valid frames. True cut-in was identified
+at scenario time 0.0 s before centroid corridor entry at 2.2 s (2.2 s lead).
+Parallel-adjacent / moving-away / crossing false positives = 0 / 0 / 0;
+NaN/Inf/exceptions = 0; latency median/p95/max =
+13.717712/14.537682/15.575071 ms. Existing MORAI tooling has no
+provenance-pinned cut-in route, so this is a deterministic canonical-message
+replay on the real route corridor, not a claimed MORAI result.
+
+Tests cover 20 core/frame cases including mandatory left/right symmetry,
+curved route, non-zero yaw, predicted entry, malformed/stale input,
+determinism and backend equivalence; config/launch/interface tests and live
+two-node replay also pass. Isolated builds pass for `ad_interfaces`,
+`ad_lidar_perception`, and `ad_planner`. Focused final verification is
+93 passed / 0 failed. The broader selected-package run is 1007 passed,
+28 failed, 7 collection errors, 2 skipped; all failures are separated in
+`docs/planning/cut_in_risk_v1.md` as optional dependency or unrelated
+pre-existing dirty-worktree launch failures, not affected-test regressions.
+
+**Recommended next task:** Cut-in Response v1 — consume CutInRisk and produce
+a planner-facing longitudinal slowdown / hold request without steering
+avoidance.
+
+---
+
 ## Dynamic Object Risk Interface v1 — COMPLETE
 
 Branch `feat/dynamic-object-risk-interface`, from `main`
@@ -95,7 +143,7 @@ sign + predicted-min-sep + uncertainty + overlap/horizon/budget +
 object-at-origin + 12 `build_risk_frame` stale/invalid/orientation-
 invariance cases).
 `test_dynamic_object_risk_launch.py` live node pass. `test_interface_contract.py`
-6/6 (+ new: risk message stable, no policy fields). Broad regression
+7/7 (+ new: risk message stable, no policy fields). Broad regression
 (`test_ab3dmot_*` minus kalmannet + competition + tracking + occupancy +
 pipeline + interface) **240 passed / 1 skipped**. C++ ctests
 `test_dynamic_object_risk` / `test_imm_predictor` / `test_cv_predictor` /

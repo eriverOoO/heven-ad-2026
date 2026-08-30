@@ -154,10 +154,11 @@ DynamicObjectRiskResult compute_object_risk(
     result.cpa_distance_m = std::hypot(sx, sy);
   }
 
-  // --- prediction-horizon minimum separation (uses discrete predicted states) ---
+  // --- discrete ego-relative states + prediction-horizon minimum separation ---
   bool any_point = false;
   double min_separation = 0.0;
   double min_separation_time = 0.0;
+  result.predicted_states.reserve(object.predicted_points.size());
   for (const auto & point : object.predicted_points) {
     if (!finite(point.time_s) || !finite(point.x_m) || !finite(point.y_m)) {
       continue;
@@ -167,7 +168,18 @@ DynamicObjectRiskResult compute_object_risk(
     }
     const double ego_x = ego.x_m + ego_vx_world * point.time_s;
     const double ego_y = ego.y_m + ego_vy_world * point.time_s;
-    const double separation = std::hypot(point.x_m - ego_x, point.y_m - ego_y);
+    const double future_dx_world = point.x_m - ego_x;
+    const double future_dy_world = point.y_m - ego_y;
+    const double future_x_rel =
+      cos_yaw * future_dx_world + sin_yaw * future_dy_world;
+    const double future_y_rel =
+      -sin_yaw * future_dx_world + cos_yaw * future_dy_world;
+    const double separation = std::hypot(future_x_rel, future_y_rel);
+    if (!finite(future_x_rel) || !finite(future_y_rel) || !finite(separation)) {
+      continue;
+    }
+    result.predicted_states.push_back(
+      RelativePredictedPoint{point.time_s, future_x_rel, future_y_rel});
     if (!any_point || separation < min_separation) {
       any_point = true;
       min_separation = separation;

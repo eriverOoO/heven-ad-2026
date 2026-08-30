@@ -11,8 +11,11 @@ find_package(std_msgs REQUIRED)
 find_package(unique_identifier_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/CutInRisk.msg"
+  "msg/CutInRiskArray.msg"
   "msg/DynamicObjectRisk.msg"
   "msg/DynamicObjectRiskArray.msg"
+  "msg/DynamicObjectRiskState.msg"
   "msg/DynamicObstacleStatus.msg"
   "msg/PlannerStatus.msg"
   "msg/PredictedState.msg"

@@ -142,6 +142,14 @@ when the object carries no predicted states. This is kept conceptually
 separate from the kinematic CPA above and is intended for later cut-in /
 gap-acceptance logic.
 
+The same admitted discrete points are also exposed as
+`DynamicObjectRiskState[] predicted_states`. Each state is relative to the
+constant-velocity ego rollout at that horizon and expressed in the
+source-stamp `base_link` axes. This preserves generic future centroid facts
+for route-aware consumers without making them bypass this interface and
+subscribe to raw predictions. Invalid/out-of-horizon points are omitted; no
+new extrapolation is performed.
+
 ### Quality
 
 `position_uncertainty_m` = sqrt of the larger eigenvalue of the
@@ -209,8 +217,9 @@ ros2 launch ad_lidar_perception lidar_perception.launch.py \
   tracker_backend:=ab3dmot dynamic_object_risk:=true   # ab3dmot -> prediction -> risk
 ```
 
-The node is observational only in this task. No planner or behaviour-tree
-node consumes `/ad/planning/dynamic_object_risks` yet.
+The node remains observational. The optional Cut-in Risk v1 fact extractor
+consumes `/ad/planning/dynamic_object_risks`; no vehicle-response or
+behaviour-tree node consumes it.
 
 ## Runtime validation
 
@@ -292,7 +301,8 @@ here: the host lacks `rosbag2_storage_mcap`.
   contract cases.
 - `test_dynamic_object_risk_launch.py` -- live node: finite base_link metrics,
   single publisher, physically sensible lead-object values.
-- `test_interface_contract.py` -- `DynamicObjectRisk` declaration is stable
-  and contains no GO / STOP / YIELD / brake / risk_score / decision field.
+- `test_interface_contract.py` -- 7/7; `DynamicObjectRisk` and its policy-free
+  future-state extension are stable and contain no GO / STOP / YIELD / brake /
+  risk_score / decision field.
 - `test_lidar_perception_launch.py` -- opt-in include, backend-agnostic,
   ordered after prediction.

@@ -54,6 +54,11 @@ bool predicted_min_separation_valid
 float32 predicted_min_separation_m
 float32 predicted_min_separation_time_s
 
+# Discrete source prediction states, converted to ego-relative base_link
+# coordinates. These preserve route-entry evidence for downstream factual
+# interfaces without requiring them to consume raw PredictedObjectArray.
+DynamicObjectRiskState[] predicted_states
+
 # sqrt of the larger initial_pose xy covariance eigenvalue; 0.0 when the source
 # reports no position uncertainty.
 float32 position_uncertainty_m
