@@ -225,6 +225,12 @@ def detected_objects_to_detections(
         label, label_probability = select_classification(obj.classification)
 
         pose = obj.kinematics.pose_with_covariance.pose
+        position = pose.position
+        if not all(
+            math.isfinite(value)
+            for value in (position.x, position.y, position.z)
+        ):
+            raise DetectedObjectsAdapterError("position must be finite")
         qx, qy, qz, qw = normalized_quaternion(pose.orientation)
         yaw = yaw_from_quaternion(qx, qy, qz, qw)
 
@@ -234,6 +240,8 @@ def detected_objects_to_detections(
             )
         else:
             x, y, z = pose.position.x, pose.position.y, pose.position.z
+        if not all(math.isfinite(value) for value in (x, y, z, yaw)):
+            raise DetectedObjectsAdapterError("transformed pose must be finite")
 
         detections.append(
             Detection(
@@ -281,15 +289,46 @@ def _set_covariance_block(
             covariance[(row_offset + i) * 6 + (col_offset + j)] = float(block[i, j])
 
 
+def world_velocity_to_object_local(
+    yaw: float,
+    velocity_world: Sequence[float],
+    covariance_world: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rotate AB3DMOT's world-frame velocity into Autoware object axes.
+
+    AB3DMOT's state is ``[x, y, z, ..., vx, vy, vz]`` in the tracker
+    frame. Autoware's tracked-object contract uses object-local twist; its
+    CV tracker performs this same ``R(-yaw)`` conversion before publishing.
+    Apply the identical basis change to the covariance at this ROS boundary
+    so the tracker core keeps its native world-frame state.
+    """
+    cosine = math.cos(yaw)
+    sine = math.sin(yaw)
+    world_to_local = np.array(
+        [
+            [cosine, sine, 0.0],
+            [-sine, cosine, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    local_velocity = world_to_local @ np.asarray(velocity_world, dtype=float)
+    local_covariance = world_to_local @ covariance_world @ world_to_local.T
+    return local_velocity, local_covariance
+
+
 def tracked_state_to_message(
-    state: TrackedState, message_types: dict[str, Any]
+    state: TrackedState,
+    message_types: dict[str, Any],
+    *,
+    orientation_available: bool = True,
 ) -> Any:
     """Map one `TrackedState` to a `TrackedObject`.
 
     Field mapping matches `docs/research/tracking_architecture.md`
     "AB3DMOT Integration Decisions" §4 exactly:
     - position/orientation/dimensions: direct from the KF state.
-    - velocity: already m/s (T-1A's real-dt predict), direct copy.
+    - velocity: AB3DMOT world-frame m/s rotated into the object-local frame
+      used by Autoware ``TrackedObject`` twist.
     - track_id: `track_id_to_uuid`.
     - classification/existence_probability: the passthrough fields T-1B
       added to `Detection`/`Track`/`TrackedState` (see `ab3dmot_core.py`).
@@ -321,13 +360,23 @@ def tracked_state_to_message(
     pose_covariance[3 * 6 + 3] = float(state.yaw_variance)
     output.kinematics.pose_with_covariance.covariance = pose_covariance.tolist()
 
+    local_velocity, local_velocity_covariance = world_velocity_to_object_local(
+        state.yaw,
+        (state.vx_mps, state.vy_mps, state.vz_mps),
+        state.velocity_covariance,
+    )
     twist = output.kinematics.twist_with_covariance.twist
-    twist.linear.x, twist.linear.y, twist.linear.z = state.vx_mps, state.vy_mps, state.vz_mps
+    twist.linear.x, twist.linear.y, twist.linear.z = local_velocity.tolist()
     twist_covariance = np.zeros(36)
-    _set_covariance_block(twist_covariance, state.velocity_covariance, 0, 0)
+    _set_covariance_block(twist_covariance, local_velocity_covariance, 0, 0)
     output.kinematics.twist_with_covariance.covariance = twist_covariance.tolist()
 
-    output.kinematics.orientation_availability = message_types["TrackedObjectKinematics"].AVAILABLE
+    availability_type = message_types["TrackedObjectKinematics"]
+    output.kinematics.orientation_availability = (
+        availability_type.AVAILABLE
+        if orientation_available
+        else availability_type.UNAVAILABLE
+    )
 
     output.shape.type = message_types["Shape"].BOUNDING_BOX
     output.shape.dimensions.x, output.shape.dimensions.y, output.shape.dimensions.z = (
@@ -343,10 +392,18 @@ def tracked_states_to_message(
     stamp: Any,
     frame_id: str,
     message_types: dict[str, Any],
+    *,
+    orientation_available: bool = True,
 ) -> Any:
     output = message_types["TrackedObjects"]()
     output.header.stamp = stamp
     output.header.frame_id = frame_id
     for state in states:
-        output.objects.append(tracked_state_to_message(state, message_types))
+        output.objects.append(
+            tracked_state_to_message(
+                state,
+                message_types,
+                orientation_available=orientation_available,
+            )
+        )
     return output

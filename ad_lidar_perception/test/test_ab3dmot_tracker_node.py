@@ -56,9 +56,13 @@ class RecordingPublisher:
         self.published.append(message)
 
 
-def build_enabled_node():
+def build_enabled_node(**parameters):
+    overrides = [Parameter("enabled", Parameter.Type.BOOL, True)]
+    overrides.extend(
+        Parameter(name, value=value) for name, value in parameters.items()
+    )
     node = Ab3dmotTrackerNode(
-        parameter_overrides=[Parameter("enabled", Parameter.Type.BOOL, True)]
+        parameter_overrides=overrides
     )
     node.publisher = RecordingPublisher()
     node._tf_buffer.lookup_transform = lambda *args, **kwargs: identity_transform()
@@ -152,6 +156,20 @@ class Ab3dmotTrackerNodeTest(unittest.TestCase):
         node._on_detected_objects(make_detected_objects(100, 0, []))
         self.assertEqual(len(node.publisher.published), 1)
         self.assertEqual(node.publisher.published[0].objects, [])
+        node.destroy_node()
+
+    def test_yaw_unobserved_publishes_orientation_unavailable(self):
+        node = build_enabled_node(yaw_measurement_mode="unobserved")
+        node._on_detected_objects(
+            make_detected_objects(
+                100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]
+            )
+        )
+        tracked = node.publisher.published[0].objects[0]
+        self.assertEqual(
+            tracked.kinematics.orientation_availability,
+            tracked.kinematics.UNAVAILABLE,
+        )
         node.destroy_node()
 
     def test_tf_failure_skips_frame_without_crashing(self):

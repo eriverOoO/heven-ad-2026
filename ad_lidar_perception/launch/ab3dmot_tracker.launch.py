@@ -10,7 +10,12 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     package_share = Path(get_package_share_directory("ad_lidar_perception"))
-    default_config = package_share / "config" / "tracking" / "ab3dmot.yaml"
+    default_config = (
+        package_share
+        / "config"
+        / "tracking"
+        / "competition_mot_baseline_v1.yaml"
+    )
 
     arguments = [
         DeclareLaunchArgument("enabled", default_value="true"),
@@ -32,20 +37,20 @@ def generate_launch_description():
         DeclareLaunchArgument("config_path", default_value=str(default_config)),
         DeclareLaunchArgument(
             "matcher",
-            default_value="greedy",
+            default_value="hungarian",
             description=(
-                "Association matcher: 'greedy' (default, production-matching "
-                "baseline) or 'hungarian' (T-3 opt-in global assignment). "
+                "Association matcher: 'hungarian' for COMPETITION_MOT_BASELINE_V1 "
+                "or the historical research option 'greedy'. "
                 "Both use the identical cost matrix and gate for whichever "
                 "association_metric is selected."
             ),
         ),
         DeclareLaunchArgument(
             "association_metric",
-            default_value="giou_3d",
+            default_value="euclidean",
             description=(
-                "T-4: 'giou_3d' (default, production-matching baseline), "
-                "'euclidean' (BEV center distance, gated by euclidean_gate_m), "
+                "COMPETITION_MOT_BASELINE_V1 uses 'euclidean' BEV center distance; "
+                "historical research options are 'giou_3d' and "
                 "or 'mahalanobis' (BEV innovation distance, gated by "
                 "mahalanobis_gate)."
             ),
@@ -63,12 +68,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "yaw_measurement_mode",
-            default_value="detector",
+            default_value="unobserved",
             description=(
-                "T-7A.5: 'detector' (default, unchanged -- feed the "
-                "detector's own yaw into the estimator) or 'unobserved' "
-                "(opt-in -- treat yaw as unmeasured; motion heading is "
-                "instead inferred from positional displacement)."
+                "COMPETITION_MOT_BASELINE_V1 uses 'unobserved' because adaptive "
+                "Euclidean clustering publishes orientation as unavailable; "
+                "'detector' remains available for oriented detectors."
             ),
         ),
         DeclareLaunchArgument(

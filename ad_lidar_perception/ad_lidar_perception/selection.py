@@ -92,7 +92,7 @@ _DETECTOR_BACKENDS = (
     "transfusion",
     "bevfusion_lidar",
 )
-_TRACKER_BACKENDS = ("none", "autoware")
+_TRACKER_BACKENDS = ("none", "autoware", "ab3dmot")
 _WINDOWS_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
 
 

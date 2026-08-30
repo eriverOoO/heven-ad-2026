@@ -17,6 +17,7 @@ from ad_lidar_perception.ab3dmot_ros import (
     tracked_state_to_message,
     tracked_states_to_message,
     transform_pose_z_up,
+    world_velocity_to_object_local,
     yaw_from_quaternion,
 )
 
@@ -88,6 +89,7 @@ class TrackedObjectShape:
 
 
 class TrackedObjectKinematicsFake:
+    UNAVAILABLE = 0
     AVAILABLE = 2
 
     def __init__(self):
@@ -294,6 +296,22 @@ class DetectedObjectsToDetectionsTest(unittest.TestCase):
         with self.assertRaises(DetectedObjectsAdapterError):
             detected_objects_to_detections(msg, identity_transform())
 
+    def test_rejects_nonfinite_position(self):
+        msg = detected_objects(
+            [
+                detected_object(
+                    position=(math.nan, 0, 0),
+                    yaw=0,
+                    dims=(1, 1, 1),
+                    classifications=[classification(0, 1.0)],
+                )
+            ]
+        )
+        with self.assertRaisesRegex(
+            DetectedObjectsAdapterError, "position must be finite"
+        ):
+            detected_objects_to_detections(msg, identity_transform())
+
 
 class TrackIdUuidTest(unittest.TestCase):
     def test_deterministic(self):
@@ -308,11 +326,14 @@ class TrackIdUuidTest(unittest.TestCase):
 
 
 class TrackedStateToMessageTest(unittest.TestCase):
-    def test_velocity_is_copied_unchanged_in_mps(self):
-        message = tracked_state_to_message(make_state(vx_mps=3.5, vy_mps=-2.0, vz_mps=0.1), MESSAGE_TYPES)
+    def test_world_velocity_is_serialized_in_object_local_axes(self):
+        message = tracked_state_to_message(
+            make_state(yaw=math.pi / 2.0, vx_mps=0.0, vy_mps=3.5, vz_mps=0.1),
+            MESSAGE_TYPES,
+        )
         twist = message.kinematics.twist_with_covariance.twist.linear
         self.assertAlmostEqual(twist.x, 3.5)
-        self.assertAlmostEqual(twist.y, -2.0)
+        self.assertAlmostEqual(twist.y, 0.0)
         self.assertAlmostEqual(twist.z, 0.1)
 
     def test_position_orientation_dimensions_and_classification(self):
@@ -338,6 +359,7 @@ class TrackedStateToMessageTest(unittest.TestCase):
 
     def test_covariance_blocks_come_from_kf_p_only(self):
         state = make_state(
+            yaw=0.0,
             position_covariance=np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]]),
             yaw_variance=0.07,
             velocity_covariance=np.array([[4.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 6.0]]),
@@ -353,6 +375,39 @@ class TrackedStateToMessageTest(unittest.TestCase):
         self.assertAlmostEqual(twist_cov[1 * 6 + 1], 5.0)
         self.assertAlmostEqual(twist_cov[2 * 6 + 2], 6.0)
 
+    def test_velocity_covariance_rotates_with_object_local_twist(self):
+        message = tracked_state_to_message(
+            make_state(
+                yaw=math.pi / 2.0,
+                velocity_covariance=np.diag([4.0, 9.0, 16.0]),
+            ),
+            MESSAGE_TYPES,
+        )
+        covariance = message.kinematics.twist_with_covariance.covariance
+        self.assertAlmostEqual(covariance[0], 9.0)
+        self.assertAlmostEqual(covariance[7], 4.0)
+        self.assertAlmostEqual(covariance[14], 16.0)
+
+    def test_prediction_style_round_trip_recovers_world_motion(self):
+        yaw = 0.7
+        velocity_world = np.array([4.0, -1.5, 0.2])
+        covariance_world = np.array(
+            [[2.0, 0.3, 0.0], [0.3, 5.0, 0.0], [0.0, 0.0, 0.4]]
+        )
+        velocity_local, covariance_local = world_velocity_to_object_local(
+            yaw, velocity_world, covariance_world
+        )
+        cosine = math.cos(yaw)
+        sine = math.sin(yaw)
+        local_to_world = np.array(
+            [[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]]
+        )
+        np.testing.assert_allclose(local_to_world @ velocity_local, velocity_world)
+        np.testing.assert_allclose(
+            local_to_world @ covariance_local @ local_to_world.T,
+            covariance_world,
+        )
+
     def test_untracked_fields_left_at_message_default(self):
         """acceleration_with_covariance / is_stationary: AB3DMOT's state has
         no such quantity, so these must stay at the message's own default
@@ -362,6 +417,17 @@ class TrackedStateToMessageTest(unittest.TestCase):
         accel = message.kinematics.acceleration_with_covariance
         self.assertEqual(accel.accel.linear.x, 0.0)
         self.assertEqual(accel.covariance, [0.0] * 36)
+
+    def test_yaw_unobserved_marks_orientation_unavailable(self):
+        message = tracked_state_to_message(
+            make_state(yaw=0.0),
+            MESSAGE_TYPES,
+            orientation_available=False,
+        )
+        self.assertEqual(
+            message.kinematics.orientation_availability,
+            TrackedObjectKinematicsFake.UNAVAILABLE,
+        )
 
 
 class TrackedStatesToMessageTest(unittest.TestCase):

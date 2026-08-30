@@ -1,0 +1,27 @@
+/**:
+  ros__parameters:
+    # COMPETITION_MOT_BASELINE_V1
+    # Detector is selected separately by lidar_perception.yaml and is required
+    # to be adaptive Euclidean clustering by lidar_perception.launch.py.
+    association_metric: euclidean
+    euclidean_gate_m: 3.0
+    matcher: hungarian
+    state_estimator: linear_kf
+    yaw_measurement_mode: unobserved
+
+    # Preserve the existing AB3DMOT lifecycle; this task does not tune it.
+    min_hits: 1
+    max_age: 2
+
+    # Explicit unused alternatives prevent inheritance from historical node
+    # defaults and make the complete parameter surface reproducible.
+    giou_gate: 0.0
+    mahalanobis_gate: 11.62
+    mahalanobis_max_distance_m: 0.0
+    imm_cv_to_cv_probability: 0.95
+    imm_ctrv_to_ctrv_probability: 0.95
+    kalmannet_checkpoint: ""
+    kalmannet_device: cpu
+
+    # Runtime observability only; does not affect tracker state or timing input.
+    runtime_summary_interval_frames: 180

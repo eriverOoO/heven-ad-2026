@@ -25,6 +25,11 @@ def _launch_file(name: str) -> PythonLaunchDescriptionSource:
     return PythonLaunchDescriptionSource(str(package_share / "launch" / name))
 
 
+def _tracking_config(name: str) -> str:
+    package_share = Path(get_package_share_directory("ad_lidar_perception"))
+    return str(package_share / "config" / "tracking" / name)
+
+
 def _include(name: str, arguments=None):
     return IncludeLaunchDescription(
         _launch_file(name),
@@ -61,6 +66,12 @@ def _launch_setup(context):
     if detector_backend not in {"euclidean", "centerpoint"}:
         raise RuntimeError("detector_backend must be euclidean or centerpoint")
     heven_centerpoint = detector_backend == "centerpoint"
+    tracker_backend_override = _perform(context, "tracker_backend").strip()
+    if tracker_backend_override not in {"", "autoware", "ab3dmot"}:
+        raise RuntimeError(
+            "tracker_backend must be empty, autoware, or ab3dmot"
+        )
+    tracker_backend = tracker_backend_override or selection.tracker.backend
     if selection.detector.build_only:
         raise RuntimeError(
             "build_only selection cannot activate the runtime composition"
@@ -221,7 +232,7 @@ def _launch_setup(context):
             )
         )
 
-    if selection.tracker.backend == "autoware":
+    if tracker_backend == "autoware":
         actions.extend(
             [
                 _include(
@@ -231,11 +242,37 @@ def _launch_setup(context):
                 _include("prediction.launch.py"),
             ]
         )
+    elif tracker_backend == "ab3dmot":
+        if heven_centerpoint or selection.detector.backend != "euclidean_cluster":
+            raise RuntimeError(
+                "COMPETITION_MOT_BASELINE_V1 requires the adaptive Euclidean detector"
+            )
+        actions.append(
+            _include(
+                "ab3dmot_tracker.launch.py",
+                {
+                    "enabled": "true",
+                    "input_topic": "/ad/perception/objects/detected",
+                    "output_topic": "/ad/perception/objects/tracked",
+                    "target_frame": "odom",
+                    "config_path": _tracking_config(
+                        "competition_mot_baseline_v1.yaml"
+                    ),
+                    "association_metric": "euclidean",
+                    "euclidean_gate_m": "3.0",
+                    "matcher": "hungarian",
+                    "state_estimator": "linear_kf",
+                    "yaw_measurement_mode": "unobserved",
+                },
+            )
+        )
 
-    if selection.occupancy.dynamic_enabled:
+    if selection.occupancy.dynamic_enabled and tracker_backend == "autoware":
         actions.append(_include("dynamic_occupancy_grid.launch.py"))
 
-    if selection.occupancy.publish_combined:
+    if selection.occupancy.publish_combined and (
+        not selection.occupancy.dynamic_enabled or tracker_backend == "autoware"
+    ):
         actions.append(_include("combined_occupancy_grid.launch.py"))
     if start_visualization or start_rviz:
         actions.append(
@@ -266,6 +303,14 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument("detector_backend", default_value="euclidean"),
+            DeclareLaunchArgument(
+                "tracker_backend",
+                default_value="",
+                description=(
+                    "Blank preserves the composition config (Autoware in the checked-in "
+                    "default); explicitly select 'autoware' or opt-in 'ab3dmot'."
+                ),
+            ),
             DeclareLaunchArgument("checkpoint_path", default_value=""),
             DeclareLaunchArgument("score_threshold", default_value="0.1"),
             DeclareLaunchArgument("max_detections", default_value="500"),

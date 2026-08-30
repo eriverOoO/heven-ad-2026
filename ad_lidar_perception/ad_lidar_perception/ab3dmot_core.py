@@ -304,7 +304,13 @@ class LinearKFEstimator:
         track_id: int,
         yaw_measurement_mode: str = "detector",
     ) -> None:
-        self._kf_wrapper = kf_class(detection.as_measurement_array(), np.zeros(1), track_id)
+        birth_measurement = detection.as_measurement_array()
+        if yaw_measurement_mode == "unobserved":
+            # Adaptive Euclidean clustering publishes an identity quaternion
+            # with orientation_availability=UNAVAILABLE. Do not seed the KF
+            # with that structural placeholder as though it were observed.
+            birth_measurement[3] = 0.0
+        self._kf_wrapper = kf_class(birth_measurement, np.zeros(1), track_id)
         self.yaw_measurement_mode = yaw_measurement_mode
 
     @property

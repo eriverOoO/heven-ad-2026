@@ -111,6 +111,7 @@ def launch_context(config, **overrides):
         "densifier_enabled": "false",
         "point_layout_adapter_enabled": "true",
         "detector_backend": "euclidean",
+        "tracker_backend": "",
         "checkpoint_path": "",
         "score_threshold": "0.1",
         "max_detections": "500",
@@ -492,6 +493,7 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "crop_clearance_m",
         "use_sim_time",
         "detector_backend",
+        "tracker_backend",
         "checkpoint_path",
         "score_threshold",
         "max_detections",
@@ -585,6 +587,75 @@ def test_checked_in_default_tracks_model_free_clusters_for_dynamic_safety():
     assert selection.occupancy.static_enabled is True
     assert selection.occupancy.dynamic_enabled is True
     assert selection.occupancy.publish_combined is True
+
+
+def test_explicit_autoware_selection_preserves_default_tracker_graph(
+    tmp_path, monkeypatch
+):
+    config = write_composition(
+        tmp_path,
+        composition_text(
+            detector="euclidean_cluster", tracker="autoware", dynamic=True
+        ),
+    )
+    _module, actions = record_setup(
+        monkeypatch, config, tracker_backend="autoware"
+    )
+    names = [action.source for action in actions]
+    assert names.count("tracking.launch.py") == 1
+    assert names.count("prediction.launch.py") == 1
+    assert "ab3dmot_tracker.launch.py" not in names
+
+
+def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
+    tmp_path, monkeypatch
+):
+    config = write_composition(
+        tmp_path,
+        composition_text(
+            detector="euclidean_cluster", tracker="autoware", dynamic=True
+        ),
+    )
+    _module, actions = record_setup(
+        monkeypatch, config, tracker_backend="ab3dmot"
+    )
+    names = [action.source for action in actions]
+    assert names.count("ab3dmot_tracker.launch.py") == 1
+    assert "tracking.launch.py" not in names
+    assert "prediction.launch.py" not in names
+    assert "dynamic_occupancy_grid.launch.py" not in names
+    assert "combined_occupancy_grid.launch.py" not in names
+
+    ab3dmot = next(
+        action
+        for action in actions
+        if action.source == "ab3dmot_tracker.launch.py"
+    )
+    arguments = dict(ab3dmot.kwargs["launch_arguments"])
+    assert arguments == {
+        "enabled": "true",
+        "input_topic": "/ad/perception/objects/detected",
+        "output_topic": "/ad/perception/objects/tracked",
+        "target_frame": "odom",
+        "config_path": arguments["config_path"],
+        "association_metric": "euclidean",
+        "euclidean_gate_m": "3.0",
+        "matcher": "hungarian",
+        "state_estimator": "linear_kf",
+        "yaw_measurement_mode": "unobserved",
+    }
+    assert arguments["config_path"].endswith(
+        "config/tracking/competition_mot_baseline_v1.yaml"
+    )
+
+
+def test_ab3dmot_override_rejects_non_euclidean_detector(tmp_path, monkeypatch):
+    config = write_composition(
+        tmp_path,
+        composition_text(detector="centerpoint", tracker="autoware"),
+    )
+    with pytest.raises(RuntimeError, match="adaptive Euclidean"):
+        record_setup(monkeypatch, config, tracker_backend="ab3dmot")
 
 
 def test_euclidean_cluster_leaf_receives_optional_stage_toggles(
