@@ -107,17 +107,31 @@ index 21 is left at `0` (AB3DMOT tracks no roll). Bounded-replay A/B:
 `coordinated_turn` selections **0 -> 0**, predicted yaw-rate stays `0`,
 **zero** curved predicted trajectories appear, and the
 `constant_velocity` / `stationary` split moves < 1 pt (within the
-disjoint-stamp noise of the two live arms). `twist.covariance[35]` (the
-yaw-*rate* variance) is a separate slot with the same latent gap -- it
-still reads `0` -> `0.04` fallback, which currently helps pin the IMM's
-turn-rate at zero; a principled yaw-rate uncertainty contract is left for
-a follow-up that must re-verify the turn counts.
+disjoint-stamp noise of the two live arms).
+
+`twist.covariance[35]` (the yaw-*rate* variance, `(rad/s)^2`) is a separate
+slot. AB3DMOT has no yaw-rate state, so it is **left unset (`0`)** -- the
+ROS encoding for "not provided" -- and prediction applies its shared
+`positive_variance(.., 0.04)` default, identical to how it treats an
+omitted field from any tracker including Autoware. This is behaviorally
+inert: `imm_predictor` gates `coordinated_turn` on the yaw-rate *value*
+(`|observed[kYawRate]|`), never its variance. A deterministic offline
+sweep of that slot across `{0.04 .. 100} (rad/s)^2` on the recorded
+1257-object stream changed **0 turn selections** and introduced **0**
+curved trajectories at every value. The **rad^2** yaw-*angle* variance is
+deliberately **not** reused here (`rad^2 != (rad/s)^2`). See
+`competition_mot_baseline.md` "Yaw-rate contract" -- no prediction or
+serialization behavior changed; the contract is documented and locked by
+tests only.
 
 New focused tests
 (`test_autoware_prediction_adapter.cpp:Ab3dmotOrientationUnavailable*`)
 assert the accept-as-Cartesian behavior and the no-forced-turn behavior;
 `test_ab3dmot_ros.py` asserts yaw variance lands at index 35, index 21
-stays zero, and the published value stays in the "yaw unknown" regime.
+stays zero, and the published value stays in the "yaw unknown" regime;
+`test_ab3dmot_ros.py::YawRateContractTest` and
+`test_imm_predictor.cpp::ZeroYawRateNeverSelectsCoordinatedTurnRegardlessOfVariance`
+lock the zero-yaw-rate / unset-`twist.covariance[35]` contract.
 
 ## Velocity semantics
 
