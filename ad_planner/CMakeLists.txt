@@ -56,6 +56,7 @@ add_library(ad_planner_core
   src/local_planning/mppi_nav2/mppi_nav2_backend.cpp
   src/planning/cut_in_risk.cpp
   src/planning/cut_in_response.cpp
+  src/planning/cut_in_speed_constraint.cpp
   src/visualization/path_tracking_markers.cpp
   src/visualization/planner_visualization.cpp
   src/visualization/route_markers.cpp)
@@ -335,6 +336,11 @@ if(BUILD_TESTING)
     std_msgs)
 
   ament_add_gtest(
+    test_cut_in_speed_constraint test/test_cut_in_speed_constraint.cpp)
+  target_include_directories(test_cut_in_speed_constraint PRIVATE include)
+  target_link_libraries(test_cut_in_speed_constraint ad_planner_core)
+
+  ament_add_gtest(
     test_road_corridor_grid test/test_road_corridor_grid.cpp)
   target_include_directories(test_road_corridor_grid PRIVATE include)
   target_link_libraries(test_road_corridor_grid ad_planner_core)
@@ -405,6 +411,13 @@ if(BUILD_TESTING)
   add_launch_test(
     test/test_cut_in_response_policy.py
     TIMEOUT 180
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_planner_cut_in_constraint.py
+    TIMEOUT 240
     ENV
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"
       "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"

@@ -1,5 +1,81 @@
 # STATUS
 
+## Planner Cut-in Speed Constraint v1 — COMPLETE
+
+Branch `feat/planner-cut-in-constraint-v1`, from merged PR #15 main
+`b723fd5b90aceedb2c6fce06b270fd52526c9516`. First change that lets a cut-in
+alter production planner longitudinal behaviour. **Opt-in, off by default**
+(`enable_cut_in_response_constraint: false`): when disabled `AdPlannerNode`
+creates no subscription, reads nothing, and is behaviourally identical to
+current main.
+
+Integration point: `run_path_tracking()` (the `FollowGlobalPath` BT leaf) now
+passes an optional external cap as the already-existing 6th
+`target_speed_mps` argument of `PathTrackingController::update()`. Stanley
+resolves `target_speed_mps.value_or(config_.target_speed_mps)` then applies its
+own `min` vs launch ramp and route profile, so a smaller value can only lower
+the governed target, never raise it, and never touches steering
+(`test_stanley.cpp::UsesPerUpdateTargetSpeedForSlowdown`). No second
+longitudinal controller, no extra `CtrlCmd`; `AdPlannerNode::publish_command`
+remains the one intended production control-command publisher.
+
+Pure helper `cut_in_response_speed_limit()` (`ad_planner/.../planning/
+cut_in_speed_constraint.{hpp,cpp}`, in `ad_planner_core`, no ROS-message dep):
+not-received / stale / `active==false` / `ACTION_NONE` / malformed / contradictory
+-> `nullopt` (true no-op, never `0.0`, never pass-through, never a speed
+increase); `ACTION_SLOWDOWN` valid finite `>0` -> `requested_max_speed_mps`;
+`ACTION_HOLD` valid `==0.0` -> `0.0`. The node clamps with
+`min(nominal_cruise_target, limit)` and passes `std::nullopt` whenever the
+result would not strictly reduce the target (byte-identical no-op).
+`nominal_cruise_target` is read once from the backend's own
+`<backend>.target_speed_mps` param purely as the clamp ceiling. Freshness:
+`context_.steady_time_s` (set at top of `tick()`, same-tick) minus the
+`steady_now()` receipt time `<= cut_in_response_max_age_s` (default `0.5`).
+
+Phase 9 blocker documented, not worked around: `PerceptionMission`
+(`run_local_motion()`, DWA/Frenet/MPPI) is **not** constrained in v1 --
+`VehicleConstraints.maximum_speed_mps` is `positive_finite_parameter`
+(strictly `>0`), so `ACTION_HOLD`'s `0.0` cannot be expressed there without
+breaking the field invariant, and capping the dynamic-window speed could
+perturb DWA `(v,ω)` selection (a lateral effect this task forbids). Local
+motion also already runs its own corridor/occupancy/prediction longitudinal
+response. Deferred to a separate representation.
+
+New config (`config/planner.yaml`): `enable_cut_in_response_constraint: false`,
+`cut_in_response_max_age_s: 0.5`, `topics.cut_in_response:
+/ad/planning/cut_in_response`, `topics.cut_in_speed_limit:
+/ad/planner/cut_in_speed_limit` (a `std_msgs/Float32` observability publisher,
+created only when enabled: active cap, or `-1.0` when no constraint). No
+comfortable/maximum deceleration or cut-in threshold duplicated -- those stay in
+`ad_cut_in_response`. `planner.launch.py enable_cut_in_response_constraint:=true`
+also starts `ad_cut_in_response` + `ad_cut_in_risk`.
+
+Files: `ad_planner` `include/ad_planner/planning/cut_in_speed_constraint.hpp`,
+`src/planning/cut_in_speed_constraint.cpp`, `src/planner/planner_node.cpp`,
+`src/planner/planner_ros_interfaces.{hpp,cpp}`, `config/planner.yaml`,
+`launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_cut_in_speed_constraint.cpp, test_planner_cut_in_constraint.py,
+test_planner_launch.py}`; `docs/planning/planner_cut_in_constraint_v1.md`,
+this file. `ad_interfaces` untouched (no new message).
+
+Tests: `test_cut_in_speed_constraint` 22 pure cases (NONE/SLOWDOWN/HOLD, stale,
+missing, inactive, invalid-flag, non-finite, `SLOWDOWN<=0`, `HOLD!=0`,
+unknown/negative action, non-negativity sweep, monotonicity, limit<=request).
+`test_planner_cut_in_constraint.py` live `ad_planner` in `FollowGlobalPath`
+(`perception.enabled:=false`), ego `8.0 m/s`: no-response/NONE -> cap `-1.0`,
+`accel==1.0`; SLOWDOWN `3.0` -> cap `3.0`, command flips to brake; HOLD -> cap
+`0.0`, braking at least as strong; stale > max-age -> cap `-1.0`, baseline
+returns; exactly one `/ad/control/command` publisher. Full `ad_planner` ctest
+**39/40** (only pre-existing `test_mppi_nav2_launch` fails -- host lacks
+`nav2_common`/`nav2_controller`). Isolated `colcon build --packages-select
+ad_planner` clean.
+
+**Recommended next task:** Roundabout Gap Risk v1 -- reuse Dynamic Object Risk
+to estimate time-gap / time-to-conflict for vehicles approaching the roundabout
+conflict region, without implementing GO/YIELD response yet.
+
+---
+
 ## Cut-in Response v1 — COMPLETE
 
 Branch `feat/cut-in-response-v1`, from merged PR #14 main

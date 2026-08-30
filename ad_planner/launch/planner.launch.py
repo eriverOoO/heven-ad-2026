@@ -197,6 +197,18 @@ def _create_planner_node(context):
         overrides["tuning.lease_required"] = (
             tuning_lease_required == "true"
         )
+    cut_in_response_constraint_override = LaunchConfiguration(
+        "enable_cut_in_response_constraint", default=""
+    ).perform(context).strip().lower()
+    if cut_in_response_constraint_override:
+        if cut_in_response_constraint_override not in {"true", "false"}:
+            raise RuntimeError(
+                "enable_cut_in_response_constraint must be empty, true, "
+                "or false"
+            )
+        overrides["enable_cut_in_response_constraint"] = (
+            cut_in_response_constraint_override == "true"
+        )
     overrides["route_corridor.expected_global_path_sha256"] = (
         _global_path_sha256(data_dir, selected_path)
     )
@@ -299,13 +311,26 @@ def _create_cut_in_risk_node(context, force=False):
     )
 
 
+def _cut_in_response_constraint_requested(context):
+    value = LaunchConfiguration(
+        "enable_cut_in_response_constraint", default=""
+    ).perform(context).strip().lower()
+    if value not in {"", "true", "false"}:
+        raise RuntimeError(
+            "enable_cut_in_response_constraint must be empty, true, or false"
+        )
+    return value == "true"
+
+
 def _create_cut_in_response_node(context):
     enabled = LaunchConfiguration(
         "cut_in_response", default="false"
     ).perform(context).strip().lower()
     if enabled not in {"true", "false"}:
         raise RuntimeError("cut_in_response must be true or false")
-    if enabled == "false":
+    # Enabling the planner-side constraint is useless without the response it
+    # consumes, so it also starts the response (and, below, the risk) node.
+    if enabled == "false" and not _cut_in_response_constraint_requested(context):
         return None
     package_share = get_package_share_directory("ad_planner")
     return Node(
@@ -326,9 +351,13 @@ def _create_planner_actions(context):
         "cut_in_response", default="false"
     ).perform(context).strip().lower()
     cut_in_risk_node = _create_cut_in_risk_node(context)
-    # The response node consumes /ad/planning/cut_in_risks, so enabling it also
-    # starts the cut-in risk node when it is not already requested.
-    if response_enabled == "true" and cut_in_risk_node is None:
+    # The response node consumes /ad/planning/cut_in_risks, so enabling it (or
+    # the planner-side constraint that consumes the response) also starts the
+    # cut-in risk node when it is not already requested.
+    if (
+        response_enabled == "true"
+        or _cut_in_response_constraint_requested(context)
+    ) and cut_in_risk_node is None:
         cut_in_risk_node = _create_cut_in_risk_node(context, force=True)
     cut_in_response_node = _create_cut_in_response_node(context)
     planning_nodes = [planner_node, road_corridor_mask_node]
@@ -375,6 +404,9 @@ def generate_launch_description():
             DeclareLaunchArgument("route_corridor_file", default_value=""),
             DeclareLaunchArgument("cut_in_risk", default_value="false"),
             DeclareLaunchArgument("cut_in_response", default_value="false"),
+            DeclareLaunchArgument(
+                "enable_cut_in_response_constraint", default_value=""
+            ),
             DeclareLaunchArgument("path_tracking_backend", default_value=""),
             DeclareLaunchArgument("target_speed_mps", default_value=""),
             DeclareLaunchArgument("perception_enabled", default_value=""),

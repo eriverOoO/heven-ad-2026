@@ -389,12 +389,17 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "route_corridor_file",
         "cut_in_risk",
         "cut_in_response",
+        "enable_cut_in_response_constraint",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
         "perception_enabled",
         "tuning_lease_required",
     }
+    assert perform_substitutions(
+        LaunchContext(),
+        arguments["enable_cut_in_response_constraint"].default_value,
+    ) == ""
     assert perform_substitutions(
         LaunchContext(), arguments["cut_in_response"].default_value
     ) == "false"

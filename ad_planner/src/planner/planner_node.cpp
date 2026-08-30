@@ -1,6 +1,7 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include <ad_interfaces/msg/cut_in_response.hpp>
 #include <ad_interfaces/msg/planner_status.hpp>
 #include <ad_interfaces/msg/predicted_object.hpp>
 #include <ad_interfaces/msg/predicted_object_array.hpp>
@@ -62,6 +63,7 @@
 #include "ad_planner/local_planning/common/road_corridor_grid.hpp"
 #include "ad_planner/local_planning/local_motion_factory.hpp"
 #include "ad_planner/planner/planner_node.hpp"
+#include "ad_planner/planning/cut_in_speed_constraint.hpp"
 #include "ad_planner/visualization/path_tracking_markers.hpp"
 #include "ad_planner/visualization/planner_visualization.hpp"
 #include "ad_planner/visualization/route_markers.hpp"
@@ -386,6 +388,20 @@ public:
         visualization_profile_sample_stride_);
     configure_local_motion(data_dir, controller_parameters, pid,
                            steering_limit);
+
+    // Opt-in cut-in longitudinal speed constraint. Default off: when disabled no
+    // subscription is created, the value below is never read, and planner
+    // behaviour is identical to a build without this feature.
+    cut_in_response_constraint_enabled_ =
+        declare_parameter<bool>("enable_cut_in_response_constraint", false);
+    cut_in_response_max_age_s_ = positive_finite_parameter(
+        declare_parameter<double>("cut_in_response_max_age_s", 0.5),
+        "cut_in_response_max_age_s");
+    // The path-tracking backend's own configured cruise target, used only as the
+    // ceiling for the min() clamp so the constraint can never raise the target.
+    // Re-read on every controller rebuild (see reset_controllers).
+    path_tracking_nominal_target_speed_mps_ =
+        read_path_tracking_nominal_target_speed(controller_parameters);
 
     planner_config_ = load_planner_config(steering_limit);
     context_.inputs.route_ready = true;
@@ -767,6 +783,9 @@ private:
     callbacks.stop_line = [this](const auto &message) {
       on_stop_line(message);
     };
+    callbacks.cut_in_response = [this](const auto &message) {
+      on_cut_in_response(message);
+    };
     callbacks.tuning_lease = [this]() {
       tuning_lease_received_ = true;
       tuning_lease_receipt_s_ = steady_now();
@@ -797,7 +816,8 @@ private:
         PlannerRosInterfaceConfig{
             road_gate_enabled_, planner_config_.traffic.stop_line_enabled,
             local_motion_backend_kind_ == LocalMotionBackendKind::kMppiNav2 &&
-                local_motion_runtime_ != nullptr},
+                local_motion_runtime_ != nullptr,
+            cut_in_response_constraint_enabled_},
         std::move(callbacks));
   }
 
@@ -818,6 +838,8 @@ private:
         throw std::runtime_error("local motion runtime is unavailable");
       }
       path_tracking_ = std::move(next_path_tracking);
+      path_tracking_nominal_target_speed_mps_ =
+          read_path_tracking_nominal_target_speed(parameters);
       local_motion_runtime_->replace_backend(std::move(next_local_motion));
       route_profile_markers_ = std::move(next_route_profile_markers);
       previous_local_trajectory_.reset();
@@ -833,6 +855,16 @@ private:
   }
 
   double steady_now() { return steady_clock_.now().seconds(); }
+
+  double read_path_tracking_nominal_target_speed(
+      RosControllerParameterProvider &parameters) {
+    return parameters.get_double(
+        (path_tracking_backend_name_ == "profile_stanley"
+             ? std::string("profile_stanley")
+             : std::string("stanley")) +
+            ".target_speed_mps",
+        16.25);
+  }
 
   void refresh_vehicle_observation() {
     auto &input = context_.inputs.status;
@@ -1111,6 +1143,44 @@ private:
     context_.inputs.stop_line = {true, true, steady_now(), message.data};
   }
 
+  void on_cut_in_response(const ad_interfaces::msg::CutInResponse &message) {
+    cut_in_response_message_ = message;
+    cut_in_response_received_ = true;
+    cut_in_response_receipt_steady_s_ = steady_now();
+  }
+
+  // The external upper speed limit the cut-in response asks the longitudinal
+  // path to honour this tick, already clamped so it can only ever lower the
+  // path-tracking target. std::nullopt means "no constraint" and is applied as a
+  // byte-identical no-op (the controller keeps its own desired speed).
+  std::optional<double> cut_in_response_target_speed_override() const {
+    if (!cut_in_response_constraint_enabled_ || !cut_in_response_received_) {
+      return std::nullopt;
+    }
+    CutInResponseConstraintInput input;
+    input.received = true;
+    input.fresh = context_.steady_time_s - cut_in_response_receipt_steady_s_ <=
+                  cut_in_response_max_age_s_;
+    input.active = cut_in_response_message_.active;
+    input.action = static_cast<int>(cut_in_response_message_.action);
+    input.requested_max_speed_valid =
+        cut_in_response_message_.requested_max_speed_valid;
+    input.requested_max_speed_mps =
+        static_cast<double>(cut_in_response_message_.requested_max_speed_mps);
+    const auto limit = cut_in_response_speed_limit(input);
+    if (!limit) {
+      return std::nullopt;
+    }
+    const double capped =
+        std::min(path_tracking_nominal_target_speed_mps_, *limit);
+    if (capped >= path_tracking_nominal_target_speed_mps_) {
+      // The request does not actually reduce the cruise target; stay a true
+      // no-op rather than re-injecting the nominal value.
+      return std::nullopt;
+    }
+    return capped;
+  }
+
   ControllerResult remember(ControllerResult result, std::string frame) {
     last_controller_result_ = result;
     last_result_frame_ = std::move(frame);
@@ -1118,11 +1188,14 @@ private:
   }
 
   ControllerResult run_path_tracking() {
+    const auto cut_in_target_override = cut_in_response_target_speed_override();
+    last_cut_in_constraint_limit_mps_ = cut_in_target_override;
     return remember(
         path_tracking_->update(context_.inputs.status.value.pose,
                                context_.inputs.status.value.speed_mps,
                                control_period_s_, 0,
-                               context_.inputs.status.value.gear),
+                               context_.inputs.status.value.gear,
+                               cut_in_target_override),
         "map");
   }
 
@@ -1567,6 +1640,7 @@ private:
   void tick() {
     context_.steady_time_s = steady_now();
     last_controller_result_.reset();
+    last_cut_in_constraint_limit_mps_.reset();
     // A tuning hold suppresses actuation but must not suppress read-only TF
     // and pose preparation. The tuner waits for inputs_ready before resetting
     // and releasing control, so skipping this work while held creates a
@@ -1614,6 +1688,15 @@ private:
     publish_command(result.command);
     publish_status(result);
     publish_path_tracking();
+    if (cut_in_response_constraint_enabled_) {
+      // Observability only: the active external cap this tick, or -1.0 when the
+      // constraint did not lower the target. Never gated on when disabled, so
+      // the default launch graph is unchanged.
+      ros_interfaces_->publish_cut_in_speed_limit(
+          last_cut_in_constraint_limit_mps_
+              ? static_cast<float>(*last_cut_in_constraint_limit_mps_)
+              : -1.0F);
+    }
     if (last_controller_result_) {
       publish_visualization(*last_controller_result_, last_result_frame_);
     }
@@ -1755,6 +1838,14 @@ private:
   std::optional<ControllerResult> last_controller_result_;
   std::string last_result_frame_{"map"};
   std::string path_tracking_backend_name_{"stanley"};
+
+  bool cut_in_response_constraint_enabled_{false};
+  bool cut_in_response_received_{false};
+  double cut_in_response_max_age_s_{0.5};
+  double cut_in_response_receipt_steady_s_{0.0};
+  double path_tracking_nominal_target_speed_mps_{16.25};
+  ad_interfaces::msg::CutInResponse cut_in_response_message_;
+  std::optional<double> last_cut_in_constraint_limit_mps_;
   visualization_msgs::msg::MarkerArray route_profile_markers_;
 
   std::unique_ptr<PlannerRosInterfaces> ros_interfaces_;
