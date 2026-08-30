@@ -95,6 +95,22 @@ PlannerRosInterfaces::PlannerRosInterfaces(rclcpp::Node &node,
         });
   }
 
+  if (config.cut_in_response_constraint_enabled) {
+    cut_in_response_subscription_ =
+        node.create_subscription<ad_interfaces::msg::CutInResponse>(
+            node.declare_parameter<std::string>(
+                "topics.cut_in_response", "/ad/planning/cut_in_response"),
+            rclcpp::QoS(1).reliable(),
+            [this](ad_interfaces::msg::CutInResponse::ConstSharedPtr message) {
+              callbacks_.cut_in_response(*message);
+            });
+    cut_in_speed_limit_publisher_ =
+        node.create_publisher<std_msgs::msg::Float32>(
+            node.declare_parameter<std::string>(
+                "topics.cut_in_speed_limit", "/ad/planner/cut_in_speed_limit"),
+            reliable_qos);
+  }
+
   tuning_hold_service_ = node.create_service<std_srvs::srv::SetBool>(
       "/ad/planner/hold_control",
       [this](const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -137,6 +153,15 @@ void PlannerRosInterfaces::publish_command(
 void PlannerRosInterfaces::publish_status(
     const ad_interfaces::msg::PlannerStatus &message) {
   status_publisher_->publish(message);
+}
+
+void PlannerRosInterfaces::publish_cut_in_speed_limit(float value) {
+  if (!cut_in_speed_limit_publisher_) {
+    return;
+  }
+  std_msgs::msg::Float32 message;
+  message.data = value;
+  cut_in_speed_limit_publisher_->publish(message);
 }
 
 } // namespace ad_planner

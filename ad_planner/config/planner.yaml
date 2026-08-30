@@ -29,6 +29,16 @@ ad_planner:
     local_motion.maximum_steering_rate_radps: 2.0943951023931953
     road_gate.enabled: true
 
+    # Opt-in: apply the cut-in response as an upper bound on the path-tracking
+    # longitudinal target (final target = min(existing target, cut-in limit)).
+    # Default off -> no subscription, no behaviour change. SLOWDOWN caps at the
+    # requested speed; HOLD caps at 0.0. Comfortable / maximum deceleration and
+    # every cut-in threshold stay owned by Cut-in Response and are not repeated
+    # here. cut_in_response_max_age_s is the consumer-side freshness timeout;
+    # absent or stale -> no constraint.
+    enable_cut_in_response_constraint: false
+    cut_in_response_max_age_s: 0.5
+
     # Current Stanley baseline: dynamic steering preview + curvature speed cap.
     stanley.target_speed_mps: 16.25
     stanley.cross_track_gain: 0.91
@@ -196,6 +206,9 @@ ad_planner:
     topics.predicted_objects: "/ad/perception/objects/predicted"
     topics.traffic_signal: "/ad/perception/traffic_signal"
     topics.stop_line: "/ad/perception/stop_line"
+    # Only subscribed / published when enable_cut_in_response_constraint is true.
+    topics.cut_in_response: "/ad/planning/cut_in_response"
+    topics.cut_in_speed_limit: "/ad/planner/cut_in_speed_limit"
     topics.command: "/ad/control/command"
     topics.planner_status: "/ad/planner/status"
     topics.path: "/ad/planner/path"
