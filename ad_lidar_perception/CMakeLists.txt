@@ -145,6 +145,24 @@ target_include_directories(ad_lidar_perception_imm_predictor PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>")
 
+add_library(ad_lidar_perception_dynamic_object_risk
+  src/planning/dynamic_object_risk.cpp
+  src/planning/dynamic_object_risk_node.cpp)
+target_compile_features(
+  ad_lidar_perception_dynamic_object_risk PUBLIC cxx_std_17)
+target_include_directories(ad_lidar_perception_dynamic_object_risk PUBLIC
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/planning>"
+  "$<INSTALL_INTERFACE:include>")
+ament_target_dependencies(
+  ad_lidar_perception_dynamic_object_risk
+  ad_interfaces
+  builtin_interfaces
+  diagnostic_msgs
+  geometry_msgs
+  nav_msgs
+  rclcpp)
+
 if(AD_WITH_AUTOWARE)
   add_executable(ad_adaptive_euclidean_cluster_node
     src/clustering/main.cpp
@@ -210,6 +228,12 @@ ament_target_dependencies(ad_lidar_perception_node
   tf2_geometry_msgs
   tf2_ros
   tf2_sensor_msgs)
+
+add_executable(ad_dynamic_object_risk_node src/planning/main.cpp)
+target_compile_features(ad_dynamic_object_risk_node PUBLIC cxx_std_17)
+target_link_libraries(
+  ad_dynamic_object_risk_node ad_lidar_perception_dynamic_object_risk)
+ament_target_dependencies(ad_dynamic_object_risk_node rclcpp)
 
 add_executable(ad_dynamic_occupancy_grid_node
   src/occupancy_grid/dynamic_main.cpp
@@ -325,7 +349,9 @@ install(TARGETS
   ad_lidar_perception_grid_combiner
   ad_lidar_perception_cv_predictor
   ad_lidar_perception_imm_predictor
+  ad_lidar_perception_dynamic_object_risk
   ad_lidar_perception_node
+  ad_dynamic_object_risk_node
   ad_dynamic_occupancy_grid_node
   ad_combined_occupancy_grid_node
   ad_point_layout_adapter_node
@@ -421,6 +447,18 @@ if(BUILD_TESTING)
     ad_lidar_perception_adaptive_cluster)
   ament_add_gtest(test_imm_predictor test/test_imm_predictor.cpp)
   target_link_libraries(test_imm_predictor ad_lidar_perception_imm_predictor)
+  ament_add_gtest(
+    test_dynamic_object_risk test/test_dynamic_object_risk.cpp)
+  target_link_libraries(
+    test_dynamic_object_risk ad_lidar_perception_dynamic_object_risk)
+  ament_target_dependencies(
+    test_dynamic_object_risk
+    ad_interfaces
+    builtin_interfaces
+    diagnostic_msgs
+    geometry_msgs
+    nav_msgs
+    rclcpp)
   if(AD_WITH_AUTOWARE)
     ament_add_gtest(
       test_autoware_prediction_adapter
@@ -467,6 +505,15 @@ if(BUILD_TESTING)
     test_ab3dmot_heading test/test_ab3dmot_heading.py)
   ament_add_pytest_test(
     test_ab3dmot_imm test/test_ab3dmot_imm.py)
+  add_launch_test(
+    test/test_dynamic_object_risk_launch.py
+    TARGET test_dynamic_object_risk_launch
+    TIMEOUT 120
+    ENV
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "ROS_DOMAIN_ID=94"
+      "ROS_LOCALHOST_ONLY=1")
   ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
@@ -550,7 +597,8 @@ ament_export_libraries(
   ad_lidar_perception_dynamic_grid
   ad_lidar_perception_grid_combiner
   ad_lidar_perception_cv_predictor
-  ad_lidar_perception_imm_predictor)
+  ad_lidar_perception_imm_predictor
+  ad_lidar_perception_dynamic_object_risk)
 ament_export_dependencies(
   ad_interfaces
   builtin_interfaces

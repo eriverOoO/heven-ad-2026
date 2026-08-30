@@ -98,6 +98,7 @@ def launch_context(config, **overrides):
         "start_ground_segmentation": "true",
         "start_visualization": "false",
         "start_rviz": "false",
+        "dynamic_object_risk": "false",
         "ground_config": "/tmp/ground.yaml",
         "sensor_config": "/tmp/sensors.yaml",
         "sensor_profile": "",
@@ -477,6 +478,7 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "start_ground_segmentation",
         "start_visualization",
         "start_rviz",
+        "dynamic_object_risk",
         "ground_config",
         "sensor_config",
         "sensor_profile",
@@ -660,6 +662,29 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
     assert dict(prediction.kwargs["launch_arguments"]) == {
         "runtime_summary_interval_frames": "180",
     }
+
+
+def test_dynamic_object_risk_is_opt_in_and_backend_agnostic(tmp_path, monkeypatch):
+    config = write_composition(
+        tmp_path,
+        composition_text(
+            detector="euclidean_cluster", tracker="autoware", dynamic=True
+        ),
+    )
+    _module, off = record_setup(monkeypatch, config)
+    assert "dynamic_object_risk.launch.py" not in [a.source for a in off]
+
+    for backend in ("autoware", "ab3dmot"):
+        _module, actions = record_setup(
+            monkeypatch, config, tracker_backend=backend,
+            dynamic_object_risk="true",
+        )
+        names = [a.source for a in actions]
+        assert names.count("dynamic_object_risk.launch.py") == 1
+        # it always sits after the shared prediction launch it consumes.
+        assert names.index("dynamic_object_risk.launch.py") > names.index(
+            "prediction.launch.py"
+        )
 
 
 def test_ab3dmot_override_rejects_non_euclidean_detector(tmp_path, monkeypatch):

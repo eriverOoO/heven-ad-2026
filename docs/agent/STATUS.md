@@ -1,5 +1,134 @@
 # STATUS
 
+## Dynamic Object Risk Interface v1 — COMPLETE
+
+Branch `feat/dynamic-object-risk-interface`, from `main`
+`ef1fbc57c35ad7b0ae68049d6b033dfebee84340` (PR #12 merged). First step of
+"make tracking/prediction useful to the planner": a **backend-agnostic**,
+**policy-free** node that converts the canonical `PredictedObjectArray` +
+ego state into planner-facing per-object relative-motion / closing / TTC /
+CPA metrics. No GO / STOP / YIELD / brake / cut-in / merge / lane logic --
+those consume this interface later.
+
+**Audit (Phase 1).** No existing planner-facing relative-motion / TTC /
+closing-speed / CPA interface exists (0 hits repo-wide for
+`ttc|time_to_collision|closing_speed|relative_velocity|closest_approach|cut_in`).
+`future_road_risk` (corridor-intersection boolean activation),
+`DynamicObstacleStatus` (camera foot-point hazard), `prediction_admission`
+(prediction-array staleness gate) are all different concerns. **New
+interface created**, not an extension.
+
+**Ego state (Phase 2).** `/ad/localization/odometry` (`nav_msgs/Odometry`):
+pose in `odom`, longitudinal speed from `twist.twist.linear.x`. On the
+default `gnss_imu` localization backend the twist carries only a real
+longitudinal `x` (wheel speed); lateral and yaw-rate are structurally
+zero, so the node treats ego lateral velocity / yaw rate as **0**
+(non-holonomic). Ego velocity is never estimated from tracks or TF
+differencing. `ego_twist_contradiction_frames` diagnostic counts frames
+where the ego pose moves at ~0 reported speed.
+
+**Message (Phase 3, `ad_interfaces`).** `DynamicObjectRisk` +
+`DynamicObjectRiskArray`. Fields: identity (UUID, class, existence);
+current relative state (`x_rel_m`, `y_rel_m`, `distance_m`, `vx_rel_mps`,
+`vy_rel_mps`, `relative_speed_mps`); closing (`range_rate_mps` radial
+primary, `longitudinal_closing_mps`); `ttc_valid` + `ttc_s`; `cpa_valid` +
+`cpa_time_s` + `cpa_distance_m`; `predicted_min_separation_valid` + `_m` +
+`_time_s`; `position_uncertainty_m`. **No `risk_score`, no GO/STOP/YIELD.**
+No field is ever NaN/Inf; invalid metric => `*_valid=false`, value `0.0`.
+
+**Conventions (Phase 4/5/6/7).** Output frame **`base_link`** (`+x` fwd,
+`+y` left). `v_rel = v_object_world - v_ego_world`. `range_rate` =
+`-(r . v_rel)/|r|` (sign-stable all quadrants). TTC = constant-relative-
+velocity contact of two **circumscribed circles** (object
+`0.5*hypot(L,W)`, ego `hypot(2.5, 1.1)`) -- **object orientation is never
+read**, so AB3DMOT's unavailable-yaw and Autoware's real-yaw give the same
+TTC. TTC invalid when separating / no root / beyond `ttc_horizon_s`.
+CPA = minimiser of `||r + v t||^2` on `[0, cpa_horizon_s]`.
+`predicted_min_separation` uses the discrete `states[]` vs a CV ego
+rollout, kept separate from the kinematic CPA. **Implemented, Phase 7.**
+
+**Backend independence.** No `if backend == ab3dmot` anywhere. The pure
+core is a function on plain structs with no orientation input; the node
+reads only the canonical message.
+`test_dynamic_object_risk.cpp:ObjectOrientationNeverAffectsRiskOutput`
+(AB3DMOT identity quaternion vs real Autoware yaw, same physical state ->
+identical output) and
+`test_lidar_perception_launch.py:test_dynamic_object_risk_is_opt_in_and_backend_agnostic`
+lock it. Backend equivalence is validated by construction + unit test;
+the bounded runtime replay exercised the AB3DMOT path only.
+
+**Node (`ad_lidar_perception`, C++).** `ad_dynamic_object_risk_node`:
+`/ad/perception/objects/predicted` + `/ad/localization/odometry` ->
+`/ad/planning/dynamic_object_risks` (+ `/diagnostics`). Fail-closed:
+rejects malformed/non-positive/duplicate/backward/stale/future prediction
+stamps, wrong frame, missing/stale ego; large backward jump = sim-time
+reset; individual malformed object skipped+counted, frame still publishes;
+empty objects = valid empty array. Config
+`config/planning/dynamic_object_risk.yaml` -- only semantic params, no
+scenario thresholds.
+
+**Launch (Phase 18).** Standalone `dynamic_object_risk.launch.py`. Opt-in
+from `lidar_perception.launch.py` via `dynamic_object_risk:=true` (default
+**off**, zero behaviour change), works for `tracker_backend:=autoware` and
+`:=ab3dmot` through the shared prediction output. No planner node consumes
+it yet -- observational only.
+
+**Bounded replay (Phase 14-17).** 180 frames `static_20260805_003151`,
+AB3DMOT -> Prediction -> Risk, synthetic canonical odometry (the replay
+has none). **Arm A (stationary ego, physically correct):** 180 pred -> 180
+risk msgs; 1334 objects in == out; 0 rejected frames/objects; every frame
+`base_link`; **0 non-finite** across 1334 x 14 fields; TTC valid 215 (35
+with real `ttc_s` 0.06-5.96 s, median 2.50; 180 near-origin overlaps ->
+0.0); CPA valid 645; predicted-min-sep valid 1334; rel distance
+med/p95/max 26.2/84.8/100.4 m; rel speed 0.0/14.1/19.2 m/s; CPA min-sep
+med/p10/min 17.7/4.3/0.18 m; **latency median 0.011 / p95 0.023 / max
+0.058 ms**; one publisher before/after; 0 NaN/Inf/exceptions.
+**Arm B (synthetic moving ego yaw 0.4, 8 m/s -- mechanical check only):**
+164 in/out, 1275 objects in/out, 0 rejected, 0 non-finite; every static
+object `vx_rel = -8.0`, `range_rate ~ -8` (separating) confirming the
+rotation + ego-velocity subtraction run on real data.
+`morai_cam4_20260813_163222` (only moving-ego bag) unusable: host lacks
+`rosbag2_storage_mcap`.
+
+**Tests.** `test_dynamic_object_risk.cpp` **38/38** (20 geometry + radial
+sign + predicted-min-sep + uncertainty + overlap/horizon/budget +
+object-at-origin + 12 `build_risk_frame` stale/invalid/orientation-
+invariance cases).
+`test_dynamic_object_risk_launch.py` live node pass. `test_interface_contract.py`
+6/6 (+ new: risk message stable, no policy fields). Broad regression
+(`test_ab3dmot_*` minus kalmannet + competition + tracking + occupancy +
+pipeline + interface) **240 passed / 1 skipped**. C++ ctests
+`test_dynamic_object_risk` / `test_imm_predictor` / `test_cv_predictor` /
+`test_dynamic_grid_builder` / `test_autoware_prediction_adapter` +
+`test_dynamic_object_risk_launch` **6/6**. `test_lidar_perception_launch.py`
++ `test_selection_config.py` **97 passed**. Isolated `colcon build
+--packages-select ad_interfaces ad_lidar_perception --symlink-install`
+clean.
+
+**No policy implemented (Phase 21).** No emergency/warning threshold, no
+cut-in/roundabout/merge decision, no behaviour-tree change, no planner
+cost change. Output is facts only.
+
+**Files:** `ad_interfaces/msg/DynamicObjectRisk.msg`,
+`DynamicObjectRiskArray.msg`, `ad_interfaces/CMakeLists.txt`,
+`ad_interfaces/test/test_interface_contract.py`;
+`ad_lidar_perception` `include/.../planning/dynamic_object_risk.hpp`,
+`src/planning/{dynamic_object_risk.cpp,dynamic_object_risk_node.hpp,
+dynamic_object_risk_node.cpp,main.cpp}`,
+`config/planning/dynamic_object_risk.yaml`,
+`launch/dynamic_object_risk.launch.py`, `launch/lidar_perception.launch.py`,
+`CMakeLists.txt`, `package.xml`,
+`test/{test_dynamic_object_risk.cpp,test_dynamic_object_risk_launch.py,
+test_lidar_perception_launch.py}`;
+`docs/planning/dynamic_object_risk_interface.md`, this file.
+
+**Recommended next task:** Cut-in Risk v1 using the Dynamic Object Risk
+Interface.
+
+## Dynamic Object Risk Interface result: **COMPLETE**
+
+---
+
 ## AB3DMOT yaw-rate uncertainty contract — COMPLETE (docs + tests only, no runtime change)
 
 Branch `fix/ab3dmot-yaw-rate-contract`, from `main`
