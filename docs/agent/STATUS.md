@@ -1,5 +1,44 @@
 # STATUS
 
+## Competition MOT Baseline v1 — COMPLETE
+
+Branch `feat/competition-mot-baseline-v1`, resumed from `main`
+`2ff2301541cf0602912042bdcd87caf4e2b75f10`. Added an opt-in, model-free
+Adaptive Euclidean -> AB3DMOT baseline with explicit Euclidean BEV 3 m,
+Hungarian, Linear KF, yaw-unobserved, `min_hits=1`, `max_age=2` settings.
+Autoware remains the implicit and explicit default; live graph checks show
+exactly one canonical tracked-object publisher for all backend selections.
+
+The velocity contract is resolved: AB3DMOT keeps world/odom Cartesian
+velocity internally, while the ROS adapter now rotates velocity and its
+covariance into Autoware's object-local `TrackedObject.twist` convention.
+HEVEN prediction's existing inverse rotation therefore recovers world motion.
+Prediction and Dynamic OGM remain intentionally disabled for the AB3DMOT
+branch and were not modified.
+
+Bounded smoke: first 180 exported frames from existing MORAI
+`static_20260805_003151`, original stamps
+`1785857513201006723..1785857541916511060` ns. Full crop -> Patchwork++ ->
+finite filter -> Adaptive Euclidean -> AB3DMOT graph produced 180 detection
+and 180 tracked messages; stamp sequences matched exactly and were strictly
+monotonic; frames were `lidar_link -> odom`; 255 births, 246 deletions, 9 live
+tracks; median/p95/max tracker step 0.755203/1.825568/3.827874 ms; zero
+non-finite objects, exceptions, duplicate publishers, or lingering processes.
+Execution evidence only, not accuracy validation.
+
+The dirty tree started with 1,918 tracked changes: 1,907 were CRLF-only and
+were excluded; no unknown substantive user edit was found. The AB3DMOT
+executable has an LF shebang; no repository-wide normalization was performed.
+Full detail: `docs/agent/competition_mot_baseline_audit.md` and
+`docs/perception/competition_mot_baseline.md`.
+
+**Recommended next task:** a separate opt-in AB3DMOT -> HEVEN Prediction ->
+Dynamic OGM integration validation focused on unavailable-orientation
+handling, world-motion round trip, exact-stamp pairing, occupancy finiteness,
+and runtime. Do not combine it with estimator/prediction-model tuning.
+
+---
+
 ## POST-FREEZE EXTENSION 2 — Camera + LiDAR Fusion, Stage 3 — COMPLETE (CASE B)
 
 Branch `feat/tracking-preset-replay`, HEAD

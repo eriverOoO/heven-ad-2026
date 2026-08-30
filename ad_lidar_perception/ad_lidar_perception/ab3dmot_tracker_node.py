@@ -12,7 +12,10 @@ both can run simultaneously off the same detections.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
+import statistics
+import time
 
 import rclpy
 from autoware_perception_msgs.msg import (
@@ -77,6 +80,7 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("imm_ctrv_to_ctrv_probability", 0.95)
         self.declare_parameter("kalmannet_checkpoint", "")
         self.declare_parameter("kalmannet_device", "cpu")
+        self.declare_parameter("runtime_summary_interval_frames", 0)
 
         self.enabled = bool(self.get_parameter("enabled").value)
         self.target_frame = str(self.get_parameter("target_frame").value)
@@ -86,6 +90,15 @@ class Ab3dmotTrackerNode(Node):
 
         self._tracker: AB3DMOTTracker | None = None
         self._last_stamp_ns: int | None = None
+        self._runtime_summary_interval_frames = int(
+            self.get_parameter("runtime_summary_interval_frames").value
+        )
+        if self._runtime_summary_interval_frames < 0:
+            raise ValueError("runtime_summary_interval_frames must be >= 0")
+        self._step_latency_ms: list[float] = []
+        self._tracks_created = 0
+        self._tracks_deleted = 0
+        self._previous_live_track_ids: set[int] = set()
         if self.enabled:
             self._tracker = self._build_tracker()
 
@@ -146,16 +159,11 @@ class Ab3dmotTrackerNode(Node):
         if decision is TimestampDecision.SKIP_DUPLICATE:
             self.get_logger().warn("rejected DetectedObjects: duplicate timestamp")
             return
-        if decision is TimestampDecision.RESET_ROLLBACK:
-            # MORAI resets simulated time together with object tracks --
-            # reset AB3DMOT's experimental state cleanly instead of ever
-            # propagating a negative dt into the KF, mirroring
-            # AutowarePredictionNode's own clock-rollback handling.
-            self.get_logger().info(
-                "detected clock rollback; resetting the experimental AB3DMOT tracker"
+        if decision is TimestampDecision.REJECT_ROLLBACK:
+            self.get_logger().warn(
+                "rejected DetectedObjects: timestamp moved backwards"
             )
-            self._tracker = self._build_tracker()
-            self._last_stamp_ns = None
+            return
 
         transform = None
         if msg.objects:
@@ -175,20 +183,55 @@ class Ab3dmotTrackerNode(Node):
 
         timestamp_seconds = stamp_ns * 1.0e-9
         try:
+            step_started = time.perf_counter()
             states = self._tracker.step(detections, timestamp_seconds)
+            step_latency_ms = (time.perf_counter() - step_started) * 1000.0
         except ValueError as error:
-            # Should not happen: the duplicate/rollback gating above already
+            # Should not happen: the non-increasing timestamp gating above already
             # guarantees a strictly-increasing timestamp reaches step().
             # Kept as a defensive backstop, matching this repo's existing
             # reject-rather-than-crash policy for malformed timing.
             self.get_logger().error(f"AB3DMOT tracker rejected step: {error}")
             return
 
+        self._record_runtime_metrics(step_latency_ms)
+
         output = tracked_states_to_message(
-            states, msg.header.stamp, self.target_frame, MESSAGE_TYPES
+            states,
+            msg.header.stamp,
+            self.target_frame,
+            MESSAGE_TYPES,
+            orientation_available=(
+                self._tracker.config.yaw_measurement_mode != "unobserved"
+            ),
         )
         self.publisher.publish(output)
         self._last_stamp_ns = stamp_ns
+
+    def _record_runtime_metrics(self, step_latency_ms: float) -> None:
+        if self._tracker is None:
+            return
+        current_ids = {track.track_id for track in self._tracker.tracks}
+        self._tracks_created += len(current_ids - self._previous_live_track_ids)
+        self._tracks_deleted += len(self._previous_live_track_ids - current_ids)
+        self._previous_live_track_ids = current_ids
+        self._step_latency_ms.append(step_latency_ms)
+
+        interval = self._runtime_summary_interval_frames
+        if interval <= 0 or len(self._step_latency_ms) % interval != 0:
+            return
+        ordered = sorted(self._step_latency_ms)
+        p95_index = max(0, math.ceil(0.95 * len(ordered)) - 1)
+        self.get_logger().info(
+            "AB3DMOT_RUNTIME_SUMMARY "
+            f"frames={len(ordered)} "
+            f"tracks_created={self._tracks_created} "
+            f"tracks_deleted={self._tracks_deleted} "
+            f"live_tracks={len(current_ids)} "
+            f"median_step_ms={statistics.median(ordered):.6f} "
+            f"p95_step_ms={ordered[p95_index]:.6f} "
+            f"max_step_ms={ordered[-1]:.6f}"
+        )
 
 
 def main() -> None:

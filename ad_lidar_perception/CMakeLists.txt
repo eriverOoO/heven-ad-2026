@@ -450,6 +450,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_ab3dmot_core test/test_ab3dmot_core.py)
   ament_add_pytest_test(
+    test_competition_mot_baseline test/test_competition_mot_baseline.py)
+  ament_add_pytest_test(
     test_ab3dmot_ros test/test_ab3dmot_ros.py)
   ament_add_pytest_test(
     test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)

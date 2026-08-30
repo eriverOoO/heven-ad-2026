@@ -209,3 +209,19 @@ def test_morai_classical_profile_is_only_cluster_tracker_and_imm():
     assert selection.occupancy.static_enabled is False
     assert selection.occupancy.dynamic_enabled is False
     assert selection.occupancy.publish_combined is False
+
+
+def test_competition_mot_profile_selects_euclidean_and_ab3dmot():
+    profile = (
+        Path(__file__).resolve().parents[1]
+        / "config"
+        / "lidar_perception_competition_mot_baseline_v1.yaml"
+    )
+    selection = load_selection(profile)
+
+    assert selection.detector.backend == "euclidean_cluster"
+    assert selection.detector.build_only is False
+    assert selection.tracker.backend == "ab3dmot"
+    assert selection.occupancy.static_enabled is True
+    assert selection.occupancy.dynamic_enabled is False
+    assert selection.occupancy.publish_combined is False
