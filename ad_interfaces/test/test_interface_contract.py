@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from ad_interfaces.msg import (
+    CutInResponse,
     CutInRisk,
     CutInRiskArray,
     DynamicObjectRisk,
@@ -192,6 +193,74 @@ def test_cut_in_risk_interface_is_stable_and_policy_free():
         "steer_right", "yield", "go",
     }
     fields = {name.lower() for name in CutInRisk.get_fields_and_field_types()}
+    assert fields.isdisjoint(forbidden)
+
+
+EXPECTED_CUT_IN_RESPONSE_DECLARATION = """\
+uint8 ACTION_NONE=0
+uint8 ACTION_SLOWDOWN=1
+uint8 ACTION_HOLD=2
+uint8 REASON_NONE=0
+uint8 REASON_APPROACHING_ENTRY=1
+uint8 REASON_COLLISION_CONFLICT=2
+uint8 REASON_SMALL_PREDICTED_CLEARANCE=3
+std_msgs/Header header
+uint8 action
+bool active
+uint8 reason
+uint16 candidate_count
+unique_identifier_msgs/UUID source_object_id
+uint8 source_side
+bool requested_max_speed_valid
+float32 requested_max_speed_mps
+float32 ego_speed_mps
+float32 required_deceleration_mps2
+float32 route_s_rel_m
+float32 predicted_entry_route_s_rel_m
+bool predicted_entry_valid
+float32 predicted_entry_time_s
+float32 lateral_velocity_toward_corridor_mps
+bool ttc_valid
+float32 ttc_s
+bool cpa_valid
+float32 cpa_time_s
+float32 cpa_distance_m
+bool predicted_min_separation_valid
+float32 predicted_min_separation_m
+"""
+
+
+def test_cut_in_response_is_a_longitudinal_request_not_a_command():
+    assert _declarations(PACKAGE_ROOT / "msg" / "CutInResponse.msg") == (
+        EXPECTED_CUT_IN_RESPONSE_DECLARATION.strip()
+    )
+    message = CutInResponse()
+    assert message.action == CutInResponse.ACTION_NONE
+    assert message.active is False
+    assert message.reason == CutInResponse.REASON_NONE
+    assert message.requested_max_speed_valid is False
+    assert message.requested_max_speed_mps == 0.0
+    # A planner-facing request only: no actuator, steering, gear, or path field.
+    forbidden = {
+        "brake",
+        "brake_percentage",
+        "throttle",
+        "throttle_percentage",
+        "steering_angle",
+        "steer_left",
+        "steer_right",
+        "steering",
+        "gear",
+        "trajectory",
+        "path",
+        "lane_change",
+        "risk_score",
+        "acceleration_command",
+        "deceleration_command",
+    }
+    fields = {
+        name.lower() for name in CutInResponse.get_fields_and_field_types()
+    }
     assert fields.isdisjoint(forbidden)
 
 

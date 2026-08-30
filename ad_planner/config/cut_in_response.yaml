@@ -1,0 +1,28 @@
+ad_cut_in_response:
+  ros__parameters:
+    topics.cut_in_risks: "/ad/planning/cut_in_risks"
+    topics.odometry: "/ad/localization/odometry"
+    topics.output: "/ad/planning/cut_in_response"
+    topics.diagnostics: "/ad/planning/cut_in_response/diagnostics"
+
+    # Input freshness. A rejected frame is not published; a consumer must apply
+    # its own freshness timeout and treat missing responses as no constraint.
+    maximum_input_age_s: 0.5
+    maximum_odometry_skew_s: 0.5
+    maximum_future_skew_s: 0.1
+
+    # Physical policy parameters only. No score weights or risk bands.
+    # longitudinal_standoff_m: route-relative clearance the ego keeps to the
+    #   cut-in station (~ front bumper 3.845 m + a fixed margin). Also the
+    #   threshold for the CPA-distance and predicted-minimum-separation holds.
+    longitudinal_standoff_m: 6.0
+    # comfortable_deceleration_mps2 mirrors perception.braking_deceleration_mps2.
+    comfortable_deceleration_mps2: 1.8
+    # maximum_deceleration_mps2 stays within the measured IONIQ 5 brake envelope
+    # and also sets the TTC hold threshold ttc_s <= ego_speed / this value.
+    maximum_deceleration_mps2: 3.0
+    # A slowdown below this speed is escalated to a hold.
+    minimum_response_speed_mps: 1.0
+
+    maximum_risks: 256
+    runtime_summary_interval_frames: 200

@@ -388,12 +388,16 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "path_file",
         "route_corridor_file",
         "cut_in_risk",
+        "cut_in_response",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
         "perception_enabled",
         "tuning_lease_required",
     }
+    assert perform_substitutions(
+        LaunchContext(), arguments["cut_in_response"].default_value
+    ) == "false"
     assert perform_substitutions(LaunchContext(), arguments["config_file"].default_value) == str(
         PACKAGE / "config" / "planner.yaml"
     )

@@ -1,5 +1,81 @@
 # STATUS
 
+## Cut-in Response v1 — COMPLETE
+
+Branch `feat/cut-in-response-v1`, from merged PR #14 main
+`fe034c9e4f000580f7e3f4c78c68cd15402e623d` (tree byte-identical to PR #14 head
+`ef6de5f`). First planner-response policy layer: an opt-in node that turns the
+factual `CutInRiskArray` frame plus ego longitudinal speed into a single
+planner-facing longitudinal request `/ad/planning/cut_in_response`
+(`ad_interfaces/msg/CutInResponse`). No actuator, steering, path, trajectory,
+gear, lane-change, BehaviorTree, or DBW output; `planner_ros_interfaces.cpp`
+untouched, so production driving behaviour is unchanged and **no production
+planner consumes the request yet**.
+
+No reusable generic planner-facing longitudinal-constraint interface exists (the
+`ad_planner` node is monolithic and emits `ad_morai_interfaces/CtrlCmd`
+directly), so a new narrow request message was created. Opt-in via
+`planner.launch.py cut_in_response:=true` (default `false`; also starts
+`ad_cut_in_risk`) or standalone `cut_in_response.launch.py`.
+
+Policy states `ACTION_NONE / ACTION_SLOWDOWN / ACTION_HOLD`. Only
+`cut_in_candidate` objects are considered. Per candidate: `station_ahead =
+min(route_s_rel_m, predicted_entry_route_s_rel_m)` (route stations only -- 2-D
+separations are never mixed into headroom); `station_ahead <= 0` -> NONE
+(merging beside/behind ego); else `available = station_ahead -
+longitudinal_standoff_m`, `a_req = v_ego^2 / (2*available)`,
+`v_req = sqrt(2*comfortable_deceleration*available)` --
+`a_req <= comfortable` NONE, `a_req <= maximum` and `v_req >= min_response`
+SLOWDOWN at `v_req`, else HOLD. A valid `ttc_s <= v_ego/maximum_deceleration`
+raises to HOLD. `cpa_distance_m` / `predicted_min_separation_m` are reported but
+never drive the action (a completed merge always ends near zero separation).
+Monotonic in entry station, TTC, and ego speed; entry *time* is reported only.
+Multi-object: most restrictive action, then smallest requested speed, then
+smallest UUID. Stateless -- exactly one response per accepted frame, never
+latched, no release/activation-delay parameter (Cut-in Risk v1's replay showed
+no chatter). 9 physical config params, no score bands.
+
+Runtime: canonical Cut-in Risk v1 scenario through all three production nodes
+with ego ramp `4.0 -> 10.0 m/s` -> 31 risk frames / 31 response frames, sequence
+`NONE (0.0-0.7 s) -> HOLD (0.8-2.3 s) -> NONE (2.4-3.0 s)`, first active at
+`0.8 s` (true corridor entry `2.2 s`, `1.4 s` lead), source alternates between
+the mirrored UUIDs, 0 negative-control responses, 0 NaN/Inf, latency
+median/p95/max `0.0036 / 0.0039 / 0.0041 ms`. A separate live policy replay
+(synthetic risks, fixed `8 m/s`, station swept `45 -> 7 m`) shows
+`NONE, NONE, NONE, SLOWDOWN, HOLD, HOLD, HOLD`, exact left/right symmetry, and
+`HOLD` on the nearer of two candidates. Negative controls (parallel-adjacent /
+moving-away / crossing) are never candidates so never respond: `0 / 0 / 0`.
+
+Tests: `test_cut_in_response.cpp` 35 gtest cases, `test_interface_contract.py`
+8/8, `test_cut_in_response_launch.py` 3, `test_cut_in_response_runtime.py` +
+`test_cut_in_response_policy.py` live. Focused `ad_planner` ctest **37 / 38**;
+the one failure `test_mppi_nav2_launch` is the pre-existing optional-Nav2
+blocker (`nav2_controller` absent), untouched by this change.
+`test_dynamic_object_risk` gtest unchanged/passing. Isolated builds of
+`ad_interfaces` and `ad_planner` pass; `behaviortree_cpp_v3 3.8.7` built from
+source into `~/projects/bt_ws` because `ros-humble-behaviortree-cpp-v3` is not
+apt-installed on this host.
+
+Files: `ad_interfaces/msg/CutInResponse.msg`, `ad_interfaces/CMakeLists.txt`,
+`ad_interfaces/test/test_interface_contract.py`;
+`ad_planner/include/ad_planner/planning/cut_in_response.hpp`,
+`ad_planner/src/planning/{cut_in_response.cpp,cut_in_response_node.hpp,
+cut_in_response_node.cpp,cut_in_response_main.cpp}`,
+`ad_planner/config/cut_in_response.yaml`,
+`ad_planner/launch/cut_in_response.launch.py`,
+`ad_planner/launch/planner.launch.py`, `ad_planner/CMakeLists.txt`,
+`ad_planner/test/{test_cut_in_response.cpp,test_cut_in_response_launch.py,
+test_cut_in_response_runtime.py,test_cut_in_response_policy.py,
+test_planner_launch.py}`; `docs/planning/cut_in_response_v1.md`, this file.
+
+**Recommended next task:** Planner Constraint Integration v1 -- connect the
+Cut-in Response longitudinal request to the existing planner speed/trajectory
+constraint path while keeping steering avoidance separate.
+
+## Cut-in Response v1 result: **COMPLETE**
+
+---
+
 ## Cut-in Risk v1 — COMPLETE
 
 Branch `feat/cut-in-risk-v1`, from merged PR #13 main `653fad390c3b41d5b56215d2ae271bb896d40916`.

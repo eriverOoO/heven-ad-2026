@@ -55,6 +55,7 @@ add_library(ad_planner_core
   src/local_planning/mppi_nav2/mppi_follow_path_state.cpp
   src/local_planning/mppi_nav2/mppi_nav2_backend.cpp
   src/planning/cut_in_risk.cpp
+  src/planning/cut_in_response.cpp
   src/visualization/path_tracking_markers.cpp
   src/visualization/planner_visualization.cpp
   src/visualization/route_markers.cpp)
@@ -157,6 +158,21 @@ ament_target_dependencies(
   tf2_geometry_msgs
   tf2_ros)
 
+add_executable(ad_cut_in_response_node
+  src/planning/cut_in_response_main.cpp
+  src/planning/cut_in_response_node.cpp)
+target_compile_features(ad_cut_in_response_node PUBLIC cxx_std_17)
+target_include_directories(ad_cut_in_response_node PRIVATE include src/planning)
+target_link_libraries(ad_cut_in_response_node ad_planner_core)
+ament_target_dependencies(
+  ad_cut_in_response_node
+  ad_interfaces
+  builtin_interfaces
+  diagnostic_msgs
+  nav_msgs
+  rclcpp
+  std_msgs)
+
 if(AD_PLANNER_ENABLE_NAV2_MPPI)
   find_package(nav2_msgs REQUIRED)
   find_package(rclcpp_action REQUIRED)
@@ -189,6 +205,7 @@ install(
   TARGETS
     ad_planner_node
     ad_cut_in_risk_node
+    ad_cut_in_response_node
     ad_occupancy_grid_reprojector_node
     ad_road_corridor_mask_node
   DESTINATION lib/${PROJECT_NAME})
@@ -303,6 +320,21 @@ if(BUILD_TESTING)
     tf2_ros)
 
   ament_add_gtest(
+    test_cut_in_response
+    test/test_cut_in_response.cpp
+    src/planning/cut_in_response_node.cpp)
+  target_include_directories(test_cut_in_response PRIVATE include src/planning)
+  target_link_libraries(test_cut_in_response ad_planner_core)
+  ament_target_dependencies(
+    test_cut_in_response
+    ad_interfaces
+    builtin_interfaces
+    diagnostic_msgs
+    nav_msgs
+    rclcpp
+    std_msgs)
+
+  ament_add_gtest(
     test_road_corridor_grid test/test_road_corridor_grid.cpp)
   target_include_directories(test_road_corridor_grid PRIVATE include)
   target_link_libraries(test_road_corridor_grid ad_planner_core)
@@ -354,9 +386,25 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_planner_launch test/test_planner_launch.py)
   ament_add_pytest_test(
     test_cut_in_risk_launch test/test_cut_in_risk_launch.py)
+  ament_add_pytest_test(
+    test_cut_in_response_launch test/test_cut_in_response_launch.py)
   add_launch_test(
     test/test_cut_in_risk_runtime.py
     TIMEOUT 240
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_cut_in_response_runtime.py
+    TIMEOUT 240
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_cut_in_response_policy.py
+    TIMEOUT 180
     ENV
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"
       "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
