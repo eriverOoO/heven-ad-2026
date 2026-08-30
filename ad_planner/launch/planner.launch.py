@@ -256,13 +256,13 @@ def _create_road_corridor_mask_node(context):
     )
 
 
-def _create_cut_in_risk_node(context):
+def _create_cut_in_risk_node(context, force=False):
     enabled = LaunchConfiguration(
         "cut_in_risk", default="false"
     ).perform(context).strip().lower()
     if enabled not in {"true", "false"}:
         raise RuntimeError("cut_in_risk must be true or false")
-    if enabled == "false":
+    if enabled == "false" and not force:
         return None
 
     config_file = LaunchConfiguration("config_file").perform(context)
@@ -299,13 +299,43 @@ def _create_cut_in_risk_node(context):
     )
 
 
+def _create_cut_in_response_node(context):
+    enabled = LaunchConfiguration(
+        "cut_in_response", default="false"
+    ).perform(context).strip().lower()
+    if enabled not in {"true", "false"}:
+        raise RuntimeError("cut_in_response must be true or false")
+    if enabled == "false":
+        return None
+    package_share = get_package_share_directory("ad_planner")
+    return Node(
+        package="ad_planner",
+        executable="ad_cut_in_response_node",
+        name="ad_cut_in_response",
+        output="screen",
+        parameters=[
+            os.path.join(package_share, "config", "cut_in_response.yaml"),
+        ],
+    )
+
+
 def _create_planner_actions(context):
     planner_node = _create_planner_node(context)
     road_corridor_mask_node = _create_road_corridor_mask_node(context)
+    response_enabled = LaunchConfiguration(
+        "cut_in_response", default="false"
+    ).perform(context).strip().lower()
     cut_in_risk_node = _create_cut_in_risk_node(context)
+    # The response node consumes /ad/planning/cut_in_risks, so enabling it also
+    # starts the cut-in risk node when it is not already requested.
+    if response_enabled == "true" and cut_in_risk_node is None:
+        cut_in_risk_node = _create_cut_in_risk_node(context, force=True)
+    cut_in_response_node = _create_cut_in_response_node(context)
     planning_nodes = [planner_node, road_corridor_mask_node]
     if cut_in_risk_node is not None:
         planning_nodes.append(cut_in_risk_node)
+    if cut_in_response_node is not None:
+        planning_nodes.append(cut_in_response_node)
     config_file = LaunchConfiguration("config_file").perform(context)
     backend = _load_parameter_file(config_file).get("local_motion.backend")
     if backend != "mppi_nav2":
@@ -344,6 +374,7 @@ def generate_launch_description():
             DeclareLaunchArgument("path_file", default_value=""),
             DeclareLaunchArgument("route_corridor_file", default_value=""),
             DeclareLaunchArgument("cut_in_risk", default_value="false"),
+            DeclareLaunchArgument("cut_in_response", default_value="false"),
             DeclareLaunchArgument("path_tracking_backend", default_value=""),
             DeclareLaunchArgument("target_speed_mps", default_value=""),
             DeclareLaunchArgument("perception_enabled", default_value=""),

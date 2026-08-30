@@ -13,6 +13,7 @@ find_package(unique_identifier_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CutInRisk.msg"
   "msg/CutInRiskArray.msg"
+  "msg/CutInResponse.msg"
   "msg/DynamicObjectRisk.msg"
   "msg/DynamicObjectRiskArray.msg"
   "msg/DynamicObjectRiskState.msg"
