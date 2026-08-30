@@ -52,6 +52,15 @@ struct PredictedPoint
   double y_m{0.0};
 };
 
+// One source prediction state expressed relative to the constant-velocity ego
+// rollout in the base_link axes fixed at the source stamp.
+struct RelativePredictedPoint
+{
+  double time_s{0.0};
+  double x_rel_m{0.0};
+  double y_rel_m{0.0};
+};
+
 // One canonical predicted object, already unpacked from
 // ad_interfaces/PredictedObject (odom frame, world-frame initial twist).
 struct PredictedObjectInput
@@ -101,6 +110,7 @@ struct DynamicObjectRiskResult
   bool predicted_min_separation_valid{false};
   double predicted_min_separation_m{0.0};
   double predicted_min_separation_time_s{0.0};
+  std::vector<RelativePredictedPoint> predicted_states{};
 
   double position_uncertainty_m{0.0};
 };

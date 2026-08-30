@@ -115,6 +115,21 @@ ad_interfaces::msg::DynamicObjectRisk serialize(const DynamicObjectRiskResult & 
     source.predicted_min_separation_valid ? source.predicted_min_separation_m : 0.0);
   output.predicted_min_separation_time_s = static_cast<float>(
     source.predicted_min_separation_valid ? source.predicted_min_separation_time_s : 0.0);
+  output.predicted_states.reserve(source.predicted_states.size());
+  for (const auto & source_state : source.predicted_states) {
+    ad_interfaces::msg::DynamicObjectRiskState state;
+    const double whole_seconds = std::floor(source_state.time_s);
+    state.time_from_start.sec = static_cast<std::int32_t>(whole_seconds);
+    state.time_from_start.nanosec = static_cast<std::uint32_t>(std::llround(
+      (source_state.time_s - whole_seconds) * 1.0e9));
+    if (state.time_from_start.nanosec == 1'000'000'000U) {
+      ++state.time_from_start.sec;
+      state.time_from_start.nanosec = 0U;
+    }
+    state.x_rel_m = static_cast<float>(source_state.x_rel_m);
+    state.y_rel_m = static_cast<float>(source_state.y_rel_m);
+    output.predicted_states.push_back(std::move(state));
+  }
   output.position_uncertainty_m = static_cast<float>(source.position_uncertainty_m);
   return output;
 }

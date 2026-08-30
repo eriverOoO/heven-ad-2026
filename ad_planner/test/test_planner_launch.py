@@ -45,6 +45,7 @@ def _launch_context(**values):
             "data_dir": str(PACKAGE / "test" / "fixtures"),
             "config_file": str(PACKAGE / "config" / "planner.yaml"),
             "path_file": "path_space.txt",
+            "cut_in_risk": "false",
             "path_tracking_backend": "",
             "target_speed_mps": "",
             "perception_enabled": "",
@@ -386,6 +387,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "config_file",
         "path_file",
         "route_corridor_file",
+        "cut_in_risk",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
@@ -398,6 +400,9 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
     assert perform_substitutions(
         LaunchContext(), arguments["path_file"].default_value
     ) == ""
+    assert perform_substitutions(
+        LaunchContext(), arguments["cut_in_risk"].default_value
+    ) == "false"
     assert perform_substitutions(
         LaunchContext(), arguments["path_tracking_backend"].default_value
     ) == ""
@@ -424,6 +429,41 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
     assert actions
     assert all(isinstance(action, Node) for action in actions)
     assert all(action._Node__node_namespace is None for action in actions)
+
+
+def test_cut_in_risk_is_opt_in_and_uses_active_corridor(monkeypatch, tmp_path):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    disabled = _launch_context(data_dir=str(tmp_path), cut_in_risk="false")
+    assert module._create_cut_in_risk_node(disabled) is None
+
+    enabled = _launch_context(data_dir=str(tmp_path), cut_in_risk="true")
+    node = module._create_cut_in_risk_node(enabled)
+    assert isinstance(node, Node)
+    assert node._Node__node_executable == "ad_cut_in_risk_node"
+    assert len(node._Node__parameters) == 2
+    overrides = _normalized_parameter_mapping(
+        node._Node__parameters[1], enabled
+    )
+    assert overrides == {
+        "data_dir": str(tmp_path),
+        "route_corridor_file": "map/route_corridor.json",
+        "route_corridor.expected_global_path_sha256": hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest(),
+    }
+
+    with pytest.raises(RuntimeError, match="cut_in_risk must be true or false"):
+        module._create_cut_in_risk_node(
+            _launch_context(data_dir=str(tmp_path), cut_in_risk="sometimes")
+        )
 
 
 def test_dwa_selection_hashes_the_reference_corridor_source_path(

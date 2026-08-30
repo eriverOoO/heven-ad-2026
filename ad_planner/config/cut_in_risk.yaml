@@ -1,0 +1,31 @@
+ad_cut_in_risk:
+  ros__parameters:
+    data_dir: ""
+    route_corridor_file: "map/route_corridor.json"
+    route_corridor.expected_global_path_sha256: ""
+
+    topics.dynamic_object_risks: "/ad/planning/dynamic_object_risks"
+    topics.route_mask: "/ad/planning/drivable_mask"
+    topics.odometry: "/ad/localization/odometry"
+    topics.output: "/ad/planning/cut_in_risks"
+    topics.diagnostics: "/ad/planning/cut_in_risks/diagnostics"
+
+    risk_frame_id: "base_link"
+    route_mask_frame_id: "base_link"
+    maximum_input_age_s: 0.5
+    maximum_odometry_skew_s: 0.5
+    maximum_future_skew_s: 0.1
+    transform_timeout_s: 0.05
+    maximum_pending_frames: 16
+    maximum_objects: 256
+
+    # Primary-lane geometry comes from route_corridor_file. These parameters
+    # only bound the nearby interaction region and evidence strength.
+    forward_analysis_distance_m: 80.0
+    rear_analysis_distance_m: 5.0
+    minimum_lateral_approach_speed_mps: 0.2
+    boundary_margin_m: 0.25
+    maximum_lateral_gap_m: 5.0
+    minimum_sustained_entry_time_s: 0.5
+
+    runtime_summary_interval_frames: 200

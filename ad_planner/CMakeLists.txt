@@ -15,6 +15,7 @@ find_package(ad_interfaces REQUIRED)
 find_package(ad_morai_interfaces REQUIRED)
 find_package(behaviortree_cpp_v3 3.8.7 EXACT REQUIRED CONFIG)
 find_package(builtin_interfaces REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -53,6 +54,7 @@ add_library(ad_planner_core
   src/local_planning/local_motion_factory.cpp
   src/local_planning/mppi_nav2/mppi_follow_path_state.cpp
   src/local_planning/mppi_nav2/mppi_nav2_backend.cpp
+  src/planning/cut_in_risk.cpp
   src/visualization/path_tracking_markers.cpp
   src/visualization/planner_visualization.cpp
   src/visualization/route_markers.cpp)
@@ -135,6 +137,26 @@ ament_target_dependencies(
   tf2
   tf2_ros)
 
+add_executable(ad_cut_in_risk_node
+  src/planning/cut_in_risk_main.cpp
+  src/planning/cut_in_risk_node.cpp)
+target_compile_features(ad_cut_in_risk_node PUBLIC cxx_std_17)
+target_include_directories(ad_cut_in_risk_node PRIVATE include src/planning)
+target_link_libraries(ad_cut_in_risk_node ad_planner_core)
+ament_target_dependencies(
+  ad_cut_in_risk_node
+  ament_index_cpp
+  ad_interfaces
+  builtin_interfaces
+  diagnostic_msgs
+  geometry_msgs
+  nav_msgs
+  rclcpp
+  std_msgs
+  tf2
+  tf2_geometry_msgs
+  tf2_ros)
+
 if(AD_PLANNER_ENABLE_NAV2_MPPI)
   find_package(nav2_msgs REQUIRED)
   find_package(rclcpp_action REQUIRED)
@@ -166,6 +188,7 @@ install(TARGETS ad_planner_core ad_planner_bt
 install(
   TARGETS
     ad_planner_node
+    ad_cut_in_risk_node
     ad_occupancy_grid_reprojector_node
     ad_road_corridor_mask_node
   DESTINATION lib/${PROJECT_NAME})
@@ -180,6 +203,7 @@ ament_export_dependencies(
   ad_control
   behaviortree_cpp_v3
   builtin_interfaces
+  diagnostic_msgs
   geometry_msgs
   nav_msgs
   rclcpp
@@ -190,6 +214,7 @@ ament_export_dependencies(
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
   set(ENV{PYTEST_DISABLE_PLUGIN_AUTOLOAD} "1")
 
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/fixtures")
@@ -258,6 +283,26 @@ if(BUILD_TESTING)
   target_link_libraries(test_frenet_geometry ad_planner_core)
 
   ament_add_gtest(
+    test_cut_in_risk
+    test/test_cut_in_risk.cpp
+    src/planning/cut_in_risk_node.cpp)
+  target_include_directories(test_cut_in_risk PRIVATE include src/planning)
+  target_link_libraries(test_cut_in_risk ad_planner_core)
+  ament_target_dependencies(
+    test_cut_in_risk
+    ament_index_cpp
+    ad_interfaces
+    builtin_interfaces
+    diagnostic_msgs
+    geometry_msgs
+    nav_msgs
+    rclcpp
+    std_msgs
+    tf2
+    tf2_geometry_msgs
+    tf2_ros)
+
+  ament_add_gtest(
     test_road_corridor_grid test/test_road_corridor_grid.cpp)
   target_include_directories(test_road_corridor_grid PRIVATE include)
   target_link_libraries(test_road_corridor_grid ad_planner_core)
@@ -307,6 +352,15 @@ if(BUILD_TESTING)
     ad_planner_bt)
 
   ament_add_pytest_test(test_planner_launch test/test_planner_launch.py)
+  ament_add_pytest_test(
+    test_cut_in_risk_launch test/test_cut_in_risk_launch.py)
+  add_launch_test(
+    test/test_cut_in_risk_runtime.py
+    TIMEOUT 240
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
   ament_add_pytest_test(
     test_road_corridor_mask_launch
     test/test_road_corridor_mask_launch.py)

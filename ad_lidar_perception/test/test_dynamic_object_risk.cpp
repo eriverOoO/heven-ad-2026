@@ -6,6 +6,7 @@
 
 #include <ad_interfaces/msg/predicted_object_array.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -57,7 +58,13 @@ PredictedObjectInput object_at(
 
 bool all_finite(const DynamicObjectRiskResult & r)
 {
-  return std::isfinite(r.x_rel_m) && std::isfinite(r.y_rel_m) &&
+  const bool states_finite = std::all_of(
+    r.predicted_states.begin(), r.predicted_states.end(),
+    [](const auto & state) {
+      return std::isfinite(state.time_s) && std::isfinite(state.x_rel_m) &&
+             std::isfinite(state.y_rel_m);
+    });
+  return states_finite && std::isfinite(r.x_rel_m) && std::isfinite(r.y_rel_m) &&
     std::isfinite(r.distance_m) && std::isfinite(r.vx_rel_mps) &&
     std::isfinite(r.vy_rel_mps) && std::isfinite(r.relative_speed_mps) &&
     std::isfinite(r.range_rate_mps) && std::isfinite(r.longitudinal_closing_mps) &&
@@ -291,6 +298,9 @@ TEST(DynamicObjectRisk, PredictedMinSeparationUsesDiscreteStates) {
   ASSERT_TRUE(r.predicted_min_separation_valid);
   EXPECT_NEAR(r.predicted_min_separation_m, 2.0, 1e-9);
   EXPECT_NEAR(r.predicted_min_separation_time_s, 3.0, 1e-9);
+  ASSERT_EQ(r.predicted_states.size(), 4U);
+  EXPECT_NEAR(r.predicted_states[0].x_rel_m, 20.0, 1e-9);
+  EXPECT_NEAR(r.predicted_states[2].x_rel_m, 2.0, 1e-9);
 }
 TEST(DynamicObjectRisk, PredictedMinSeparationInvalidWithoutStates) {
   const auto r = compute_object_risk(
@@ -393,7 +403,13 @@ std::optional<EgoSample> ego_sample(const std::int64_t stamp_ns, const double sp
 TEST(DynamicObjectRiskFrame, ValidFramePublishesBaseLinkArray) {
   const std::int64_t stamp = 1'000'000'000LL;
   auto prediction = prediction_at(stamp);
-  prediction.objects.push_back(one_object(20.0, 0.0));
+  auto source = one_object(20.0, 0.0);
+  ad_interfaces::msg::PredictedState state;
+  state.time_from_start.sec = 1;
+  state.pose.pose.position.x = 22.0;
+  state.pose.pose.position.y = -1.0;
+  source.states.push_back(state);
+  prediction.objects.push_back(source);
   const auto result = build_risk_frame(
     prediction, ego_sample(stamp), stamp + 10'000'000LL, std::nullopt, RiskNodeConfig{});
   ASSERT_TRUE(result.published);
@@ -402,6 +418,10 @@ TEST(DynamicObjectRiskFrame, ValidFramePublishesBaseLinkArray) {
   ASSERT_EQ(result.risks.objects.size(), 1U);
   EXPECT_EQ(result.objects_in, 1U);
   EXPECT_EQ(result.objects_out, 1U);
+  ASSERT_EQ(result.risks.objects.front().predicted_states.size(), 1U);
+  EXPECT_EQ(result.risks.objects.front().predicted_states.front().time_from_start.sec, 1);
+  EXPECT_FLOAT_EQ(result.risks.objects.front().predicted_states.front().x_rel_m, 17.0F);
+  EXPECT_FLOAT_EQ(result.risks.objects.front().predicted_states.front().y_rel_m, -1.0F);
 }
 
 TEST(DynamicObjectRiskFrame, EmptyObjectsIsValidEmptyArray) {
