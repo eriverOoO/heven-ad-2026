@@ -1,5 +1,86 @@
 # STATUS
 
+## Correct AB3DMOT yaw covariance contract — COMPLETE
+
+Branch `fix/ab3dmot-yaw-covariance-contract`, from `main`
+`82a75a85198cf4a0bdead9609ca3561406f37751` (PR #10 merged).
+
+**Bug.** `geometry_msgs/PoseWithCovariance.covariance` is a row-major 6x6
+over `(x,y,z,roll,pitch,yaw)`; yaw-yaw variance is flat index **35**.
+`ab3dmot_ros.py` wrote `state.yaw_variance` to index **21** (roll-roll).
+`autoware_prediction_node.cpp` reads index 35 -> saw `0` -> substituted
+its `positive_variance(..., 0.04)` default. So prediction was treating the
+always-zero placeholder Euclidean yaw as a measurement known to +/- ~11
+deg -- an overconfidence caused purely by a covariance-indexing accident.
+
+**Audit.** `yaw_measurement_mode=unobserved`: the KF never applies a yaw
+measurement, so the latent theta stays **exactly 0.0** for every track,
+every frame (offline: 1336/1336 track-frames), and `P[3,3]` is the
+birth prior 10 + accumulated `Q[3,3]=1` per predict, never corrected --
+replay median 13, p95 123, max 189 rad^2 (std 3.6-13.8 rad, all > pi =
+uninformative). Prediction reads `orientation_availability` only for a
+metrics counter, never to gate yaw. IMM `coordinated_turn` selection is
+gated by the yaw-*rate* measurement value (`twist.angular.z`, always 0 ->
+`turn_evidence < 0.03` -> -1.0 log-likelihood penalty every frame), not by
+the yaw-angle variance, so a large yaw-angle variance cannot make CT fire.
+
+**Fix: Option A (minimal, source-grounded).** One line in `ab3dmot_ros.py`:
+`pose_covariance[3*6+3]` -> `pose_covariance[5*6+5]`. Keep
+`orientation_availability = UNAVAILABLE`. Index 21 left at 0 (AB3DMOT
+tracks no roll). No prediction change (Option C rejected: the prediction
+node is shared with the Autoware default path). `twist.covariance[35]`
+(yaw-rate variance) deliberately **not** touched -- AB3DMOT has no
+yaw-rate state so Option A has nothing to route there, and its current
+0->0.04 fallback helps pin the IMM turn-rate at 0; a principled yaw-rate
+contract is a separate task. Documented as the same class of gap.
+
+**Live bounded-replay A/B** (180-frame `static_20260805_003151`, disjoint
+wall-clock stamps between arms):
+
+| | BEFORE (idx 21) | AFTER (idx 35) |
+| --- | --- | --- |
+| tracked `cov[35]` (yaw var) med/p95/max | 0.0 / 0.0 / 0.0 | 12 / 118 / 176 |
+| tracked `cov[21]` (roll slot) nonzero | 1285 (max 179) | **0** |
+| orientation_availability | all UNAVAILABLE | all UNAVAILABLE |
+| published yaw (quaternion) | 0 everywhere | 0 everywhere |
+| prediction `initial_pose.cov[35]` | 0.04 (fallback) | 12 / 118 / 176 |
+| prediction rejected | 0 | 0 |
+| `stationary` selections | 633 | 572 |
+| `constant_velocity` selections | 652 | 607 |
+| **`coordinated_turn` selections** | **0** | **0** |
+| predicted `|angular.z|` (yaw rate) max | 0.0 | 0.0 |
+| curved predicted trajectories | 0 | 0 |
+| 0.5s predicted displacement mean/p95/max | 1.50 / 6.19 / 7.67 | 1.46 / 6.14 / 8.09 |
+| 1.0s | 3.03 / 12.73 / 17.23 | 2.91 / 11.96 / 17.09 |
+| 2.0s | 6.14 / 26.32 / 36.34 | 5.87 / 23.64 / 36.01 |
+
+CV/stationary split moves < 1 pt (50.7/49.3 -> 51.5/48.5), within the
+disjoint-stamp noise. No turning introduced. The material effect is
+latent correctness: any consumer of the yaw uncertainty (numerical, or a
+future oriented detector) now reads the real value at the right slot.
+
+**Autoware default: unchanged** -- the diff is one line in
+`ab3dmot_ros.py` plus tests; no shared prediction/serialization code.
+
+**Tests.** `test_ab3dmot_ros.py` +3 (yaw var at index 35; index 21 zero;
+"yaw unknown" regime guard; whole-array exactness). Existing
+`test_covariance_blocks_come_from_kf_p_only` updated (21 -> 35). Full
+AB3DMOT + prediction + OGM + launch suite **296 passed, 1 skipped**; 4/4
+C++ ctests (`cv_predictor`, `imm_predictor`, `dynamic_grid_builder`,
+`autoware_prediction_adapter`). Isolated `colcon build` clean.
+
+**Frozen/untouched:** position covariance cap (PR #10), velocity
+covariance, KF `P`/`Q`/`R`, association, lifecycle, IMM params, Autoware.
+
+**Files:** `ab3dmot_ros.py`, `test_ab3dmot_ros.py`,
+`docs/perception/competition_mot_baseline.md`,
+`docs/perception/competition_dynamic_object_pipeline.md`, this file.
+
+**Remaining limitation:** `twist.covariance[35]` (yaw-rate variance) still
+uses the 0->0.04 fallback -- same class of gap, deferred because a large
+value could unpin the IMM turn-rate and a fix there must re-verify turn
+counts.
+
 ## Stabilize AB3DMOT covariance for downstream prediction — COMPLETE
 
 Branch `fix/ab3dmot-covariance-stability`, from `main`

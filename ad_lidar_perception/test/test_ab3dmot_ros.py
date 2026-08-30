@@ -372,11 +372,41 @@ class TrackedStateToMessageTest(unittest.TestCase):
         self.assertAlmostEqual(pose_cov[0 * 6 + 0], 1.0)
         self.assertAlmostEqual(pose_cov[1 * 6 + 1], 2.0)
         self.assertAlmostEqual(pose_cov[2 * 6 + 2], 3.0)
-        self.assertAlmostEqual(pose_cov[3 * 6 + 3], 0.07)
+        # yaw variance -> flat index 35 (yaw-yaw), matching Autoware's
+        # PoseWithCovariance convention and autoware_prediction_node.cpp.
+        self.assertAlmostEqual(pose_cov[5 * 6 + 5], 0.07)
+        # index 21 is roll-roll and must stay zero (AB3DMOT tracks no roll).
+        self.assertEqual(pose_cov[3 * 6 + 3], 0.0)
         twist_cov = message.kinematics.twist_with_covariance.covariance
         self.assertAlmostEqual(twist_cov[0 * 6 + 0], 4.0)
         self.assertAlmostEqual(twist_cov[1 * 6 + 1], 5.0)
         self.assertAlmostEqual(twist_cov[2 * 6 + 2], 6.0)
+
+    def test_unobserved_yaw_variance_is_serialized_in_the_unknown_regime(self):
+        """Semantic regression guard: with yaw_measurement_mode="unobserved"
+        the KF yaw variance is the uninformative birth prior + process noise
+        (>= 10 rad^2). It must reach prediction at index 35 as a large
+        number so the IMM does not treat the always-zero placeholder yaw as
+        a confident measurement (which is what the 0.04 rad^2 default
+        implies). This fails if someone shrinks `yaw_variance`."""
+        message, _ = tracked_state_to_message(
+            make_state(yaw=0.0, yaw_variance=13.0), MESSAGE_TYPES
+        )
+        pose_cov = message.kinematics.pose_with_covariance.covariance
+        self.assertEqual(pose_cov[35], 13.0)
+        self.assertGreater(pose_cov[35], 1.0)  # not the 0.04-confident regime
+        self.assertEqual(pose_cov[21], 0.0)
+
+    def test_yaw_variance_index_move_does_not_touch_other_pose_covariance(self):
+        state = make_state(
+            position_covariance=np.diag([1.5, 2.5, 3.5]), yaw_variance=9.0
+        )
+        message, _ = tracked_state_to_message(state, MESSAGE_TYPES)
+        pose_cov = list(message.kinematics.pose_with_covariance.covariance)
+        expected = [0.0] * 36
+        expected[0], expected[7], expected[14] = 1.5, 2.5, 3.5
+        expected[35] = 9.0
+        self.assertEqual(pose_cov, expected)
 
     def test_velocity_covariance_rotates_with_object_local_twist(self):
         message, _ = tracked_state_to_message(

@@ -406,7 +406,17 @@ def tracked_state_to_message(
     )
     pose_covariance = np.zeros(36)
     _set_covariance_block(pose_covariance, reported_position_covariance, 0, 0)
-    pose_covariance[3 * 6 + 3] = float(state.yaw_variance)
+    # geometry_msgs/PoseWithCovariance is a row-major 6x6 over
+    # (x, y, z, roll, pitch, yaw): the yaw-yaw variance is flat index
+    # 5*6+5 = 35, not 3*6+3 = 21 (which is roll-roll). Autoware's
+    # convention and `autoware_prediction_node.cpp` both read index 35.
+    # With yaw_measurement_mode="unobserved" the KF never corrects theta,
+    # so P[3,3] is the uninformative birth prior plus accumulated process
+    # noise (>= 10 rad^2, std > pi) -- publishing it at the correct slot
+    # lets prediction see "yaw unknown" instead of falling back to its
+    # 0.04 rad^2 default and treating the always-zero placeholder yaw as a
+    # confident measurement. orientation_availability stays UNAVAILABLE.
+    pose_covariance[5 * 6 + 5] = float(state.yaw_variance)
     output.kinematics.pose_with_covariance.covariance = pose_covariance.tolist()
 
     local_velocity, local_velocity_covariance = world_velocity_to_object_local(
