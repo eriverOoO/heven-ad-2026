@@ -428,6 +428,20 @@ def tracked_state_to_message(
     twist.linear.x, twist.linear.y, twist.linear.z = local_velocity.tolist()
     twist_covariance = np.zeros(36)
     _set_covariance_block(twist_covariance, local_velocity_covariance, 0, 0)
+    # Yaw-rate contract (see docs/perception/competition_mot_baseline.md
+    # "Yaw-rate contract"): the Linear KF tracks no yaw-rate state, so
+    # `twist.angular` is left at the message zero (the constant-velocity
+    # model's actual output, not a fabricated measurement) and
+    # `twist_covariance[35]` (wz-wz, (rad/s)^2) is left unset. A
+    # non-positive covariance entry is the ROS "not provided" encoding;
+    # `autoware_prediction_node.cpp` then applies its shared
+    # `positive_variance(.., 0.04)` default -- the same treatment every
+    # tracker gets for an omitted field. This is behaviorally inert:
+    # coordinated-turn selection is gated on `|observed[yaw_rate]|`, never
+    # its variance (verified across a 2500x offline sweep -- 0 turn
+    # selections, 0 curved trajectories). The rad^2 yaw-*angle* variance
+    # (pose_covariance[35], >= 10 here) is deliberately NOT copied here:
+    # rad^2 != (rad/s)^2.
     output.kinematics.twist_with_covariance.covariance = twist_covariance.tolist()
 
     availability_type = message_types["TrackedObjectKinematics"]

@@ -2,8 +2,10 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <numeric>
 
 namespace
@@ -11,6 +13,7 @@ namespace
 
 using ad_lidar_perception::tracking::ImmConfig;
 using ad_lidar_perception::tracking::ImmPredictor;
+using ad_lidar_perception::tracking::ImmResult;
 using ad_lidar_perception::tracking::MotionModel;
 using ad_lidar_perception::tracking::TrackMeasurement2D;
 
@@ -105,6 +108,43 @@ TEST(ImmPredictor, TurningEvidenceRaisesCoordinatedTurnProbability) {
   ASSERT_EQ(result.predicted_states.size(), 2U);
   EXPECT_GT(result.predicted_states.back().y_m, result.fused_state.y_m);
   EXPECT_GT(result.predicted_states.back().yaw_rad, result.fused_state.yaw_rad);
+}
+
+// AB3DMOT yaw-rate contract (PR #12): AB3DMOT publishes yaw_rate == 0 and no
+// yaw-rate covariance, so prediction sees yaw_rate_variance == the shared 0.04
+// (rad/s)^2 default. Turn selection is gated on the yaw-rate *value*, never its
+// variance, so a straight AB3DMOT track must never trigger coordinated turn and
+// must never bend -- for any yaw-rate variance.
+TEST(ImmPredictor, ZeroYawRateNeverSelectsCoordinatedTurnRegardlessOfVariance) {
+  for (const double yaw_rate_variance : {0.04, 1.0, 100.0}) {
+    ImmPredictor predictor(test_config());
+    constexpr double speed = 8.0;  // a fast, clearly-moving straight track
+    ImmResult result;
+    for (std::int64_t index = 1; index <= 12; ++index) {
+      auto m = measurement(
+        speed * static_cast<double>(index) * 0.5, 0.0, 0.0, speed, 0.0);
+      m.yaw_rate_variance_rad2ps2 = yaw_rate_variance;
+      result = predictor.update(m, index * kSecondNs / 2);
+    }
+    const auto ctrv = static_cast<std::size_t>(MotionModel::kCoordinatedTurn);
+    const auto cv = static_cast<std::size_t>(MotionModel::kConstantVelocity);
+    // coordinated turn never beats constant velocity and is never the argmax
+    // model -- a straight (non-rotating) constant-velocity track.
+    EXPECT_LT(result.model_probabilities[ctrv], result.model_probabilities[cv])
+      << "yaw_rate_variance=" << yaw_rate_variance;
+    const auto argmax = static_cast<std::size_t>(std::distance(
+      result.model_probabilities.begin(),
+      std::max_element(
+        result.model_probabilities.begin(),
+        result.model_probabilities.end())));
+    EXPECT_NE(argmax, ctrv) << "yaw_rate_variance=" << yaw_rate_variance;
+    // fused yaw rate stays zero and predicted horizons stay straight.
+    EXPECT_NEAR(result.fused_state.yaw_rate_radps, 0.0, 1.0e-9);
+    for (const auto & state : result.predicted_states) {
+      EXPECT_NEAR(state.yaw_rad, 0.0, 1.0e-6)
+        << "yaw_rate_variance=" << yaw_rate_variance;
+    }
+  }
 }
 
 TEST(ImmPredictor, ResetDiscardsPreviousMotionEvidence) {

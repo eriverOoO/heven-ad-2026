@@ -102,7 +102,10 @@ class TrackedObjectKinematicsFake:
             covariance=[0.0] * 36,
         )
         self.twist_with_covariance = SimpleNamespace(
-            twist=SimpleNamespace(linear=SimpleNamespace(x=0.0, y=0.0, z=0.0)),
+            twist=SimpleNamespace(
+                linear=SimpleNamespace(x=0.0, y=0.0, z=0.0),
+                angular=SimpleNamespace(x=0.0, y=0.0, z=0.0),
+            ),
             covariance=[0.0] * 36,
         )
         self.orientation_availability = 0
@@ -461,6 +464,94 @@ class TrackedStateToMessageTest(unittest.TestCase):
             message.kinematics.orientation_availability,
             TrackedObjectKinematicsFake.UNAVAILABLE,
         )
+
+
+class YawRateContractTest(unittest.TestCase):
+    """Locks the AB3DMOT yaw-*rate* uncertainty contract (PR #12).
+
+    AB3DMOT's Linear KF has no yaw-rate state, so the serializer publishes
+    `twist.angular.z = 0` (the constant-velocity model's actual output) and
+    leaves `twist.covariance[35]` at 0. Per the ROS/`positive_variance`
+    convention a non-positive covariance entry means "not provided", and the
+    shared `autoware_prediction_node.cpp` default of 0.04 (rad/s)^2 then
+    applies -- the same treatment every tracker gets for an omitted field.
+    A 2500x offline sweep of that variance changed zero model selections and
+    zero trajectories, because coordinated-turn selection is gated on the
+    yaw-*rate value* (`|observed[kYawRate]|`), never its variance. These
+    tests fail if a future change fabricates a yaw rate, or routes the
+    rad^2 yaw-*angle* variance (10-189 here) into the (rad/s)^2 slot.
+    """
+
+    def _twist(self, message):
+        return message.kinematics.twist_with_covariance
+
+    def test_angular_velocity_is_exactly_zero(self):
+        message, _ = tracked_state_to_message(
+            make_state(yaw=0.0, vx_mps=8.0, vy_mps=0.0), MESSAGE_TYPES
+        )
+        angular = self._twist(message).twist.angular
+        self.assertEqual((angular.x, angular.y, angular.z), (0.0, 0.0, 0.0))
+
+    def test_yaw_rate_variance_slot_is_left_unset_meaning_not_provided(self):
+        """twist.covariance[35] (wz-wz) stays 0.0: AB3DMOT genuinely has no
+        yaw-rate covariance, and 0.0 is the ROS encoding of "not provided"
+        (consumed by positive_variance(.., 0.04))."""
+        message, _ = tracked_state_to_message(make_state(), MESSAGE_TYPES)
+        twist_cov = list(self._twist(message).covariance)
+        self.assertEqual(twist_cov[5 * 6 + 5], 0.0)
+        # the whole angular 3x3 block is unset (wx/wy/wz rows and columns).
+        for i in (3, 4, 5):
+            for j in (3, 4, 5):
+                self.assertEqual(twist_cov[i * 6 + j], 0.0)
+
+    def test_large_yaw_angle_variance_never_leaks_into_the_yaw_rate_slot(self):
+        """Dimensional guard: rad^2 (yaw angle) must not become (rad/s)^2
+        (yaw rate). Even a huge unobserved-yaw variance leaves twist[35] 0."""
+        message, _ = tracked_state_to_message(
+            make_state(yaw=0.0, yaw_variance=189.0), MESSAGE_TYPES
+        )
+        pose_cov = list(message.kinematics.pose_with_covariance.covariance)
+        twist_cov = list(self._twist(message).covariance)
+        self.assertEqual(pose_cov[5 * 6 + 5], 189.0)   # yaw angle var -> pose[35]
+        self.assertEqual(twist_cov[5 * 6 + 5], 0.0)     # yaw rate var -> unset
+        self.assertNotIn(189.0, twist_cov)
+
+    def test_only_the_linear_velocity_block_is_populated(self):
+        message, _ = tracked_state_to_message(
+            make_state(
+                yaw=0.0,
+                velocity_covariance=np.diag([4.0, 5.0, 6.0]),
+                yaw_variance=42.0,
+            ),
+            MESSAGE_TYPES,
+        )
+        twist_cov = list(self._twist(message).covariance)
+        expected = [0.0] * 36
+        expected[0], expected[7], expected[14] = 4.0, 5.0, 6.0
+        self.assertEqual(twist_cov, expected)
+
+    def test_contract_is_deterministic(self):
+        a, _ = tracked_state_to_message(make_state(track_id=5), MESSAGE_TYPES)
+        b, _ = tracked_state_to_message(make_state(track_id=5), MESSAGE_TYPES)
+        self.assertEqual(
+            list(self._twist(a).covariance), list(self._twist(b).covariance)
+        )
+        self.assertEqual(
+            self._twist(a).twist.angular.z, self._twist(b).twist.angular.z
+        )
+
+    def test_no_cross_track_leakage_in_the_yaw_rate_slot(self):
+        states = [
+            make_state(track_id=1, yaw=0.0, yaw_variance=150.0),
+            make_state(track_id=2, yaw=0.0, yaw_variance=0.02),
+        ]
+        message, _ = tracked_states_to_message(
+            states, SimpleNamespace(sec=10, nanosec=0), "odom", MESSAGE_TYPES
+        )
+        for obj in message.objects:
+            twist_cov = list(obj.kinematics.twist_with_covariance.covariance)
+            self.assertEqual(twist_cov[5 * 6 + 5], 0.0)
+            self.assertEqual(obj.kinematics.twist_with_covariance.twist.angular.z, 0.0)
 
 
 class TrackedStatesToMessageTest(unittest.TestCase):

@@ -1,5 +1,131 @@
 # STATUS
 
+## AB3DMOT yaw-rate uncertainty contract — COMPLETE (docs + tests only, no runtime change)
+
+Branch `fix/ab3dmot-yaw-rate-contract`, from `main`
+`36bdc6de30a77273c8c5f76a45c04a908ff7e8f3` (PR #11 merged). **Closes the
+tracker/prediction covariance-contract workstream** (PR #9 oversized-OGM
+skip, PR #10 position-cov bound, PR #11 yaw-*angle* cov slot, this = the
+yaw-*rate* slot). Selected **Option D**: no runtime code change; document
+and lock the contract with regression tests.
+
+**The gap.** AB3DMOT's Linear KF has no yaw-rate state. It publishes
+`twist.angular.z = 0` and leaves `twist.covariance[35]` (`wz-wz`,
+`(rad/s)^2`) at `0`. `autoware_prediction_node.cpp` applies
+`positive_variance(twist.covariance[35], 0.04)`, so prediction saw
+"yaw rate = 0 known to +/- 0.2 rad/s". Question: is that a semantic
+mismatch that needs a code change?
+
+**Analysis (source + offline sweep).** No -- it is behaviorally inert.
+`imm_predictor.cpp` gates `coordinated_turn` on the yaw-rate *value*
+(`turn_evidence = |observed[kYawRate]|`, always `0` -> constant `-1.0`
+log-likelihood penalty), **never on the yaw-rate variance**. The CV
+model's yaw-rate term has its own `max(.., 0.01)` floor; the generic
+`log(det S)` likelihood term shifts all three models identically. Built a
+faithful Python port of `imm_predictor.cpp` + `imm_measurement` (validated
+against all 3 `test_imm_predictor.cpp` cases: CV 0.891, stationary 0.998,
+CT 1.0). Replayed the recorded 1257-object TrackedObjects stream
+(identical UUIDs / stamps / pose / linear velocity every run) once per
+candidate `twist.covariance[35]` in
+`{0.04, 0.25, 1.0, 3.0, 4.0, 9.0, 100.0} (rad/s)^2`:
+
+| `cov[35]` | CT median prob | CT max prob | stat / CV / **CT** selections | curved trajs | max \|Δyaw\| |
+| --- | --- | --- | --- | --- | --- |
+| 0.04 (fallback) | 2.03e-2 | 1.17e-1 | 593 / 664 / **0** | **0** | 0 |
+| 0.25 | 2.34e-2 | 1.62e-1 | 593 / 664 / **0** | **0** | 0 |
+| 1.0 | 2.46e-2 | 1.83e-1 | 591 / 666 / **0** | **0** | 0 |
+| 3.0 | 2.50e-2 | 1.90e-1 | 591 / 666 / **0** | **0** | 0 |
+| 4.0 | 2.51e-2 | 1.91e-1 | 591 / 666 / **0** | **0** | 0 |
+| 9.0 | 2.52e-2 | 1.93e-1 | 591 / 666 / **0** | **0** | 0 |
+| 100.0 | 2.52e-2 | 1.95e-1 | 591 / 666 / **0** | **0** | 0 |
+
+A 2500x swing in the variable moved **0 coordinated-turn selections**, 0
+curved trajectories, and left fused yaw rate at exactly 0 at every
+horizon. The only effect: CT *probability* creeps `2.03e-2 -> 2.52e-2`
+(never competitive), and two of 1257 object-frames flip
+`stationary <-> constant_velocity` (both straight-line models) via the
+`log(det S)` term.
+
+**Option B (write an explicit finite `twist.covariance[35]`) was
+implemented and measured, then rejected**: it requires an underivable
+constant (physical yaw-rate bounds need speed + turn radius, both unknown
+from "no information"), it moves the "field not provided" choice to the
+wrong side of the interface (AB3DMOT asserting a fabricated number
+instead of the consumer's uniform default), and the sweep shows it buys
+nothing behaviorally. Option C (change the shared `0.04` default) stays
+rejected on Autoware-regression grounds -- it is the correct home for the
+one real (tiny) artifact, as a separate task if ever justified.
+
+**Change (docs + tests only).** No runtime behavior change.
+- `ab3dmot_ros.py`: explanatory comment at the twist serialization
+  (the `angular`/`covariance[35]` zeros are deliberate; `rad^2` yaw-angle
+  variance must not be copied into the `(rad/s)^2` slot).
+- `test_ab3dmot_ros.py`: new `YawRateContractTest` (6 cases -- angular is
+  exactly 0; `covariance[35]` and the whole angular 3x3 block unset;
+  a huge yaw-angle variance never leaks to `twist[35]`; only the linear
+  velocity block is populated; deterministic; no cross-track leakage).
+- `test_imm_predictor.cpp`: new
+  `ZeroYawRateNeverSelectsCoordinatedTurnRegardlessOfVariance`
+  (yaw_rate = 0 with `yaw_rate_variance in {0.04, 1.0, 100.0}` -- CT never
+  the argmax, CT < CV, fused yaw rate 0, every predicted horizon straight).
+- `docs/perception/competition_mot_baseline.md`: new "Yaw-rate contract"
+  section. `competition_dynamic_object_pipeline.md`: yaw-rate slot note
+  updated (was "left for a follow-up"). This file.
+
+**Tests.** Combined Python suite -- all `test_ab3dmot_*.py` except
+`kalmannet` (needs torch), plus `test_competition_mot_baseline.py`,
+`test_tracking_launch.py`, `test_occupancy_layer_launch.py`,
+`test_lidar_perception_launch.py`, `test_selection_config.py`,
+`test_autoware_pipeline_integration.py` -- **330 passed, 1 skipped**
+(the 6 new `YawRateContractTest` cases and the existing
+`test_ab3dmot_ros.py` 24 + `test_ab3dmot_tracker_node.py` 15 are inside
+this number). C++ via `ctest -R` by name: `test_imm_predictor` 6/6 (incl.
+the 1 new), `test_cv_predictor` 7/7, `test_dynamic_grid_builder` 21/21,
+`test_autoware_prediction_adapter` 24/24 -- 4/4 registered and pass.
+Isolated `colcon build --packages-select ad_lidar_perception
+--symlink-install` clean.
+
+**Runtime regression.** A fresh AFTER-arm replay was **not** run: no
+runtime code changed (Python comment + test files + docs only), so the
+Phase-3 live bounded replay on this branch (180 `static_20260805_003151` frames,
+`tracker_backend:=ab3dmot`, full AB3DMOT -> prediction -> dynamic +
+combined OGM) is the AFTER state: 172 tracked msgs / 1257 objects, 1
+publisher per canonical topic, `objects_in == objects_out == 1257`,
+`rejected = 0`, all `orientation_availability = UNAVAILABLE`,
+`coordinated_turn` selections **0**, predicted `|angular.z|` max 0.0,
+curved trajectories 0. PR #9 (oversized skip active), PR #10 (published
+position std capped at 7.0 m), PR #11 (pose `covariance[35]` = yaw-angle
+variance, median 13 / max 181; `covariance[21]` = 0) all still active. 0
+NaN / Inf / exceptions; grids all finite, 0 invalid cells; 1 empty
+dynamic grid (post-replay stale clear, expected).
+
+**Autoware default: unchanged.** No shared prediction/serialization code
+touched -- only a Python comment, two test files, and docs. The existing
+`test_imm_predictor.cpp` (`Turning...`, `Stationary...`, `Initializes...`)
+and `test_autoware_prediction_adapter.cpp` (24) pass unmodified.
+
+**Contract (locked).** AB3DMOT's Competition MOT baseline publishes a
+truthful zero yaw rate under an explicit non-rotating (constant-velocity)
+assumption. `twist.covariance[35] = 0` means "not provided"; the shared
+`0.04 (rad/s)^2` prediction default then applies, identically to any
+tracker that omits the field. A zero placeholder is never interpreted as
+observed turning information because turn detection is driven by the
+yaw-rate value, not its variance. Coordinated-turn behavior remains gated
+on real motion evidence. **Known limitation:** the `0.04` default gives
+the stationary model a small `log(det S)` edge over CV (stationary's
+`variance[kYawRate]` is clamped to `0.02`); measured effect is 2/1257
+object-frames flipping between two straight-line models. Fixing that
+belongs with the shared prediction default, not a per-tracker override.
+
+**This closes the covariance/uncertainty-contract cleanup.** Next
+development phase (not started here): `PredictedObjectArray` -> Dynamic
+Object Risk Interface -> TTC -> cut-in risk -> roundabout gap acceptance
+-> highway merge gap.
+
+## AB3DMOT yaw-rate contract result: **COMPLETE (Option D)**
+
+---
+
 ## Correct AB3DMOT yaw covariance contract — COMPLETE
 
 Branch `fix/ab3dmot-yaw-covariance-contract`, from `main`
