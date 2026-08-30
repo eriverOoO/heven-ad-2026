@@ -785,4 +785,87 @@ TEST(AutowarePredictionAdapter, TombstonesBindOnlyExpiredUuidInMultiObjectFlow) 
   EXPECT_EQ(b.at("reset_or_gating_reason"), "measurement_accepted");
 }
 
+// --- AB3DMOT Competition MOT baseline -> HEVEN prediction contract ---
+// Adaptive Euclidean clustering never observes yaw, so the AB3DMOT baseline
+// publishes an identity quaternion with orientation_availability=UNAVAILABLE.
+// Prediction must treat that as planar Cartesian motion, never as an
+// observed heading, and must not fabricate a turn from the placeholder yaw.
+
+TrackedObjects ab3dmot_style_input(
+  const std::int64_t stamp_ns, const double local_vx, const double local_vy)
+{
+  auto input = valid_input(stamp_ns);
+  auto & object = input.objects.back();
+  object.classification.back().label = ObjectClassification::UNKNOWN;
+  object.classification.back().probability = 1.0F;
+  auto & pose = object.kinematics.pose_with_covariance.pose;
+  pose.orientation.x = 0.0;
+  pose.orientation.y = 0.0;
+  pose.orientation.z = 0.0;
+  pose.orientation.w = 1.0;
+  object.kinematics.orientation_availability = 0U;  // UNAVAILABLE
+  auto & twist = object.kinematics.twist_with_covariance.twist;
+  twist.linear.x = local_vx;
+  twist.linear.y = local_vy;
+  twist.linear.z = 0.0;
+  twist.angular.z = 0.0;
+  return input;
+}
+
+TEST(AutowarePredictionAdapter, Ab3dmotOrientationUnavailableYieldsCartesianWorldTwist) {
+  const auto input = ab3dmot_style_input(10 * kSecondNs, 3.0, -2.0);
+  const auto output = adapt_tracked_objects(
+    input, 10 * kSecondNs + 100000000LL, std::nullopt, valid_config());
+
+  ASSERT_EQ(output.objects.size(), 1U);
+  const auto & twist = output.objects.front().initial_twist;
+  // Latent yaw is zero, so R(+yaw) is identity: world velocity equals the
+  // published object-local twist with no rotation introduced.
+  EXPECT_NEAR(twist.twist.linear.x, 3.0, 1.0e-12);
+  EXPECT_NEAR(twist.twist.linear.y, -2.0, 1.0e-12);
+  EXPECT_TRUE(
+    std::all_of(
+      twist.covariance.begin(), twist.covariance.end(),
+      [](const double value) {return std::isfinite(value);}));
+  const auto & orientation = output.objects.front().initial_pose.pose.orientation;
+  EXPECT_DOUBLE_EQ(orientation.x, 0.0);
+  EXPECT_DOUBLE_EQ(orientation.y, 0.0);
+  EXPECT_NEAR(orientation.z, 0.0, 1.0e-12);
+  EXPECT_NEAR(orientation.w, 1.0, 1.0e-12);
+}
+
+TEST(AutowarePredictionAdapter, Ab3dmotOrientationUnavailableDoesNotForceCoordinatedTurn) {
+  auto config = valid_config();
+  config.imm_prediction.horizons_s = config.prediction.horizons_s;
+  StatefulImmPredictionAdapter adapter(config);
+
+  const auto straight_step = [&](const int step) {
+    const std::int64_t stamp = 10 * kSecondNs + step * 100000000LL;
+    // Straight-line world motion along +x; identity quaternion throughout.
+    auto input = ab3dmot_style_input(stamp, 4.0, 0.0);
+    input.objects.back().kinematics.pose_with_covariance.pose.position.x =
+      10.0 + 0.4 * step;
+    input.objects.back().kinematics.pose_with_covariance.pose.position.y = 20.0;
+    const std::optional<std::int64_t> last =
+      step == 0 ? std::nullopt :
+      std::optional<std::int64_t>(10 * kSecondNs + (step - 1) * 100000000LL);
+    return adapter.adapt_with_diagnostics(input, stamp + 50000000LL, last);
+  };
+  (void)straight_step(0);
+  (void)straight_step(1);
+  (void)straight_step(2);
+  const auto cycle = straight_step(3);
+
+  ASSERT_EQ(cycle.diagnostics.status.size(), 1U);
+  const auto values = diagnostic_values(cycle.diagnostics.status.front());
+  EXPECT_NE(values.at("selected_mode"), "coordinated_turn");
+  ASSERT_EQ(cycle.predictions.objects.size(), 1U);
+  const auto & twist = cycle.predictions.objects.front().initial_twist;
+  EXPECT_TRUE(
+    std::all_of(
+      twist.covariance.begin(), twist.covariance.end(),
+      [](const double value) {return std::isfinite(value);}));
+  EXPECT_GT(std::hypot(twist.twist.linear.x, twist.twist.linear.y), 0.1);
+}
+
 } // namespace

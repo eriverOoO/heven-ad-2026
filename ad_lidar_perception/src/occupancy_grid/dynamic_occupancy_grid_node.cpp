@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -233,6 +234,14 @@ public:
     config_.occupied_cost = static_cast<std::int8_t>(occupied_cost);
     config_.maximum_cells_per_object =
       static_cast<std::size_t>(maximum_cells);
+    const auto runtime_summary_interval =
+      declare_parameter<std::int64_t>("runtime_summary_interval_frames", 0);
+    if (runtime_summary_interval < 0) {
+      throw std::invalid_argument(
+              "runtime_summary_interval_frames must be nonnegative");
+    }
+    runtime_summary_interval_frames_ =
+      static_cast<std::size_t>(runtime_summary_interval);
     geometry_.width =
       cell_count(geometry_.x_min_m, x_max_m_, geometry_.resolution_m);
     geometry_.height =
@@ -492,6 +501,7 @@ private:
     const ad_interfaces::msg::PredictedObjectArray & input,
     const std::vector<std::int8_t> * const mask)
   {
+    const auto step_started = std::chrono::steady_clock::now();
     std::optional<rclcpp::Time> admitted_stamp;
     try {
       if (input.header.frame_id != source_frame_) {
@@ -537,14 +547,54 @@ private:
         const auto & drivable_mask = *mask;
         data = build_dynamic_grid(geometry_, boxes, config_, drivable_mask);
       }
+      const auto occupied_cells = static_cast<std::size_t>(std::count_if(
+          data.begin(), data.end(),
+          [](const std::int8_t value) {return value > 0;}));
       publisher_->publish(
         make_grid(
           input.header.stamp,
           std::move(data)));
       last_valid_stamp_ = stamp;
+      const double step_latency_ms =
+        std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - step_started).count();
+      record_runtime_metrics(
+        input.objects.size(), occupied_cells, step_latency_ms);
     } catch (const std::exception & error) {
       invalidate_and_clear(error.what(), admitted_stamp);
     }
+  }
+
+  void record_runtime_metrics(
+    const std::size_t predicted_objects, const std::size_t occupied_cells,
+    const double step_latency_ms)
+  {
+    predicted_objects_ += predicted_objects;
+    if (occupied_cells == 0U) {
+      ++empty_grids_;
+    } else {
+      ++nonempty_grids_;
+    }
+    step_latency_ms_.push_back(step_latency_ms);
+    const auto interval = runtime_summary_interval_frames_;
+    if (interval == 0U || step_latency_ms_.size() % interval != 0U) {
+      return;
+    }
+    auto ordered = step_latency_ms_;
+    std::sort(ordered.begin(), ordered.end());
+    const auto count = ordered.size();
+    const double median = count % 2U == 0U ?
+      0.5 * (ordered[count / 2U - 1U] + ordered[count / 2U]) :
+      ordered[count / 2U];
+    const auto p95_index = static_cast<std::size_t>(
+      std::ceil(0.95 * static_cast<double>(count))) - 1U;
+    RCLCPP_INFO(
+      get_logger(),
+      "DYNAMIC_OGM_RUNTIME_SUMMARY frames=%zu predicted_objects=%zu "
+      "empty_grids=%zu nonempty_grids=%zu median_step_ms=%.6f "
+      "p95_step_ms=%.6f max_step_ms=%.6f",
+      count, predicted_objects_, empty_grids_, nonempty_grids_, median,
+      ordered[p95_index], ordered.back());
   }
 
   void process_pair(std::optional<RoadGatePairer::Pair> pair)
@@ -627,6 +677,11 @@ private:
   rclcpp::TimerBase::SharedPtr stale_timer_;
   std::optional<rclcpp::Time> last_valid_stamp_;
   std::optional<rclcpp::Time> latest_admissible_stamp_;
+  std::size_t runtime_summary_interval_frames_{0U};
+  std::size_t predicted_objects_{0U};
+  std::size_t empty_grids_{0U};
+  std::size_t nonempty_grids_{0U};
+  std::vector<double> step_latency_ms_;
 };
 
 std::shared_ptr<rclcpp::Node> make_dynamic_occupancy_grid_node()

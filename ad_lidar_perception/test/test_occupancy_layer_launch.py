@@ -223,7 +223,10 @@ def _assert_leaf_launch_contracts():
     assert str(dynamic["parameters"][0]).endswith(
         "config/occupancy_grid/dynamic.yaml"
     )
-    assert dynamic["parameters"][1].keys() == {"topics.drivable_mask"}
+    assert dynamic["parameters"][1].keys() == {
+        "topics.drivable_mask",
+        "runtime_summary_interval_frames",
+    }
 
     combined = _record_leaf("combined_occupancy_grid.launch.py")
     assert combined["package"] == "ad_lidar_perception"

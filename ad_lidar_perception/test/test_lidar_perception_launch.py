@@ -620,11 +620,14 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
         monkeypatch, config, tracker_backend="ab3dmot"
     )
     names = [action.source for action in actions]
+    # AB3DMOT replaces Autoware as the single canonical tracker, then feeds the
+    # same shared downstream prediction and occupancy launches the Autoware
+    # backend uses. No tracker-specific downstream launch exists.
     assert names.count("ab3dmot_tracker.launch.py") == 1
     assert "tracking.launch.py" not in names
-    assert "prediction.launch.py" not in names
-    assert "dynamic_occupancy_grid.launch.py" not in names
-    assert "combined_occupancy_grid.launch.py" not in names
+    assert names.count("prediction.launch.py") == 1
+    assert names.count("dynamic_occupancy_grid.launch.py") == 1
+    assert names.count("combined_occupancy_grid.launch.py") == 1
 
     ab3dmot = next(
         action
@@ -643,10 +646,20 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
         "matcher": "hungarian",
         "state_estimator": "linear_kf",
         "yaw_measurement_mode": "unobserved",
+        "velocity_audit_enabled": "true",
     }
     assert arguments["config_path"].endswith(
         "config/tracking/competition_mot_baseline_v1.yaml"
     )
+
+    prediction = next(
+        action
+        for action in actions
+        if action.source == "prediction.launch.py"
+    )
+    assert dict(prediction.kwargs["launch_arguments"]) == {
+        "runtime_summary_interval_frames": "180",
+    }
 
 
 def test_ab3dmot_override_rejects_non_euclidean_detector(tmp_path, monkeypatch):

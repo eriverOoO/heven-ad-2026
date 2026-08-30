@@ -247,32 +247,42 @@ def _launch_setup(context):
             raise RuntimeError(
                 "COMPETITION_MOT_BASELINE_V1 requires the adaptive Euclidean detector"
             )
-        actions.append(
-            _include(
-                "ab3dmot_tracker.launch.py",
-                {
-                    "enabled": "true",
-                    "input_topic": "/ad/perception/objects/detected",
-                    "output_topic": "/ad/perception/objects/tracked",
-                    "target_frame": "odom",
-                    "config_path": _tracking_config(
-                        "competition_mot_baseline_v1.yaml"
-                    ),
-                    "association_metric": "euclidean",
-                    "euclidean_gate_m": "3.0",
-                    "matcher": "hungarian",
-                    "state_estimator": "linear_kf",
-                    "yaw_measurement_mode": "unobserved",
-                },
-            )
+        actions.extend(
+            [
+                _include(
+                    "ab3dmot_tracker.launch.py",
+                    {
+                        "enabled": "true",
+                        "input_topic": "/ad/perception/objects/detected",
+                        "output_topic": "/ad/perception/objects/tracked",
+                        "target_frame": "odom",
+                        "config_path": _tracking_config(
+                            "competition_mot_baseline_v1.yaml"
+                        ),
+                        "association_metric": "euclidean",
+                        "euclidean_gate_m": "3.0",
+                        "matcher": "hungarian",
+                        "state_estimator": "linear_kf",
+                        "yaw_measurement_mode": "unobserved",
+                        "velocity_audit_enabled": "true",
+                    },
+                ),
+                _include(
+                    "prediction.launch.py",
+                    {"runtime_summary_interval_frames": "180"},
+                ),
+            ]
         )
 
-    if selection.occupancy.dynamic_enabled and tracker_backend == "autoware":
-        actions.append(_include("dynamic_occupancy_grid.launch.py"))
+    if selection.occupancy.dynamic_enabled:
+        dynamic_arguments = None
+        if tracker_backend == "ab3dmot":
+            dynamic_arguments = {"runtime_summary_interval_frames": "180"}
+        actions.append(
+            _include("dynamic_occupancy_grid.launch.py", dynamic_arguments)
+        )
 
-    if selection.occupancy.publish_combined and (
-        not selection.occupancy.dynamic_enabled or tracker_backend == "autoware"
-    ):
+    if selection.occupancy.publish_combined:
         actions.append(_include("combined_occupancy_grid.launch.py"))
     if start_visualization or start_rviz:
         actions.append(

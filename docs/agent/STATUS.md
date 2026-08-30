@@ -1,5 +1,98 @@
 # STATUS
 
+## AB3DMOT -> Prediction -> Dynamic OGM integration — COMPLETE
+
+Branch `feat/ab3dmot-prediction-dynamic-ogm`, from `main`
+`84412cc1a91d86d0dfda10cc7f854a094e518d30` (PR #7). Connected the merged
+model-free Competition MOT baseline to the existing HEVEN stateful IMM
+prediction node and the existing dynamic / combined occupancy nodes.
+`tracker_backend:=ab3dmot` now starts `prediction.launch.py`,
+`dynamic_occupancy_grid.launch.py`, and `combined_occupancy_grid.launch.py`
+- the same shared downstream launches the Autoware path uses. No
+AB3DMOT-specific prediction or occupancy node was created. Autoware
+remains the default; no learned model is required.
+
+**Compatibility work.** Only launch wiring plus additive runtime
+instrumentation. The `lidar_perception.launch.py` gate that restricted
+prediction / dynamic / combined occupancy to `tracker_backend == autoware`
+was a temporary safety gate (per the baseline doc), not a contract
+incompatibility - removed cleanly. No AB3DMOT config, KF, gate, matcher,
+lifecycle, IMM parameter, or occupancy parameter was tuned. Two overreach
+changes found in the in-progress tree were reverted: a deleted
+clock-rollback reset in the shared prediction node (would have wedged the
+Autoware path after a MORAI time reset) and a switch of the IMM
+`initial_twist` from the fused estimate to the raw measurement.
+
+**Orientation UNAVAILABLE.** Prediction needs no change. `convert_object`
+never rejects on the availability flag; the AB3DMOT identity quaternion
+gives yaw 0, so `R(+yaw)` and the serialization `R(-yaw)` are both
+identity and world Cartesian motion is preserved. The IMM consumes the
+always-zero yaw with a bounded fallback variance and never forces a turn
+(replay: only `constant_velocity` / `stationary` selected, 0
+`coordinated_turn`). New tests
+`test_autoware_prediction_adapter.cpp:Ab3dmotOrientationUnavailable*`.
+
+**Velocity round trip (live ROS).** AB3DMOT published its pre-serialization
+world velocity on a diagnostic audit topic (on only for `ab3dmot`).
+Reconstructed world velocity from published local twist + pose yaw vs the
+audited value over 1318 object-frames (651 with |v| > 1 m/s, max 20.4):
+max |Δvx| = max |Δvy| = max |Δv| = 0.000e+00. Exact because yaw is
+identically zero (identity rotations); the rotation math itself stays
+covered by the merged baseline serialization tests.
+
+**Bounded replay** (`~/datasets/morai_heven` `static_20260805_003151`,
+first 180 frames, ~6 Hz, self-crop-bypass -> Patchwork++ -> finite ->
+Adaptive Euclidean -> AB3DMOT -> prediction -> dynamic OGM, plus static +
+combined with `road_gate.enabled:=false` because no repo-local replay has
+`/ad/planning/drivable_mask` and the host lacks `rosbag2_storage_mcap`):
+172 `TrackedObjects` (172 unique monotonic `odom` stamps), 171
+`PredictedObjectArray` (12 states each, stamps a subset of tracked), 171
+unique-stamp dynamic grids (77 empty / 94 non-empty, occupied median 4338
+/ p95 24398 / max 50026, 0 invalid cells, 1040x200 @ 0.1 base_link), 171
+combined grids (geometry valid, 0 invalid). Prediction rejected 1 array
+(first-frame `stamp is in the future`), 0 orientation-related. Exactly one
+publisher on tracked / predicted / dynamic / combined before and after
+the replay. Zero NaN / Inf / exceptions / node crashes.
+
+Component step latency (median / p95 / max ms): AB3DMOT 0.822 / 2.323 /
+3.356; prediction 0.125 / 0.299 / 0.539; dynamic OGM 0.410 / 0.898 /
+1.456. End-to-end callback-to-publish was not separately instrumented.
+
+**Known limitations.** Execution / interface evidence only (one static
+window, no HOTA / IDSW). Drivable-mask-gated occupancy not exercised
+against real planning (no repo-local mask data; mask pairing / mismatch /
+stale rejection stay covered by `test_occupancy_layer_launch.py` with a
+synthetic driver). Large Linear-KF position covariance can inflate a
+coarse Euclidean AABB past `maximum_cells_per_object`, and the dynamic
+node then safely clears that frame (>=13 of the 77 empties); a covariance
+cap / occupancy inflation review is a separate task, not tuned here. The
+from-scratch 6 Hz replay dropped ~8 of 180 frames at start/stop
+boundaries (Patchwork++ re-emit; AB3DMOT correctly rejected the
+duplicate / backward stamps).
+
+**Tests.** `ad_lidar_perception` gtest 14/14; focused pytest
+(`test_lidar_perception_launch`, `test_tracking_launch`,
+`test_occupancy_layer_launch`, `test_ab3dmot_*`) 164/164; the
+`test_occupancy_layer_launch` launch_test reports 4/4 subtests pass
+(ctest wraps a spurious SIGINT-teardown return code).
+`test_lidar_bag_replay_launch` (1 subtest) and
+`test_perception_visualization_launch` (1 subtest) fail on this host from
+a pre-existing rosbag2 CLI mismatch, unrelated to this change (both files
+are CRLF-only in the tree). Isolated `colcon build` of `ad_lidar_perception`
+clean.
+
+**Full detail:** `docs/perception/competition_dynamic_object_pipeline.md`.
+
+**Recommended next task:** accuracy evaluation of this dynamic-object path
+(needs a disjoint GT scene), or a drivable-mask-gated occupancy run
+against a real planning stack, or a covariance-cap / occupancy-inflation
+review for the coarse Euclidean boxes. Do not combine with estimator or
+prediction-model tuning.
+
+## AB3DMOT -> Prediction -> Dynamic OGM result: **COMPLETE**
+
+---
+
 ## Competition MOT Baseline v1 — COMPLETE
 
 Branch `feat/competition-mot-baseline-v1`, resumed from `main`
