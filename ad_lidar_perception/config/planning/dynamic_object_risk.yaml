@@ -1,0 +1,38 @@
+ad_dynamic_object_risk:
+  ros__parameters:
+    # Canonical inputs. The node is tracker-backend agnostic: it consumes the
+    # shared PredictedObjectArray produced by either the Autoware or the
+    # AB3DMOT prediction path, plus the canonical localization odometry.
+    prediction_topic: /ad/perception/objects/predicted
+    odometry_topic: /ad/localization/odometry
+    output_topic: /ad/planning/dynamic_object_risks
+    diagnostic_topic: /ad/planning/dynamic_object_risks/diagnostics
+
+    prediction_frame_id: odom
+    output_frame_id: base_link
+
+    # Fail-closed freshness. Matches the planner's own
+    # local_motion.prediction_timeout_sec / max_odometry_age_sec.
+    maximum_prediction_age_s: 0.5
+    maximum_ego_age_s: 0.5
+    maximum_future_skew_s: 0.10
+
+    # Below this relative speed an object is "not closing" (radial rate) and
+    # has "no relative motion" (TTC / CPA undefined -> valid flag false).
+    closing_speed_epsilon_mps: 0.05
+
+    # Constant-velocity rollout horizon for CPA and predicted-min-separation,
+    # and the cutoff beyond which a modelled TTC contact is reported invalid.
+    # Matches perception.future_road_risk.horizon_sec / the prediction horizon.
+    cpa_horizon_s: 6.0
+    ttc_horizon_s: 6.0
+
+    # Ego circumscribed-circle radius = hypot(half_length, half_width).
+    # IONIQ 5 body ~4.64 x 1.89 m -> ~2.32 x 0.95 m half-extents, rounded up.
+    # This is a conservative geometric contact radius, not a safety margin.
+    ego_half_length_m: 2.5
+    ego_half_width_m: 1.1
+    minimum_object_radius_m: 0.30
+
+    maximum_objects: 256
+    runtime_summary_interval_frames: 180

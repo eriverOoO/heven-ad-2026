@@ -284,6 +284,12 @@ def _launch_setup(context):
 
     if selection.occupancy.publish_combined:
         actions.append(_include("combined_occupancy_grid.launch.py"))
+
+    # Opt-in, backend-agnostic planner-facing metric node. Default off: it only
+    # observes the shared PredictedObjectArray + canonical odometry and adds no
+    # behaviour. Works identically for the autoware and ab3dmot prediction paths.
+    if _perform(context, "dynamic_object_risk").strip().lower() in {"1", "true"}:
+        actions.append(_include("dynamic_object_risk.launch.py"))
     if start_visualization or start_rviz:
         actions.append(
             _include(
@@ -364,6 +370,14 @@ def generate_launch_description():
                 "start_visualization", default_value="false"
             ),
             DeclareLaunchArgument("start_rviz", default_value="false"),
+            DeclareLaunchArgument(
+                "dynamic_object_risk",
+                default_value="false",
+                description=(
+                    "Opt-in: start the planner-facing Dynamic Object Risk "
+                    "Interface node (observational, no behaviour change)."
+                ),
+            ),
             DeclareLaunchArgument(
                 "point_layout_adapter_enabled",
                 default_value="true",
