@@ -76,11 +76,10 @@ For each nonempty input, the tracker requests the
 transforms detections before association and publishes `odom`. Empty inputs
 do not require TF. The output reuses the input stamp object unchanged.
 
-Input stamps must be strictly positive. Duplicate stamps are rejected without
-publication. A backward stamp resets tracker state before processing the new
-epoch. The KF transition uses the actual positive elapsed seconds between
-successive accepted message stamps, so velocity remains m/s rather than
-meters/frame.
+Input stamps must be strictly positive. Duplicate and backward stamps are
+rejected without publication or tracker-state mutation. The KF transition
+uses the actual positive elapsed seconds between successive accepted message
+stamps, so velocity remains m/s rather than meters/frame.
 
 ## Yaw and velocity
 

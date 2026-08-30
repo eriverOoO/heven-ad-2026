@@ -190,7 +190,9 @@ class ClassifyTimestampTest(unittest.TestCase):
         self.assertEqual(classify_timestamp(100, 100), TimestampDecision.SKIP_DUPLICATE)
 
     def test_decreasing_is_rollback(self):
-        self.assertEqual(classify_timestamp(50, 100), TimestampDecision.RESET_ROLLBACK)
+        self.assertEqual(
+            classify_timestamp(50, 100), TimestampDecision.REJECT_ROLLBACK
+        )
 
 
 class SelectClassificationTest(unittest.TestCase):

@@ -159,17 +159,11 @@ class Ab3dmotTrackerNode(Node):
         if decision is TimestampDecision.SKIP_DUPLICATE:
             self.get_logger().warn("rejected DetectedObjects: duplicate timestamp")
             return
-        if decision is TimestampDecision.RESET_ROLLBACK:
-            # MORAI resets simulated time together with object tracks --
-            # reset AB3DMOT's experimental state cleanly instead of ever
-            # propagating a negative dt into the KF, mirroring
-            # AutowarePredictionNode's own clock-rollback handling.
-            self.get_logger().info(
-                "detected clock rollback; resetting the experimental AB3DMOT tracker"
+        if decision is TimestampDecision.REJECT_ROLLBACK:
+            self.get_logger().warn(
+                "rejected DetectedObjects: timestamp moved backwards"
             )
-            self._tracker = self._build_tracker()
-            self._last_stamp_ns = None
-            self._previous_live_track_ids.clear()
+            return
 
         transform = None
         if msg.objects:
@@ -193,7 +187,7 @@ class Ab3dmotTrackerNode(Node):
             states = self._tracker.step(detections, timestamp_seconds)
             step_latency_ms = (time.perf_counter() - step_started) * 1000.0
         except ValueError as error:
-            # Should not happen: the duplicate/rollback gating above already
+            # Should not happen: the non-increasing timestamp gating above already
             # guarantees a strictly-increasing timestamp reaches step().
             # Kept as a defensive backstop, matching this repo's existing
             # reject-rather-than-crash policy for malformed timing.

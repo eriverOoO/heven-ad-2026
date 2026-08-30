@@ -135,15 +135,13 @@ class Ab3dmotTrackerNodeTest(unittest.TestCase):
         self.assertEqual(len(node.publisher.published), published_before)
         node.destroy_node()
 
-    def test_clock_rollback_resets_tracker_state(self):
+    def test_clock_rollback_is_rejected_without_reset_or_publication(self):
         node = build_enabled_node()
         node._on_detected_objects(make_detected_objects(200, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
         first_tracker = node._tracker
         node._on_detected_objects(make_detected_objects(50, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
-        self.assertIsNot(node._tracker, first_tracker)
-        # the reset tracker treats the rollback message as a fresh first
-        # frame rather than propagating a negative dt
-        self.assertEqual(len(node.publisher.published), 2)
+        self.assertIs(node._tracker, first_tracker)
+        self.assertEqual(len(node.publisher.published), 1)
         node.destroy_node()
 
     def test_empty_detections_does_not_require_tf(self):

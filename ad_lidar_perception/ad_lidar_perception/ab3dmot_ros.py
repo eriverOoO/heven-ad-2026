@@ -55,22 +55,20 @@ class TimestampDecision(Enum):
 
     PROCESS = "process"  # first frame, or a normal strictly-later stamp
     SKIP_DUPLICATE = "skip_duplicate"  # identical stamp; drop silently-safe
-    RESET_ROLLBACK = "reset_rollback"  # stamp went backwards (MORAI sim reset)
+    REJECT_ROLLBACK = "reject_rollback"  # stamp went backwards
 
 
 def classify_timestamp(stamp_ns: int, last_stamp_ns: int | None) -> TimestampDecision:
     """Classify ``stamp_ns`` against ``last_stamp_ns`` (``None`` on the
     first frame). Never returns a decision that would let a non-positive
-    dt reach the tracker: duplicates are skipped, rollbacks call for a
-    tracker reset (after which the caller should treat the next step as a
-    fresh first frame), and everything else is a normal, strictly-
-    increasing step.
+    dt reach the tracker: duplicates and rollbacks are rejected, and
+    everything else is a normal, strictly-increasing step.
     """
     if last_stamp_ns is None or stamp_ns > last_stamp_ns:
         return TimestampDecision.PROCESS
     if stamp_ns == last_stamp_ns:
         return TimestampDecision.SKIP_DUPLICATE
-    return TimestampDecision.RESET_ROLLBACK
+    return TimestampDecision.REJECT_ROLLBACK
 
 
 def _finite_probability(value: float) -> bool:
