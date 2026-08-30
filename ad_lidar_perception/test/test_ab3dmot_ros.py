@@ -8,6 +8,7 @@ from ad_lidar_perception.ab3dmot_core import TrackedState
 from ad_lidar_perception.ab3dmot_ros import (
     DetectedObjectsAdapterError,
     TimestampDecision,
+    bound_position_covariance,
     classify_timestamp,
     detected_objects_to_detections,
     quaternion_from_yaw,
@@ -329,7 +330,7 @@ class TrackIdUuidTest(unittest.TestCase):
 
 class TrackedStateToMessageTest(unittest.TestCase):
     def test_world_velocity_is_serialized_in_object_local_axes(self):
-        message = tracked_state_to_message(
+        message, _ = tracked_state_to_message(
             make_state(yaw=math.pi / 2.0, vx_mps=0.0, vy_mps=3.5, vz_mps=0.1),
             MESSAGE_TYPES,
         )
@@ -339,7 +340,7 @@ class TrackedStateToMessageTest(unittest.TestCase):
         self.assertAlmostEqual(twist.z, 0.1)
 
     def test_position_orientation_dimensions_and_classification(self):
-        message = tracked_state_to_message(make_state(), MESSAGE_TYPES)
+        message, _ = tracked_state_to_message(make_state(), MESSAGE_TYPES)
         pose = message.kinematics.pose_with_covariance.pose
         self.assertAlmostEqual(pose.position.x, 1.0)
         self.assertAlmostEqual(pose.position.y, 2.0)
@@ -353,9 +354,9 @@ class TrackedStateToMessageTest(unittest.TestCase):
         self.assertAlmostEqual(message.existence_probability, 0.8)
 
     def test_stable_track_identity_via_uuid(self):
-        first = tracked_state_to_message(make_state(track_id=42), MESSAGE_TYPES)
-        second = tracked_state_to_message(make_state(track_id=42), MESSAGE_TYPES)
-        third = tracked_state_to_message(make_state(track_id=43), MESSAGE_TYPES)
+        first, _ = tracked_state_to_message(make_state(track_id=42), MESSAGE_TYPES)
+        second, _ = tracked_state_to_message(make_state(track_id=42), MESSAGE_TYPES)
+        third, _ = tracked_state_to_message(make_state(track_id=43), MESSAGE_TYPES)
         self.assertTrue(np.array_equal(first.object_id.uuid, second.object_id.uuid))
         self.assertFalse(np.array_equal(first.object_id.uuid, third.object_id.uuid))
 
@@ -366,7 +367,7 @@ class TrackedStateToMessageTest(unittest.TestCase):
             yaw_variance=0.07,
             velocity_covariance=np.array([[4.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 6.0]]),
         )
-        message = tracked_state_to_message(state, MESSAGE_TYPES)
+        message, _ = tracked_state_to_message(state, MESSAGE_TYPES)
         pose_cov = message.kinematics.pose_with_covariance.covariance
         self.assertAlmostEqual(pose_cov[0 * 6 + 0], 1.0)
         self.assertAlmostEqual(pose_cov[1 * 6 + 1], 2.0)
@@ -378,7 +379,7 @@ class TrackedStateToMessageTest(unittest.TestCase):
         self.assertAlmostEqual(twist_cov[2 * 6 + 2], 6.0)
 
     def test_velocity_covariance_rotates_with_object_local_twist(self):
-        message = tracked_state_to_message(
+        message, _ = tracked_state_to_message(
             make_state(
                 yaw=math.pi / 2.0,
                 velocity_covariance=np.diag([4.0, 9.0, 16.0]),
@@ -414,14 +415,14 @@ class TrackedStateToMessageTest(unittest.TestCase):
         """acceleration_with_covariance / is_stationary: AB3DMOT's state has
         no such quantity, so these must stay at the message's own default
         rather than being invented."""
-        message = tracked_state_to_message(make_state(), MESSAGE_TYPES)
+        message, _ = tracked_state_to_message(make_state(), MESSAGE_TYPES)
         self.assertEqual(message.kinematics.is_stationary, False)
         accel = message.kinematics.acceleration_with_covariance
         self.assertEqual(accel.accel.linear.x, 0.0)
         self.assertEqual(accel.covariance, [0.0] * 36)
 
     def test_yaw_unobserved_marks_orientation_unavailable(self):
-        message = tracked_state_to_message(
+        message, _ = tracked_state_to_message(
             make_state(yaw=0.0),
             MESSAGE_TYPES,
             orientation_available=False,
@@ -435,14 +436,124 @@ class TrackedStateToMessageTest(unittest.TestCase):
 class TrackedStatesToMessageTest(unittest.TestCase):
     def test_sets_odom_frame_and_preserves_input_stamp(self):
         stamp = SimpleNamespace(sec=12, nanosec=345)
-        message = tracked_states_to_message([make_state()], stamp, "odom", MESSAGE_TYPES)
+        message, bounded = tracked_states_to_message(
+            [make_state()], stamp, "odom", MESSAGE_TYPES
+        )
+        self.assertEqual(bounded, 0)
         self.assertEqual(message.header.frame_id, "odom")
         self.assertIs(message.header.stamp, stamp)
         self.assertEqual(len(message.objects), 1)
 
     def test_empty_states_produce_empty_objects(self):
-        message = tracked_states_to_message([], SimpleNamespace(sec=1, nanosec=0), "odom", MESSAGE_TYPES)
+        message, bounded = tracked_states_to_message(
+            [], SimpleNamespace(sec=1, nanosec=0), "odom", MESSAGE_TYPES
+        )
         self.assertEqual(message.objects, [])
+        self.assertEqual(bounded, 0)
+
+
+class BoundPositionCovarianceTest(unittest.TestCase):
+    """Option C published-uncertainty bound
+    (fix/ab3dmot-covariance-stability). See
+    docs/perception/competition_dynamic_object_pipeline.md."""
+
+    def test_disabled_for_non_positive_or_non_finite_limit(self):
+        raw = np.diag([400.0, 400.0, 1.0])
+        for limit in (0.0, -1.0, float("nan"), float("inf")):
+            out, bounded = bound_position_covariance(raw, limit)
+            self.assertFalse(bounded)
+            self.assertIs(out, raw)
+
+    def test_covariance_within_limit_is_untouched(self):
+        raw = np.diag([4.0, 9.0, 1.0])  # max std 3 m
+        out, bounded = bound_position_covariance(raw, 7.0)
+        self.assertFalse(bounded)
+        self.assertIs(out, raw)
+
+    def test_pathological_case_is_clipped_to_the_limit(self):
+        # born-then-lost track: P0_pos 10 + dt^2 * P0_vel ~= 360 m^2.
+        raw = np.diag([360.0, 360.0, 360.0])
+        out, bounded = bound_position_covariance(raw, 7.0)
+        self.assertTrue(bounded)
+        eigenvalues = np.linalg.eigvalsh(out)
+        self.assertLessEqual(float(eigenvalues[-1]), 49.0 + 1e-9)
+        self.assertAlmostEqual(math.sqrt(out[0, 0]), 7.0, places=9)
+
+    def test_only_the_exceeding_direction_is_clipped(self):
+        raw = np.diag([400.0, 1.0, 0.25])
+        out, bounded = bound_position_covariance(raw, 5.0)
+        self.assertTrue(bounded)
+        self.assertAlmostEqual(out[0, 0], 25.0, places=9)
+        self.assertAlmostEqual(out[1, 1], 1.0, places=9)
+        self.assertAlmostEqual(out[2, 2], 0.25, places=9)
+
+    def test_result_is_symmetric_and_psd(self):
+        raw = np.array(
+            [[350.0, 40.0, 5.0], [40.0, 360.0, -3.0], [5.0, -3.0, 12.0]]
+        )
+        out, bounded = bound_position_covariance(raw, 6.0)
+        self.assertTrue(bounded)
+        np.testing.assert_allclose(out, out.T, atol=0.0)
+        self.assertGreaterEqual(float(np.linalg.eigvalsh(out)[0]), -1e-9)
+        self.assertTrue(np.all(np.isfinite(out)))
+
+    def test_does_not_mutate_the_input(self):
+        raw = np.diag([500.0, 500.0, 500.0])
+        original = raw.copy()
+        bound_position_covariance(raw, 7.0)
+        np.testing.assert_array_equal(raw, original)
+
+    def test_deterministic(self):
+        raw = np.diag([300.0, 420.0, 8.0])
+        first, _ = bound_position_covariance(raw, 7.0)
+        second, _ = bound_position_covariance(raw, 7.0)
+        np.testing.assert_array_equal(first, second)
+
+
+class TrackedStateBoundedSerializationTest(unittest.TestCase):
+    def test_serialization_clips_pathological_position_block_and_flags_it(self):
+        state = make_state(
+            yaw=0.0,
+            position_covariance=np.diag([360.0, 360.0, 360.0]),
+            velocity_covariance=np.diag([10000.0, 10000.0, 10000.0]),
+            hits=1,
+            time_since_update=1,
+        )
+        message, bounded = tracked_state_to_message(
+            state, MESSAGE_TYPES, maximum_position_std_m=7.0
+        )
+        self.assertTrue(bounded)
+        pose_cov = message.kinematics.pose_with_covariance.covariance
+        self.assertAlmostEqual(pose_cov[0], 49.0, places=6)
+        self.assertAlmostEqual(pose_cov[7], 49.0, places=6)
+        # velocity covariance is deliberately left raw -- a born-then-lost
+        # track's velocity really is unknown; the OGM does not read it.
+        twist_cov = message.kinematics.twist_with_covariance.covariance
+        self.assertAlmostEqual(twist_cov[0], 10000.0, places=6)
+
+    def test_normal_track_serialization_is_unchanged_by_the_bound(self):
+        state = make_state(position_covariance=np.diag([1.2, 1.2, 1.2]))
+        with_bound, bounded = tracked_state_to_message(
+            state, MESSAGE_TYPES, maximum_position_std_m=7.0
+        )
+        without_bound, _ = tracked_state_to_message(state, MESSAGE_TYPES)
+        self.assertFalse(bounded)
+        self.assertEqual(
+            list(with_bound.kinematics.pose_with_covariance.covariance),
+            list(without_bound.kinematics.pose_with_covariance.covariance),
+        )
+
+    def test_aggregate_counts_bounded_objects(self):
+        states = [
+            make_state(track_id=1, position_covariance=np.diag([360.0, 360.0, 360.0])),
+            make_state(track_id=2, position_covariance=np.diag([1.0, 1.0, 1.0])),
+            make_state(track_id=3, position_covariance=np.diag([200.0, 9.0, 9.0])),
+        ]
+        _, count = tracked_states_to_message(
+            states, SimpleNamespace(sec=1, nanosec=0), "odom", MESSAGE_TYPES,
+            maximum_position_std_m=7.0,
+        )
+        self.assertEqual(count, 2)
 
 
 if __name__ == "__main__":

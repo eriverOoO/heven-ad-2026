@@ -124,6 +124,145 @@ covered by the merged baseline's focused serialization tests. The IMM
 from the raw measurement (up to ~13 m/s at track birth in this replay);
 that is filter behavior, reported separately, not round-trip error.
 
+## Position covariance contract
+
+### Root cause of the ~360 m^2 position covariance
+
+The reference AB3DMOT birth prior (`references/ab3dmot`
+`AB3DMOT_libs/kalman_filter.py`) is `kf.P *= 10.` then `kf.P[7:,7:] *=
+1000.`, i.e. **position variance 10 m^2, velocity variance 10000 (m/s)^2**
+on a fresh track. `Q` position diag is 1, velocity diag 0.01. The
+constant-velocity transition couples them: `F[0,7] = F[1,8] = dt`, so one
+`predict()` step gives
+
+```text
+P_next[0,0] = P[0,0] + dt^2 * P[7,7] + Q[0,0]
+```
+
+Under COMPETITION_MOT_BASELINE_V1 (`min_hits: 1`, `max_age: 2`), a track
+that is **born from a single detection and never re-associated** is
+published at birth (`hits=1`, `time_since_update=0`, std `sqrt(10)` =
+3.16 m), then coasts **exactly one** `predict()` step (`time_since_update=1`,
+still published because `is_dead` needs `>= max_age`), then is deleted at
+`time_since_update=2`. That single coast step, at the normal replay
+interval `dt` ~ 0.19 s, propagates `dt^2 * 10000` ~ 360 m^2 into position
+variance -> std ~ 19 m for that one published frame.
+
+Measured on the offline deterministic replay of the recorded 180-frame
+detection stream (1336 published track-frames):
+
+| metric | raw KF `P` (before) |
+| --- | --- |
+| position std median | 1.00 m |
+| position std p95 / p99 / max | 19.06 / 20.03 / 20.33 m |
+| published rows with std > 15 m | 155 (11.6%) |
+| of those: `hits`, `time_since_update` | `1`, `1` for **all 155** |
+| of those: velocity variance | 10000 (unchanged) for all 155 |
+| non-finite or non-PSD rows | 0 |
+
+This is **not a bug**: `P_next[0,0]` matches the closed-form
+`P0_pos + dt^2 * P0_vel + Q` to the digit, every row is finite and PSD,
+`dt` is normal (min 0.018 s at one frame boundary, median 0.187 s, max
+0.202 s), and only born-then-lost 1-hit tracks are affected -- a track
+that gets a second hit stays at std ~2-4 m and converges to ~1.3 m. The
+~19 m std is the honest one-coast-step reachability of a hypothesis that
+has velocity prior 10000 and has been unobserved for a frame.
+
+### Policy: Option C -- bound the published covariance, not the filter
+
+The internal Kalman covariance is **not** modified. Changing `P0` was
+tested (velocity variance 900 / 400 / 100 instead of 10000): it does
+suppress the tail, but it also changes the Kalman gain, and with it the
+predicted positions, the Euclidean-gate association outcomes, and the
+resulting track set -- the published track-id set changed (274 -> 265-270
+unique ids) and common published states diverged by mean 3-17 m / p95 up
+to 60 m. An internal bound is therefore rejected: it silently alters
+tracking behaviour.
+
+Instead, `ab3dmot_ros.bound_position_covariance` clips **only the 3x3
+position block written into the outgoing `TrackedObject`**, via
+eigenvalue clipping (symmetry- and PSD-preserving), so no direction's
+reported standard deviation exceeds `maximum_position_std_m`. The filter's
+`P` -- and thus every `x`, `vx`, track id, hit count -- is byte-identical
+with and without the bound (verified: offline replay, 1336 track-frames,
+274 track ids, all internal states equal; deterministic across reruns).
+
+`maximum_position_std_m` default is **0.0 (disabled)** for the generic
+AB3DMOT node; COMPETITION_MOT_BASELINE_V1 sets **7.0 m**, derived forward
+from physics, not from any downstream config:
+
+```text
+sqrt( P0_pos 10 m^2  +  (v_max 31 m/s * one coast step ~0.2 s)^2 )  ~=  6.96 m
+```
+
+`v_max` is the top of the actor speeds measured in this dataset (T-11).
+The bound is deliberately **above** the ~5 m std at which the OGM's
+2-sigma inflation starts tripping `maximum_cells_per_object`: it is a
+physical reachability ceiling, not a device for making the OGM accept the
+object. Velocity covariance and yaw variance are left raw -- a
+born-then-lost track's velocity genuinely is unknown (10000), the OGM does
+not read it, and capping it would make the IMM partially trust a zero
+velocity it has no evidence for.
+
+Diagnostics: `AB3DMOT_RUNTIME_SUMMARY` gains `position_cov_bounded=` (total
+objects clipped) and `position_cov_bounded_frames=`. The published
+covariance is never presented as the raw estimator covariance.
+
+### Coupling to lifecycle
+
+`maximum_position_std_m` = 7.0 is the **one-coast-step** bound. It is
+valid only because `max_age: 2` allows exactly one coast frame before
+deletion. Raising `max_age` (more coast steps -> larger honest
+reachability) requires re-deriving this value.
+
+### Before / after (offline replay, identical detection stream)
+
+| published position std | before (raw `P`) | after (Option C, 7.0 m) |
+| --- | --- | --- |
+| median | 1.00 m | 1.00 m |
+| p95 / p99 / max | 19.06 / 20.03 / 20.33 m | 7.00 / 7.00 / 7.00 m |
+| rows > 3 m | 468 | 468 (unchanged -- real mid-range uncertainty) |
+| rows > 10 m / > 15 m | 155 / 155 | 0 / 0 |
+| objects clipped | -- | 155 (11.6%) |
+| serialized non-finite / non-PSD | 0 / 0 | 0 / 0 |
+
+### Downstream effect on the Dynamic OGM (PR #9 still active)
+
+`bound_position_covariance` runs at the tracker's ROS boundary; the
+prediction node passes the position covariance through essentially
+unchanged for these 1-hit tracks (measured: predicted `initial_pose` std
+distribution == tracked std distribution), so the OGM sees the bounded
+value. Live bounded replay, 160-frame `DYNAMIC_OGM_RUNTIME_SUMMARY`,
+`build_dynamic_grid` with the PR #9 per-object skip **not reverted**:
+
+| metric | before (cap 0.0) | after (cap 7.0) |
+| --- | --- | --- |
+| `oversized_objects_skipped` | 157 | 97 |
+| `frames_with_oversized_skip` | 72 | 57 |
+| empty dynamic grids | 1 (startup) | 1 (startup) |
+| dynamic occupied cells median / p95 | 8868 / 43385 | 10237 / 52040 |
+| invalid occupancy cells | 0 | 0 |
+
+The extreme published tail is gone (the actual deliverable of this fix)
+and ~40% fewer objects reach the OGM's per-object budget check
+(157 -> 97). The cap does **not** make a born-then-lost 1-hit track
+rasterizable as a meaningful footprint: at std 7 m the 2-sigma inflation
+is still 14 m, so an in-grid object's clipped footprint stays well over
+`maximum_cells_per_object`. The 157 -> 97 drop is dominated by objects
+near the grid boundary whose smaller 14 m halo (vs. 38 m) no longer
+overlaps the grid at all, or clips to a thin strip -- their net
+contribution to the published grid is ~zero either way, and the small
+occupied-cell delta (median 8868 -> 10237) is within the run-to-run
+noise of the two arms sampling disjoint wall-clock stamps. PR #9's
+per-object skip remains the operative guard for in-grid diffuse objects;
+painting a 14 m-radius blob into the planning grid for a lost 1-hit
+hypothesis is not desirable. The concrete win downstream is for any
+consumer that reads the covariance **numerically** (prediction's IMM
+measurement variance, a future planner cost term): it now gets a
+physically meaningful ~7 m rather than a 19 m one-frame artifact.
+Eliminating the OGM skips entirely would need a sub-birth-uncertainty cap
+(false confidence) or an OGM-side rendering change (out of scope).
+
 ## Prediction behavior
 
 Unchanged `ad_autoware_prediction`: stateful IMM (stationary /
@@ -165,8 +304,10 @@ frames (~40%) had their entire dynamic layer erased. The trigger was
 almost always a single AB3DMOT track carrying ~350-370 m^2 position
 covariance (KF uncertainty, std ~19 m) -> 2-sigma inflation ~38 m ->
 grid-clipped footprint >20000 cells. Object box dimensions were tiny
-(0.1-1.7 m); coarse detector geometry was not the cause. The underlying KF
-covariance is out of scope for this fix and is not tuned.
+(0.1-1.7 m); coarse detector geometry was not the cause. That covariance
+is now root-caused and bounded at the tracker's ROS boundary -- see
+**Position covariance contract** above; PR #9's per-object skip remains as
+the downstream guard for the residual.
 
 Checked-in `dynamic.yaml` keeps `road_gate.enabled: true`, so in
 production the node pairs each prediction with an exact-stamp
@@ -259,15 +400,21 @@ and the 0.5 s prediction-timeout, and the structural bound is unchanged.
    (`rosbag2_storage_mcap` missing). The exact-stamp mask pairing,
    geometry-mismatch rejection, and stale-mask rejection remain covered by
    `test_occupancy_layer_launch.py` with a synthetic mask driver.
-3. **Covariance-inflated footprints (mitigated downstream).** Some
-   Linear-KF AB3DMOT tracks carry ~350-370 m^2 position covariance, whose
-   2-sigma inflation (~38 m) pushes a small box past
-   `maximum_cells_per_object`. The dynamic node used to erase the whole
-   frame; it now skips only that object. The underlying KF covariance is
-   out of scope -- a covariance cap in the estimator or a physical
-   uncertainty ceiling in prediction is a separate task. A frame whose
-   *every* in-grid object is oversized still yields a correctly-empty grid
-   (none occurred in the replay).
+3. **Covariance-inflated footprints (root-caused; bounded at the ROS
+   boundary; PR #9 still guards the residual).** Born-then-lost 1-hit
+   Linear-KF AB3DMOT tracks reach ~360 m^2 position covariance from the
+   reference `P0` velocity prior (10000) propagating through one coast
+   step -- see **Position covariance contract**. The *published* position
+   covariance is now clipped to `maximum_position_std_m` (7.0 m for the
+   competition baseline); the internal filter is unchanged (proven
+   byte-identical). This removes the extreme tail (std p95 19 -> 7 m) and
+   cuts OGM per-object skips ~40% (157 -> 97 over 160 frames), but does
+   not eliminate them: an honest 7 m std still inflates past the grid
+   budget for objects near ego, and PR #9's per-object skip stays as the
+   last-resort guard. Driving the skips to zero would need a
+   sub-birth-uncertainty cap (false confidence) or an OGM rendering
+   change, both out of scope. A frame whose *every* in-grid object is
+   oversized still yields a correctly-empty grid (none occurred).
 4. **From-scratch replay boundary loss.** Feeding Patchwork++ a cold 6 Hz
    stream dropped ~8 of 180 frames at the start / stop boundaries;
    Patchwork++ re-emitted the final buffered frame, and AB3DMOT correctly

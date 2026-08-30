@@ -95,6 +95,17 @@ default Autoware tracker. With this baseline's unavailable zero yaw, the
 rotation is numerically an identity. A downstream consumer applying
 `R(yaw)` recovers the original world motion and covariance.
 
+The published *position* covariance is additionally clipped so no direction's
+reported standard deviation exceeds `maximum_position_std_m` (7.0 m for this
+baseline). A born-then-lost single-hit track coasts one `predict()` step with
+the reference AB3DMOT velocity prior (variance 10000), which `dt^2` propagates
+into a ~360 m^2 (std ~19 m) position variance for the one frame it is
+published at `time_since_update=1`. The clip is a PSD-preserving reporting
+bound at the ROS boundary only -- the internal Kalman filter is unmodified
+(proven byte-identical) -- so HEVEN prediction and the Dynamic OGM do not
+inflate that one-frame reachability blob. See
+`competition_dynamic_object_pipeline.md` "Position covariance contract".
+
 ## Lifecycle and observability
 
 Tracks publish after the first hit (`min_hits=1`). An unmatched track coasts

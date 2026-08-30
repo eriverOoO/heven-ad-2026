@@ -83,6 +83,11 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("kalmannet_checkpoint", "")
         self.declare_parameter("kalmannet_device", "cpu")
         self.declare_parameter("runtime_summary_interval_frames", 0)
+        # Option C published-uncertainty bound (see
+        # docs/perception/competition_dynamic_object_pipeline.md). <= 0
+        # disables it; the internal KF covariance is never affected either
+        # way. COMPETITION_MOT_BASELINE_V1 sets 7.0 m.
+        self.declare_parameter("maximum_position_std_m", 0.0)
         self.declare_parameter("velocity_audit_enabled", False)
         self.declare_parameter(
             "velocity_audit_topic",
@@ -102,9 +107,16 @@ class Ab3dmotTrackerNode(Node):
         )
         if self._runtime_summary_interval_frames < 0:
             raise ValueError("runtime_summary_interval_frames must be >= 0")
+        self._maximum_position_std_m = float(
+            self.get_parameter("maximum_position_std_m").value
+        )
+        if self._maximum_position_std_m < 0.0:
+            raise ValueError("maximum_position_std_m must be >= 0")
         self._step_latency_ms: list[float] = []
         self._tracks_created = 0
         self._tracks_deleted = 0
+        self._position_covariance_bounded = 0
+        self._frames_with_position_covariance_bounded = 0
         self._previous_live_track_ids: set[int] = set()
         if self.enabled:
             self._tracker = self._build_tracker()
@@ -210,7 +222,7 @@ class Ab3dmotTrackerNode(Node):
 
         self._record_runtime_metrics(step_latency_ms)
 
-        output = tracked_states_to_message(
+        output, position_covariance_bounded = tracked_states_to_message(
             states,
             msg.header.stamp,
             self.target_frame,
@@ -218,7 +230,11 @@ class Ab3dmotTrackerNode(Node):
             orientation_available=(
                 self._tracker.config.yaw_measurement_mode != "unobserved"
             ),
+            maximum_position_std_m=self._maximum_position_std_m,
         )
+        self._position_covariance_bounded += position_covariance_bounded
+        if position_covariance_bounded:
+            self._frames_with_position_covariance_bounded += 1
         self.publisher.publish(output)
         self._publish_velocity_audit(states, msg.header.stamp)
         self._last_stamp_ns = stamp_ns
@@ -262,6 +278,8 @@ class Ab3dmotTrackerNode(Node):
             f"tracks_created={self._tracks_created} "
             f"tracks_deleted={self._tracks_deleted} "
             f"live_tracks={len(current_ids)} "
+            f"position_cov_bounded={self._position_covariance_bounded} "
+            f"position_cov_bounded_frames={self._frames_with_position_covariance_bounded} "
             f"median_step_ms={statistics.median(ordered):.6f} "
             f"p95_step_ms={ordered[p95_index]:.6f} "
             f"max_step_ms={ordered[-1]:.6f}"

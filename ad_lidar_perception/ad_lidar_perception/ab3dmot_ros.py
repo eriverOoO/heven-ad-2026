@@ -275,6 +275,47 @@ def track_id_to_uuid(track_id: int) -> np.ndarray:
     return uuid_bytes
 
 
+def bound_position_covariance(
+    covariance: np.ndarray, maximum_std_m: float
+) -> tuple[np.ndarray, bool]:
+    """Clip a 3x3 position covariance so no direction's standard deviation
+    exceeds ``maximum_std_m``, preserving symmetry and positive
+    semi-definiteness via eigenvalue clipping.
+
+    This is a *published-uncertainty* bound applied only at the
+    estimator -> ROS boundary (Option C in
+    `docs/perception/competition_dynamic_object_pipeline.md`). The internal
+    Kalman filter covariance (`LinearKFEstimator._kf.P`) is never touched;
+    only the covariance written into the outgoing `TrackedObject` is
+    bounded, so downstream consumers (HEVEN prediction, Dynamic OGM) do not
+    interpret a track's transient one-coast-step position uncertainty
+    (`P0_pos + dt^2 * P0_vel`, ~360 m^2 for a born-then-lost track under the
+    reference AB3DMOT `P[7:,7:] *= 1000` prior) literally.
+
+    ``maximum_std_m`` <= 0 or non-finite disables the bound and returns the
+    input unchanged (identical to the pre-fix behaviour, which is the
+    default for every non-competition AB3DMOT configuration).
+
+    Returns ``(bounded_covariance, was_bounded)``. ``bounded_covariance`` is
+    a fresh array whenever the bound activates and the original object
+    otherwise.
+    """
+    if not math.isfinite(maximum_std_m) or maximum_std_m <= 0.0:
+        return covariance, False
+    maximum_variance = maximum_std_m * maximum_std_m
+    symmetric = 0.5 * (np.asarray(covariance, dtype=float) + np.asarray(covariance, dtype=float).T)
+    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+    if float(eigenvalues[-1]) <= maximum_variance:
+        return covariance, False
+    # Clip from above at the ceiling and from below at 0: the input block is
+    # PSD by construction, but flooring at 0 makes the serialized matrix
+    # unconditionally PSD even if numerical noise produced a tiny negative
+    # eigenvalue (downstream OGM rejects any non-PSD covariance).
+    clipped = np.clip(eigenvalues, 0.0, maximum_variance)
+    bounded = eigenvectors @ np.diag(clipped) @ eigenvectors.T
+    return 0.5 * (bounded + bounded.T), True
+
+
 def _set_covariance_block(
     covariance: np.ndarray, block: np.ndarray, row_offset: int, col_offset: int
 ) -> None:
@@ -319,7 +360,8 @@ def tracked_state_to_message(
     message_types: dict[str, Any],
     *,
     orientation_available: bool = True,
-) -> Any:
+    maximum_position_std_m: float = 0.0,
+) -> tuple[Any, bool]:
     """Map one `TrackedState` to a `TrackedObject`.
 
     Field mapping matches `docs/research/tracking_architecture.md`
@@ -331,13 +373,19 @@ def tracked_state_to_message(
     - classification/existence_probability: the passthrough fields T-1B
       added to `Detection`/`Track`/`TrackedState` (see `ab3dmot_core.py`).
     - pose covariance (position block + yaw variance) and twist covariance
-      (velocity block): real KF `P` sub-blocks, not invented.
+      (velocity block): real KF `P` sub-blocks, not invented. The position
+      block is passed through `bound_position_covariance` first when
+      ``maximum_position_std_m`` > 0 (Option C; velocity covariance and
+      yaw variance are left raw -- see
+      `docs/perception/competition_dynamic_object_pipeline.md`).
     - acceleration_with_covariance, is_stationary: **left at the message's
       own zero/false default** -- AB3DMOT's 10-state KF tracks no
       acceleration state and applies no stationary/moving heuristic, so
       per this task's "use the message's appropriate unknown/default
       semantics" instruction, these are not populated at all (not
       invented, not guessed).
+
+    Returns ``(tracked_object, position_covariance_bounded)``.
     """
     output = message_types["TrackedObject"]()
     output.object_id.uuid = track_id_to_uuid(state.track_id)
@@ -353,8 +401,11 @@ def tracked_state_to_message(
     qx, qy, qz, qw = quaternion_from_yaw(state.yaw)
     pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = qx, qy, qz, qw
 
+    reported_position_covariance, position_covariance_bounded = bound_position_covariance(
+        state.position_covariance, maximum_position_std_m
+    )
     pose_covariance = np.zeros(36)
-    _set_covariance_block(pose_covariance, state.position_covariance, 0, 0)
+    _set_covariance_block(pose_covariance, reported_position_covariance, 0, 0)
     pose_covariance[3 * 6 + 3] = float(state.yaw_variance)
     output.kinematics.pose_with_covariance.covariance = pose_covariance.tolist()
 
@@ -382,7 +433,7 @@ def tracked_state_to_message(
         state.width,
         state.height,
     )
-    return output
+    return output, position_covariance_bounded
 
 
 def tracked_states_to_message(
@@ -392,16 +443,25 @@ def tracked_states_to_message(
     message_types: dict[str, Any],
     *,
     orientation_available: bool = True,
-) -> Any:
+    maximum_position_std_m: float = 0.0,
+) -> tuple[Any, int]:
+    """Serialize a list of `TrackedState` into one `TrackedObjects`.
+
+    Returns ``(tracked_objects, position_covariance_bounded_count)`` -- the
+    number of objects whose published position covariance was clipped by
+    `bound_position_covariance` (0 unless ``maximum_position_std_m`` > 0).
+    """
     output = message_types["TrackedObjects"]()
     output.header.stamp = stamp
     output.header.frame_id = frame_id
+    bounded_count = 0
     for state in states:
-        output.objects.append(
-            tracked_state_to_message(
-                state,
-                message_types,
-                orientation_available=orientation_available,
-            )
+        obj, bounded = tracked_state_to_message(
+            state,
+            message_types,
+            orientation_available=orientation_available,
+            maximum_position_std_m=maximum_position_std_m,
         )
-    return output
+        output.objects.append(obj)
+        bounded_count += int(bounded)
+    return output, bounded_count

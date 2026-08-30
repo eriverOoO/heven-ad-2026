@@ -1,5 +1,108 @@
 # STATUS
 
+## Stabilize AB3DMOT covariance for downstream prediction — COMPLETE
+
+Branch `fix/ab3dmot-covariance-stability`, from `main`
+`f255d3caba46559389587a98e67f15c3c4405591` (PR #9 merged). **Diagnosis
+first, no internal cap. PR #9 NOT reverted.**
+
+**Root cause (measured, not a bug).** Reference AB3DMOT birth prior
+(`references/ab3dmot`): position variance 10 m^2, **velocity variance
+10000 (m/s)^2**; `Q` pos 1, vel 0.01. CV transition couples them
+(`F[0,7]=F[1,8]=dt`), so one `predict()` gives `P_next[0,0] = P[0,0] +
+dt^2*P[7,7] + Q`. Under the frozen `min_hits:1`/`max_age:2`, a track born
+from a single detection and never re-associated is published at birth
+(std sqrt(10)=3.16 m), coasts **exactly one** step (still published at
+`time_since_update=1`), then is deleted. That one coast at `dt`~0.19 s
+propagates `dt^2*10000`~360 m^2 -> std ~19 m for that single frame.
+Offline deterministic replay of the recorded 180-frame stream: 1336
+published track-frames, position std median 1.00 / p95 19.06 / max
+20.33 m; 155 rows (11.6%) exceed 15 m and **every one** is `hits=1`,
+`time_since_update=1`, velocity variance still 10000; **0 non-finite, 0
+non-PSD**; `dt` normal throughout. A track that gets a 2nd hit stays at
+std ~2-4 m. Not a bug -- correct one-coast-step reachability of an
+unobserved hypothesis with an uninformative velocity prior.
+
+**Fix class: C (published-uncertainty bound).** A-no bug. B rejected
+empirically: rescaling `P0` velocity variance (900/400/100 vs 10000) does
+suppress the tail but changes the Kalman gain -> predicted positions ->
+Euclidean-gate association -> track set (274 -> 265-270 unique published
+ids; common states diverge mean 3-17 m, p95 up to 60 m). D rejected: the
+`time_since_update=1` publish is legitimate under the frozen lifecycle
+(no correctness bug in lifecycle semantics -> not tuned).
+
+**Implementation.** New `ab3dmot_ros.bound_position_covariance(cov3,
+max_std)` -- eigenvalue clipping (symmetry- and PSD-preserving) of **only
+the 3x3 position block written into the outgoing `TrackedObject`**.
+`tracked_state_to_message` / `tracked_states_to_message` thread a
+`maximum_position_std_m` kwarg and return a `(msg, bounded_flag/count)`
+tuple. Node gains a `maximum_position_std_m` parameter (**default 0.0 =
+disabled**; negative rejected) and `position_cov_bounded=` /
+`position_cov_bounded_frames=` in `AB3DMOT_RUNTIME_SUMMARY`.
+`competition_mot_baseline_v1.yaml` sets **7.0 m**, derived forward:
+`sqrt(P0_pos 10 + (v_max 31 m/s * one coast ~0.2 s)^2) ~= 6.96`, `v_max`
+= top actor speed measured in this dataset (T-11). Deliberately above the
+OGM's ~5 m 2-sigma-inflation knee -- a physical ceiling, not a device to
+force OGM acceptance. Velocity covariance and yaw variance left raw. The
+internal `LinearKFEstimator._kf.P` is **never** written.
+
+**Internal-state invariance (Phase 9).** Offline replay with vs without
+the serialization bound: every internal `x`, `P`, track id, hit count,
+`time_since_update` **bit-identical** (1336 rows, 274 ids); deterministic
+across reruns. Live: `tracks_created=265` identical in both A/B arms.
+
+**Covariance A/B (offline, identical stream).** Published position std
+p95/p99/max **19.06/20.03/20.33 -> 7.00/7.00/7.00 m**; rows >10 m and
+>15 m **155 -> 0**; rows >3 m unchanged (468, real mid-range uncertainty
+untouched); 155 objects clipped; serialized non-finite/non-PSD 0/0 both.
+
+**Downstream OGM A/B (live bounded replay, PR #9 active, 160-frame
+summary).** `oversized_objects_skipped` **157 -> 97**;
+`frames_with_oversized_skip` **72 -> 57**; empty grids 1 -> 1 (startup);
+dynamic occupied cells median 8868 -> 10237 (within run-to-run noise --
+the two live arms sample disjoint wall-clock stamps, `common_stamps=0`);
+invalid cells 0 -> 0. Extreme published tail gone (the deliverable);
+~40% fewer objects reach the budget check, dominated by boundary objects
+whose smaller 14 m halo no longer overlaps the grid. The cap does **not**
+make an in-grid 1-hit track rasterizable (2-sigma inflation still 14 m);
+PR #9 stays the operative guard. Real downstream win is for numerical
+covariance consumers (IMM measurement variance, planner cost).
+
+**Prediction sanity (Phase 12).** 12 horizons unchanged; `objects_in ==
+objects_out`, `rejected=0`; all `orientation_unavailable`; `initial_twist`
+finite; predicted `initial_pose` std distribution == tracked std
+distribution (bound flows through, no re-inflation); no coordinated-turn
+artifact; no stamp/UUID contamination (0 duplicate UUIDs/frame).
+
+**Tests.** `test_ab3dmot_ros.py` +10 (`bound_position_covariance`:
+disabled/within-limit/pathological/single-direction/symmetric-PSD/
+no-mutation/deterministic; serialization: clips + flags, normal
+unchanged, aggregate count). `test_ab3dmot_tracker_node.py` +5 (negative
+param rejected; born-then-lost bounded when enabled / unbounded by
+default; no cross-track leakage). Existing `tracked_state_to_message`
+call sites updated for the tuple return. Full AB3DMOT + prediction + OGM +
+launch suite: **293 passed, 1 skipped**; 4/4 relevant C++ ctests pass
+(`cv_predictor`, `imm_predictor`, `dynamic_grid_builder`,
+`autoware_prediction_adapter`). `test_occupancy_layer_launch` is
+pre-existing-flaky under load (passes isolated; touches no file in this
+diff). Isolated `colcon build --packages-select ad_lidar_perception`
+clean.
+
+**Frozen params untouched:** `euclidean_gate_m` 3.0, `matcher` hungarian,
+`min_hits` 1, `max_age` 2, KF `Q`/`R`, IMM. No association/detector/IMM/
+KalmanNet/CenterPoint/planner change. `maximum_position_std_m` = 7.0 is
+the **one-coast-step** bound and is coupled to `max_age: 2`.
+
+**Files:** `ab3dmot_ros.py`, `ab3dmot_tracker_node.py`,
+`config/tracking/competition_mot_baseline_v1.yaml`, `test_ab3dmot_ros.py`,
+`test_ab3dmot_tracker_node.py`,
+`docs/perception/competition_dynamic_object_pipeline.md`, this file.
+Known limitation (not fixed, noted): `pose_covariance` yaw variance is
+written at flat index 21, not Autoware's index 35, so prediction's
+`measurement.yaw_variance_rad2` falls back to its 0.04 default -- a real
+pre-existing index bug, left alone because fixing it here would bundle an
+untested IMM yaw-trust change into a covariance-magnitude fix.
+
 ## Dynamic OGM robust to oversized predicted-object uncertainty — COMPLETE
 
 Branch `fix/dynamic-ogm-oversized-uncertainty`, from `main`
