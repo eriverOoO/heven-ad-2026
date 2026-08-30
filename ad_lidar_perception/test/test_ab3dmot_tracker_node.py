@@ -189,6 +189,92 @@ class Ab3dmotTrackerNodeTest(unittest.TestCase):
         self.assertEqual(node.publisher.published, [])
         node.destroy_node()
 
+    def test_negative_maximum_position_std_is_rejected(self):
+        with self.assertRaises(ValueError):
+            Ab3dmotTrackerNode(
+                parameter_overrides=[
+                    Parameter("enabled", Parameter.Type.BOOL, True),
+                    Parameter("maximum_position_std_m", Parameter.Type.DOUBLE, -1.0),
+                ]
+            )
+
+    def _pos_var(self, tracked_object):
+        return tracked_object.kinematics.pose_with_covariance.covariance[0]
+
+    def test_born_then_lost_track_position_covariance_is_bounded_when_enabled(self):
+        node = build_enabled_node(
+            association_metric="euclidean",
+            euclidean_gate_m=3.0,
+            matcher="hungarian",
+            yaw_measurement_mode="unobserved",
+            maximum_position_std_m=7.0,
+        )
+        node._on_detected_objects(
+            make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        # next frame: a different, far detection -- the first track is
+        # unmatched and coasts one step (tsu=1) before max_age=2 deletes it.
+        node._on_detected_objects(
+            make_detected_objects(100, int(2e8), [(50, 50, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        coasted = next(
+            obj
+            for obj in node.publisher.published[-1].objects
+            if abs(obj.kinematics.pose_with_covariance.pose.position.x) < 5.0
+        )
+        self.assertLessEqual(self._pos_var(coasted), 49.0 + 1e-6)
+        self.assertGreaterEqual(node._position_covariance_bounded, 1)
+        self.assertGreaterEqual(node._frames_with_position_covariance_bounded, 1)
+        node.destroy_node()
+
+    def test_born_then_lost_track_covariance_is_unbounded_by_default(self):
+        node = build_enabled_node(
+            association_metric="euclidean",
+            euclidean_gate_m=3.0,
+            matcher="hungarian",
+            yaw_measurement_mode="unobserved",
+        )
+        node._on_detected_objects(
+            make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        node._on_detected_objects(
+            make_detected_objects(100, int(2e8), [(50, 50, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        coasted = next(
+            obj
+            for obj in node.publisher.published[-1].objects
+            if abs(obj.kinematics.pose_with_covariance.pose.position.x) < 5.0
+        )
+        self.assertGreater(self._pos_var(coasted), 100.0)
+        self.assertEqual(node._position_covariance_bounded, 0)
+        node.destroy_node()
+
+    def test_bounding_one_track_does_not_change_a_healthy_neighbour(self):
+        node = build_enabled_node(
+            association_metric="euclidean",
+            euclidean_gate_m=3.0,
+            matcher="hungarian",
+            yaw_measurement_mode="unobserved",
+            maximum_position_std_m=7.0,
+        )
+        # track A gets two hits (healthy); track B is seen once then lost.
+        node._on_detected_objects(
+            make_detected_objects(
+                100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9), (20, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]
+            )
+        )
+        node._on_detected_objects(
+            make_detected_objects(100, int(2e8), [(0.1, 0, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        healthy = next(
+            obj
+            for obj in node.publisher.published[-1].objects
+            if abs(obj.kinematics.pose_with_covariance.pose.position.x) < 5.0
+        )
+        # A matched detection: its covariance is small and untouched.
+        self.assertLess(self._pos_var(healthy), 10.0)
+        node.destroy_node()
+
 
 if __name__ == "__main__":
     unittest.main()

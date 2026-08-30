@@ -25,3 +25,19 @@
 
     # Runtime observability only; does not affect tracker state or timing input.
     runtime_summary_interval_frames: 180
+
+    # Option C published-uncertainty bound (fix/ab3dmot-covariance-stability).
+    # The reference AB3DMOT birth prior is P0_pos = 10 m^2, P0_vel = 10000
+    # (m/s)^2; a track that is born (min_hits=1) then never re-associated
+    # coasts exactly ONE predict() step before max_age=2 deletes it, and
+    # F[0,7]=dt propagates dt^2 * P0_vel ~= 360 m^2 into position variance
+    # (std ~= 19 m) for that single published frame. The internal KF P is
+    # left untouched (changing it alters the Kalman gain and the associated
+    # track set -- measured); only the covariance written into the outgoing
+    # TrackedObject is clipped, via PSD-preserving eigenvalue clipping, so
+    # HEVEN prediction / Dynamic OGM do not inflate a one-frame reachability
+    # blob. Value = sqrt(P0_pos 10 m^2 + (v_max 31 m/s * one coast step
+    # ~0.2 s)^2) ~= 6.96 m, rounded up. v_max is the top of the actor speeds
+    # measured in this dataset (T-11). Coupled to max_age=2: raising max_age
+    # means more coast steps and this bound must be revisited.
+    maximum_position_std_m: 7.0
