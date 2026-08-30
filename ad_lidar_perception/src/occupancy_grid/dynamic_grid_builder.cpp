@@ -290,8 +290,12 @@ std::vector<std::int8_t> build_dynamic_grid_impl(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
   const DynamicGridConfig & config,
-  const std::vector<std::int8_t> * const drivable_mask)
+  const std::vector<std::int8_t> * const drivable_mask,
+  std::size_t * const oversized_objects_skipped)
 {
+  if (oversized_objects_skipped != nullptr) {
+    *oversized_objects_skipped = 0U;
+  }
   validate_geometry(geometry);
   validate_config(config);
 
@@ -367,18 +371,22 @@ std::vector<std::int8_t> build_dynamic_grid_impl(
     const std::size_t maximum_y = clipped_max_index(
       object_y_max, geometry.y_min_m, grid_y_max,
       geometry.resolution_m, geometry.height);
+    // A single object whose grid-clipped inflated footprint would exceed the
+    // per-object cell budget is skipped, not fatal: one pathologically
+    // uncertain or coarse object must not erase every other valid object in
+    // the frame. Per-object rasterization work stays bounded by this same
+    // budget, so total per-frame work is unchanged.
     const std::size_t candidate_width = maximum_x - minimum_x + 1U;
     const std::size_t candidate_height = maximum_y - minimum_y + 1U;
-    if (candidate_width >
-      config.maximum_cells_per_object / candidate_height)
+    const bool exceeds_row_budget = candidate_width >
+      config.maximum_cells_per_object / candidate_height;
+    if (exceeds_row_budget ||
+      candidate_width * candidate_height > config.maximum_cells_per_object)
     {
-      throw std::length_error(
-              "dynamic-object candidate exceeds maximum_cells_per_object");
-    }
-    const std::size_t candidate_count = candidate_width * candidate_height;
-    if (candidate_count > config.maximum_cells_per_object) {
-      throw std::length_error(
-              "dynamic-object candidate exceeds maximum_cells_per_object");
+      if (oversized_objects_skipped != nullptr) {
+        ++*oversized_objects_skipped;
+      }
+      continue;
     }
 
     for (std::size_t y = minimum_y; y <= maximum_y; ++y) {
@@ -405,19 +413,22 @@ std::vector<std::int8_t> build_dynamic_grid_impl(
 std::vector<std::int8_t> build_dynamic_grid(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
-  const DynamicGridConfig & config)
+  const DynamicGridConfig & config,
+  std::size_t * const oversized_objects_skipped)
 {
-  return build_dynamic_grid_impl(geometry, objects, config, nullptr);
+  return build_dynamic_grid_impl(
+    geometry, objects, config, nullptr, oversized_objects_skipped);
 }
 
 std::vector<std::int8_t> build_dynamic_grid(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
   const DynamicGridConfig & config,
-  const std::vector<std::int8_t> & drivable_mask)
+  const std::vector<std::int8_t> & drivable_mask,
+  std::size_t * const oversized_objects_skipped)
 {
   return build_dynamic_grid_impl(
-    geometry, objects, config, &drivable_mask);
+    geometry, objects, config, &drivable_mask, oversized_objects_skipped);
 }
 
 }  // namespace ad_lidar_perception::occupancy_grid

@@ -1,5 +1,90 @@
 # STATUS
 
+## Dynamic OGM robust to oversized predicted-object uncertainty — COMPLETE
+
+Branch `fix/dynamic-ogm-oversized-uncertainty`, from `main`
+`02533f6aa93317d8b2fb2c9012221cb606d26179` (PR #8 merged). Fixes the
+whole-frame clear the previous integration flagged.
+
+**Root cause.** `build_dynamic_grid_impl` threw `std::length_error` when a
+single object's grid-clipped, uncertainty-inflated footprint exceeded
+`maximum_cells_per_object` (20000). `on_predictions` has one `catch` that
+treats every failure the same, so that one object aborted the whole object
+loop and `invalidate_and_clear` published an empty grid, discarding every
+already-rasterized valid object. In the bounded replay this erased ~69 of
+~171 frames (~40%). The trigger was almost always one AB3DMOT track with
+~350-370 m^2 KF position covariance (std ~19 m) -> 2-sigma inflation ~38 m;
+box dimensions were tiny (0.1-1.7 m), so coarse detector geometry was not
+the cause. `maximum_cells_per_object` is a per-object rasterization budget,
+not a compute-safety bound (the clipped rect is already grid-bounded), so
+the right fix is to skip, not abort.
+
+**Fix (per-object skip).** The two `maximum_cells_per_object` sites now
+`continue` and increment a counter instead of throwing.
+`build_dynamic_grid` gained a trailing `std::size_t *
+oversized_objects_skipped = nullptr` out-param on both overloads
+(non-breaking; ~20 existing call sites unchanged). The node accumulates
+`oversized_objects_skipped_` / `frames_with_oversized_skip_`, logs a
+throttled warning, and adds both to `DYNAMIC_OGM_RUNTIME_SUMMARY`.
+**Deliberately unchanged:** every other per-object throw
+(`validate_object`, covariance eigenvalue, footprint/bounds overflow) and
+every array/geometry/config/mask throw still clear the layer (fail-safe).
+No config value, covariance handling, inflation math, tracker, prediction,
+or IMM parameter was touched. Backend-agnostic: the builder is a pure
+function on `DynamicBox`, the node consumes canonical
+`PredictedObjectArray`; no `if backend` anywhere.
+
+**A/B bounded replay** (same 180-frame `static_20260805_003151` window,
+AB3DMOT -> prediction -> dynamic + combined, `road_gate.enabled:=false`):
+
+| | before | after |
+| --- | --- | --- |
+| oversized-object instances | 138 | 165 |
+| frames with an oversized object | 69 | 77 |
+| dynamic grids erased by one | 69 | 0 |
+| empty dynamic grids | 69 (all had valid objects) | 1 (post-replay stale clear) |
+| non-empty dynamic grids | 102 | 160 |
+| occupied cells non-empty (med/p95/max) | 5296 / 28859 / 65804 | 9450 / 43682 / 91366 |
+| invalid / non-finite cells | 0 | 0 |
+| combined grids | 171 / 171 | 160 / 160 |
+| dynamic step latency ms (med/p95/max) | 0.478 / 1.379 / 1.758 | 0.663 / 1.484 / 3.440 |
+
+Every previously-erased frame now publishes its valid objects. Occupied
+cells and latency rise because those recovered frames now do the
+rasterization they previously skipped by throwing; grids stay <=~44%
+occupied, latency stays far under the ~167 ms frame budget and 0.5 s
+prediction timeout, and the structural per-frame bound is unchanged
+(skipped object O(1), admitted object <= budget). Exactly one publisher on
+every canonical topic before and after; zero NaN / Inf / exceptions /
+crashes. Both A/B runs were verified single-publisher (an earlier
+contaminated run with orphaned launch-child nodes was discarded and the
+replay harness cleanup hardened).
+
+**Tests.** `ad_lidar_perception` gtest 14/14 (`test_dynamic_grid_builder`
+21 incl. 6 new: skip-not-throw, valid-survives-oversized, per-object
+count, high-finite-covariance skip, malformed-still-throws,
+determinism+out-param-reset). `test_occupancy_layer_launch` node-level
+oversized test added (valid object survives an oversized sibling, grid
+values valid). Focused pytest suite green. Pre-existing unrelated
+failures on this host: `test_lidar_bag_replay_launch`,
+`test_perception_visualization_launch` (both CRLF-only in the tree,
+rosbag2 CLI mismatch). Isolated `colcon build` clean.
+
+**Files:** `dynamic_grid_builder.hpp/.cpp`,
+`dynamic_occupancy_grid_node.cpp`, `test_dynamic_grid_builder.cpp`,
+`test_occupancy_layer_launch.py`, plus this file and
+`docs/perception/competition_dynamic_object_pipeline.md`.
+
+**Remaining limitation.** A frame whose *every* in-grid object is
+oversized still yields a correctly-empty grid (none occurred in the
+replay). The large KF covariance itself is unaddressed (out of scope) - a
+covariance cap in the estimator or a physical uncertainty ceiling in
+prediction is the recommended next task.
+
+## Dynamic OGM oversized-uncertainty fix result: **COMPLETE**
+
+---
+
 ## AB3DMOT -> Prediction -> Dynamic OGM integration — COMPLETE
 
 Branch `feat/ab3dmot-prediction-dynamic-ogm`, from `main`

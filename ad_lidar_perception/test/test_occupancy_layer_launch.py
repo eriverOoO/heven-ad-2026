@@ -1180,6 +1180,41 @@ class TestOccupancyLayers(unittest.TestCase):
         time.sleep(0.25)
         self.assertEqual(len(driver.dynamic), clear_count)
 
+        # An object whose uncertainty-inflated footprint exceeds
+        # maximum_cells_per_object must be skipped per-object, not clear the
+        # whole layer: the valid object in the same array stays represented.
+        mixed_stamp = driver.get_clock().now().nanoseconds
+        mixed = _predicted_array(mixed_stamp)
+        oversized = copy.deepcopy(mixed.objects[0])
+        oversized.initial_pose.pose.position.x = 40.0
+        oversized.initial_pose.pose.position.y = 0.0
+        oversized.initial_pose.covariance[0] = 400.0
+        oversized.initial_pose.covariance[7] = 400.0
+        mixed.objects.append(oversized)
+        driver.publish_transform(mixed_stamp)
+        before = len(driver.dynamic)
+        driver.publish_prediction(mixed)
+        self.assertTrue(
+            _wait_until(
+                lambda: len(driver.dynamic) > before
+                and _stamp_ns(driver.dynamic[-1]) == mixed_stamp
+                and any(cell == 100 for cell in driver.dynamic[-1].data)
+            ),
+            "oversized object erased the valid object from the dynamic layer",
+        )
+        oversized_grid = driver.dynamic[-1]
+        self.assertTrue(
+            all(-1 <= cell <= 100 for cell in oversized_grid.data)
+        )
+        self.assertEqual(
+            len(oversized_grid.data),
+            oversized_grid.info.width * oversized_grid.info.height,
+        )
+        # The oversized box (~40 m inflation) was not painted wholesale.
+        occupied = sum(1 for cell in oversized_grid.data if cell > 0)
+        self.assertGreater(occupied, 0)
+        self.assertLess(occupied, 20000)
+
 
 @launch_testing.post_shutdown_test()
 class TestOccupancyLayerShutdown(unittest.TestCase):
