@@ -132,6 +132,6 @@ frame-based. The temporary replay reconstructed ring/time fields because the
 committed finite export retains XYZI only; no deskew claim is made.
 
 Status: **ready as an opt-in Competition MOT baseline**. Autoware remains the
-production default. Prediction and Dynamic OGM are deliberately deferred even
-though the twist basis is now consistent; enabling them requires a separate
-end-to-end task and must not be inferred from this smoke result.
+production default. Prediction and Dynamic OGM are now connected to this path
+by a separate end-to-end integration; see
+`docs/perception/competition_dynamic_object_pipeline.md`.

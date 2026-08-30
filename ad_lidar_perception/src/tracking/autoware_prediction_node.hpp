@@ -10,10 +10,12 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ad_lidar_perception::tracking
 {
@@ -94,10 +96,19 @@ private:
   void on_tracked_objects(
     const autoware_perception_msgs::msg::TrackedObjects::ConstSharedPtr
     input);
+  void record_runtime_metrics(
+    std::size_t input_objects, std::size_t output_objects,
+    std::size_t unavailable_orientation_objects, double step_latency_ms);
 
   AutowarePredictionAdapterConfig config_;
   std::unique_ptr<StatefulImmPredictionAdapter> imm_adapter_;
   std::optional<std::int64_t> last_successful_stamp_ns_;
+  std::size_t runtime_summary_interval_frames_{0U};
+  std::size_t rejected_arrays_{0U};
+  std::size_t input_objects_{0U};
+  std::size_t output_objects_{0U};
+  std::size_t unavailable_orientation_objects_{0U};
+  std::vector<double> step_latency_ms_;
   rclcpp::Publisher<ad_interfaces::msg::PredictedObjectArray>::SharedPtr
     publisher_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr

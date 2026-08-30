@@ -26,6 +26,7 @@ from autoware_perception_msgs.msg import (
     TrackedObjectKinematics,
     TrackedObjects,
 )
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.node import Node
 from tf2_ros import (
     Buffer,
@@ -43,6 +44,7 @@ from ad_lidar_perception.ab3dmot_ros import (
     classify_timestamp,
     detected_objects_to_detections,
     stamp_to_ns,
+    track_id_to_uuid,
     tracked_states_to_message,
 )
 
@@ -81,6 +83,11 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("kalmannet_checkpoint", "")
         self.declare_parameter("kalmannet_device", "cpu")
         self.declare_parameter("runtime_summary_interval_frames", 0)
+        self.declare_parameter("velocity_audit_enabled", False)
+        self.declare_parameter(
+            "velocity_audit_topic",
+            "/ad/perception/objects/tracked/ab3dmot_velocity_audit",
+        )
 
         self.enabled = bool(self.get_parameter("enabled").value)
         self.target_frame = str(self.get_parameter("target_frame").value)
@@ -105,6 +112,13 @@ class Ab3dmotTrackerNode(Node):
         self.publisher = self.create_publisher(
             TrackedObjects, str(self.get_parameter("output_topic").value), 1
         )
+        self._velocity_audit_publisher = None
+        if bool(self.get_parameter("velocity_audit_enabled").value):
+            self._velocity_audit_publisher = self.create_publisher(
+                DiagnosticArray,
+                str(self.get_parameter("velocity_audit_topic").value),
+                1,
+            )
         self.subscription = self.create_subscription(
             DetectedObjects,
             str(self.get_parameter("input_topic").value),
@@ -206,7 +220,27 @@ class Ab3dmotTrackerNode(Node):
             ),
         )
         self.publisher.publish(output)
+        self._publish_velocity_audit(states, msg.header.stamp)
         self._last_stamp_ns = stamp_ns
+
+    def _publish_velocity_audit(self, states, stamp) -> None:
+        if self._velocity_audit_publisher is None:
+            return
+        audit = DiagnosticArray()
+        audit.header.stamp = stamp
+        audit.header.frame_id = self.target_frame
+        for state in states:
+            status = DiagnosticStatus()
+            status.level = DiagnosticStatus.OK
+            status.name = bytes(track_id_to_uuid(state.track_id)).hex()
+            status.hardware_id = "ab3dmot_world_velocity"
+            status.message = "internal velocity before ROS serialization"
+            status.values = [
+                KeyValue(key="vx_world_mps", value=repr(float(state.vx_mps))),
+                KeyValue(key="vy_world_mps", value=repr(float(state.vy_mps))),
+            ]
+            audit.status.append(status)
+        self._velocity_audit_publisher.publish(audit)
 
     def _record_runtime_metrics(self, step_latency_ms: float) -> None:
         if self._tracker is None:

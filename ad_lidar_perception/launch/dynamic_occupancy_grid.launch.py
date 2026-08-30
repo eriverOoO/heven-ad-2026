@@ -21,6 +21,10 @@ def generate_launch_description():
                 "drivable_mask_topic",
                 default_value="/ad/planning/drivable_mask",
             ),
+            DeclareLaunchArgument(
+                "runtime_summary_interval_frames",
+                default_value="0",
+            ),
             Node(
                 package="ad_lidar_perception",
                 executable="ad_dynamic_occupancy_grid_node",
@@ -32,7 +36,13 @@ def generate_launch_description():
                         "topics.drivable_mask": ParameterValue(
                             LaunchConfiguration("drivable_mask_topic"),
                             value_type=str,
-                        )
+                        ),
+                        "runtime_summary_interval_frames": ParameterValue(
+                            LaunchConfiguration(
+                                "runtime_summary_interval_frames"
+                            ),
+                            value_type=int,
+                        ),
                     },
                 ],
             ),

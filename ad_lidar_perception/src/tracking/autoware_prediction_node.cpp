@@ -4,12 +4,14 @@
 #include <ad_interfaces/msg/predicted_state.hpp>
 #include <autoware_perception_msgs/msg/object_classification.hpp>
 #include <autoware_perception_msgs/msg/shape.hpp>
+#include <autoware_perception_msgs/msg/tracked_object_kinematics.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <diagnostic_msgs/msg/diagnostic_status.hpp>
 #include <diagnostic_msgs/msg/key_value.hpp>
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -917,6 +919,14 @@ AutowarePredictionNode::AutowarePredictionNode(
     declare_parameter<double>("imm.process_variance.coordinated_turn", 0.35);
   config_.imm_track_retention_sec =
     declare_parameter<double>("imm.track_retention_sec", 1.0);
+  const auto runtime_summary_interval =
+    declare_parameter<std::int64_t>("runtime_summary_interval_frames", 0);
+  if (runtime_summary_interval < 0) {
+    throw std::invalid_argument(
+            "runtime_summary_interval_frames must be nonnegative");
+  }
+  runtime_summary_interval_frames_ =
+    static_cast<std::size_t>(runtime_summary_interval);
   validate_adapter_config(config_);
   imm_adapter_ = std::make_unique<StatefulImmPredictionAdapter>(config_);
 
@@ -959,6 +969,7 @@ AutowarePredictionNode::AutowarePredictionNode(
 void AutowarePredictionNode::on_tracked_objects(
   const autoware_perception_msgs::msg::TrackedObjects::ConstSharedPtr input)
 {
+  const auto step_started = std::chrono::steady_clock::now();
   try {
     const std::int64_t input_stamp_ns = stamp_to_ns(input->header.stamp);
     if (last_successful_stamp_ns_.has_value() &&
@@ -972,10 +983,23 @@ void AutowarePredictionNode::on_tracked_objects(
     auto output = imm_adapter_->adapt_with_diagnostics(
       *input, now().nanoseconds(),
       last_successful_stamp_ns_);
+    const double step_latency_ms =
+      std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - step_started).count();
     publisher_->publish(output.predictions);
     diagnostic_publisher_->publish(output.diagnostics);
-    last_successful_stamp_ns_ = stamp_to_ns(input->header.stamp);
+    last_successful_stamp_ns_ = input_stamp_ns;
+    const auto unavailable = static_cast<std::size_t>(std::count_if(
+        input->objects.begin(), input->objects.end(),
+        [](const auto & object) {
+          return object.kinematics.orientation_availability ==
+                 autoware_perception_msgs::msg::TrackedObjectKinematics::UNAVAILABLE;
+        }));
+    record_runtime_metrics(
+      input->objects.size(), output.predictions.objects.size(), unavailable,
+      step_latency_ms);
   } catch (const std::exception & error) {
+    ++rejected_arrays_;
     std::optional<std::array<std::uint8_t, 16>> culprit_uuid;
     if (const auto * input_error =
       dynamic_cast<const PredictionInputError *>(&error))
@@ -988,6 +1012,36 @@ void AutowarePredictionNode::on_tracked_objects(
       get_logger(), "Rejected tracked-object array: %s",
       error.what());
   }
+}
+
+void AutowarePredictionNode::record_runtime_metrics(
+  const std::size_t input_objects, const std::size_t output_objects,
+  const std::size_t unavailable_orientation_objects,
+  const double step_latency_ms)
+{
+  input_objects_ += input_objects;
+  output_objects_ += output_objects;
+  unavailable_orientation_objects_ += unavailable_orientation_objects;
+  step_latency_ms_.push_back(step_latency_ms);
+  const auto interval = runtime_summary_interval_frames_;
+  if (interval == 0U || step_latency_ms_.size() % interval != 0U) {
+    return;
+  }
+  auto ordered = step_latency_ms_;
+  std::sort(ordered.begin(), ordered.end());
+  const auto count = ordered.size();
+  const double median = count % 2U == 0U ?
+    0.5 * (ordered[count / 2U - 1U] + ordered[count / 2U]) :
+    ordered[count / 2U];
+  const auto p95_index = static_cast<std::size_t>(
+    std::ceil(0.95 * static_cast<double>(count))) - 1U;
+  RCLCPP_INFO(
+    get_logger(),
+    "PREDICTION_RUNTIME_SUMMARY frames=%zu objects_in=%zu objects_out=%zu "
+    "orientation_unavailable=%zu rejected=%zu median_step_ms=%.6f "
+    "p95_step_ms=%.6f max_step_ms=%.6f",
+    count, input_objects_, output_objects_, unavailable_orientation_objects_,
+    rejected_arrays_, median, ordered[p95_index], ordered.back());
 }
 
 } // namespace ad_lidar_perception::tracking

@@ -113,6 +113,9 @@ def generate_launch_description():
                 "state_estimator:=kalmannet."
             ),
         ),
+        DeclareLaunchArgument(
+            "velocity_audit_enabled", default_value="false"
+        ),
     ]
     node = Node(
         package="ad_lidar_perception",
@@ -148,6 +151,10 @@ def generate_launch_description():
                 ),
                 "kalmannet_checkpoint": LaunchConfiguration("kalmannet_checkpoint"),
                 "kalmannet_device": LaunchConfiguration("kalmannet_device"),
+                "velocity_audit_enabled": ParameterValue(
+                    LaunchConfiguration("velocity_audit_enabled"),
+                    value_type=bool,
+                ),
             },
         ],
     )
