@@ -85,14 +85,39 @@ The prediction adapter needs **no compatibility change** for this:
   serialization-side `R(-yaw)` are both the identity. World Cartesian
   motion is preserved exactly, and no heading is fabricated.
 - The IMM consumes the (always zero, always consistent) yaw as a
-  measurement with a bounded fallback variance, so the latent yaw stays at
-  zero and never drives a spurious turn. In the bounded replay the IMM
-  selected only `constant_velocity` and `stationary`; `coordinated_turn`
-  was never selected.
+  measurement, weighted by the KF's own yaw variance, so the latent yaw
+  stays at zero and never drives a spurious turn. In the bounded replay
+  the IMM selected only `constant_velocity` and `stationary`;
+  `coordinated_turn` was never selected.
+
+### Yaw-variance covariance slot (fix)
+
+`geometry_msgs/PoseWithCovariance.covariance` is a row-major 6x6 over
+`(x, y, z, roll, pitch, yaw)`; the yaw-yaw variance is flat index **35**.
+`ab3dmot_ros.py` previously wrote `state.yaw_variance` to index **21**
+(roll-roll), so `autoware_prediction_node.cpp` -- which reads index 35 --
+saw `0` and substituted its `0.04 rad^2` default, i.e. it treated the
+always-zero placeholder yaw as a measurement known to +/- ~11 deg. The
+adapter now writes index 35. Because `yaw_measurement_mode = unobserved`
+never corrects the latent yaw, `P[3,3]` is the uninformative birth prior
+plus accumulated process noise (>= 10 rad^2, std > pi; replay median
+~12, max ~180), so prediction now correctly reads "yaw unknown" instead
+of an accidental 0.04. `orientation_availability` stays `UNAVAILABLE`;
+index 21 is left at `0` (AB3DMOT tracks no roll). Bounded-replay A/B:
+`coordinated_turn` selections **0 -> 0**, predicted yaw-rate stays `0`,
+**zero** curved predicted trajectories appear, and the
+`constant_velocity` / `stationary` split moves < 1 pt (within the
+disjoint-stamp noise of the two live arms). `twist.covariance[35]` (the
+yaw-*rate* variance) is a separate slot with the same latent gap -- it
+still reads `0` -> `0.04` fallback, which currently helps pin the IMM's
+turn-rate at zero; a principled yaw-rate uncertainty contract is left for
+a follow-up that must re-verify the turn counts.
 
 New focused tests
 (`test_autoware_prediction_adapter.cpp:Ab3dmotOrientationUnavailable*`)
-assert the accept-as-Cartesian behavior and the no-forced-turn behavior.
+assert the accept-as-Cartesian behavior and the no-forced-turn behavior;
+`test_ab3dmot_ros.py` asserts yaw variance lands at index 35, index 21
+stays zero, and the published value stays in the "yaw unknown" regime.
 
 ## Velocity semantics
 
@@ -202,7 +227,9 @@ physical reachability ceiling, not a device for making the OGM accept the
 object. Velocity covariance and yaw variance are left raw -- a
 born-then-lost track's velocity genuinely is unknown (10000), the OGM does
 not read it, and capping it would make the IMM partially trust a zero
-velocity it has no evidence for.
+velocity it has no evidence for. (The yaw variance is now also written to
+the correct covariance slot, index 35 -- see "Yaw / orientation
+behavior".)
 
 Diagnostics: `AB3DMOT_RUNTIME_SUMMARY` gains `position_cov_bounded=` (total
 objects clipped) and `position_cov_bounded_frames=`. The published

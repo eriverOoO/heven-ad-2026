@@ -88,6 +88,20 @@ quaternion is structural, so the baseline drops yaw from the KF measurement,
 initializes the latent yaw to zero, and publishes
 `orientation_availability=UNAVAILABLE`.
 
+The yaw-yaw variance is serialized at `PoseWithCovariance.covariance` flat
+index **35** (`5*6+5`), matching Autoware's convention and
+`autoware_prediction_node.cpp` (which reads index 35). It previously went to
+index 21 (roll-roll), so prediction read `0` there and fell back to its
+`0.04 rad^2` default -- effectively trusting the always-zero placeholder yaw
+to +/- ~11 deg. Since `yaw_measurement_mode=unobserved` never corrects the
+latent yaw, the KF yaw variance `P[3,3]` is the birth prior plus process
+noise (>= 10 rad^2, std > pi), so prediction now correctly treats the yaw as
+unknown. `orientation_availability` stays `UNAVAILABLE`; index 21 stays `0`.
+This changed no model selection in the bounded replay and introduced no
+coordinated-turn behavior (turn selections 0 -> 0). The yaw-*rate* variance
+slot (`twist.covariance[35]`) has the same latent gap and still uses the
+`0.04` fallback; a principled fix there is a separate task.
+
 AB3DMOT internally represents Cartesian velocity and covariance in `odom`.
 Autoware `TrackedObject.twist` uses object-local axes. The ROS adapter rotates
 velocity and its covariance by `R(-yaw)` during serialization, matching the
