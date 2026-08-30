@@ -541,11 +541,23 @@ private:
         rclcpp::Duration::from_seconds(transform_timeout_sec_));
       const auto boxes = boxes_from_message(input, transform);
       std::vector<std::int8_t> data;
+      std::size_t oversized_skipped = 0U;
       if (mask == nullptr) {
-        data = build_dynamic_grid(geometry_, boxes, config_);
+        data = build_dynamic_grid(
+          geometry_, boxes, config_, &oversized_skipped);
       } else {
         const auto & drivable_mask = *mask;
-        data = build_dynamic_grid(geometry_, boxes, config_, drivable_mask);
+        data = build_dynamic_grid(
+          geometry_, boxes, config_, drivable_mask, &oversized_skipped);
+      }
+      if (oversized_skipped > 0U) {
+        oversized_objects_skipped_ += oversized_skipped;
+        ++frames_with_oversized_skip_;
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "skipped %zu predicted object(s) this frame: inflated footprint "
+          "exceeds maximum_cells_per_object; other objects still rasterized",
+          oversized_skipped);
       }
       const auto occupied_cells = static_cast<std::size_t>(std::count_if(
           data.begin(), data.end(),
@@ -591,9 +603,11 @@ private:
     RCLCPP_INFO(
       get_logger(),
       "DYNAMIC_OGM_RUNTIME_SUMMARY frames=%zu predicted_objects=%zu "
-      "empty_grids=%zu nonempty_grids=%zu median_step_ms=%.6f "
+      "empty_grids=%zu nonempty_grids=%zu oversized_objects_skipped=%zu "
+      "frames_with_oversized_skip=%zu median_step_ms=%.6f "
       "p95_step_ms=%.6f max_step_ms=%.6f",
-      count, predicted_objects_, empty_grids_, nonempty_grids_, median,
+      count, predicted_objects_, empty_grids_, nonempty_grids_,
+      oversized_objects_skipped_, frames_with_oversized_skip_, median,
       ordered[p95_index], ordered.back());
   }
 
@@ -681,6 +695,8 @@ private:
   std::size_t predicted_objects_{0U};
   std::size_t empty_grids_{0U};
   std::size_t nonempty_grids_{0U};
+  std::size_t oversized_objects_skipped_{0U};
+  std::size_t frames_with_oversized_skip_{0U};
   std::vector<double> step_latency_ms_;
 };
 

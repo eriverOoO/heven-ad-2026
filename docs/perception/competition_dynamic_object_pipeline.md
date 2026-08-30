@@ -135,12 +135,38 @@ through unchanged.
 
 ## Dynamic OGM behavior
 
-Unchanged `ad_dynamic_occupancy_grid`: 1040 x 200 cells, 0.1 m, origin
-`(-4, -10)`, identity orientation, `base_link`. Each object's current
-footprint is rasterized and inflated by the larger of `minimum_inflation_m`
-(0.20 m) and the 2-sigma position covariance. Future states are validated
-but not rasterized (the grid has no time axis). Invalid / stale / out of
-order input clears the layer.
+`ad_dynamic_occupancy_grid`: 1040 x 200 cells, 0.1 m, origin `(-4, -10)`,
+identity orientation, `base_link`. Each object's current footprint is
+rasterized and inflated by the larger of `minimum_inflation_m` (0.20 m)
+and the 2-sigma position covariance. Future states are validated but not
+rasterized (the grid has no time axis). Invalid / stale / out of order
+**array-level** input clears the layer.
+
+### Oversized single-object handling (fix)
+
+A single predicted object whose grid-clipped, uncertainty-inflated
+footprint would exceed `maximum_cells_per_object` (20000) is now **skipped
+per-object** rather than aborting the whole grid. Every other valid object
+in the same array is still rasterized. `build_dynamic_grid` reports the
+per-call skip count; the node accumulates it, logs a throttled warning
+(`skipped N predicted object(s) this frame: inflated footprint exceeds
+maximum_cells_per_object`), and adds `oversized_objects_skipped` /
+`frames_with_oversized_skip` to `DYNAMIC_OGM_RUNTIME_SUMMARY`. Genuinely
+malformed objects (non-finite fields, non-positive dimensions,
+non-positive-semidefinite covariance) and invalid geometry / config / mask
+still throw and still clear the layer (fail-safe). `maximum_cells_per_object`
+keeps its value and its purpose as the per-object rasterization budget;
+only its failure behavior changed from fatal to skip. Per-frame work stays
+bounded: a skipped object costs O(1), an admitted object costs at most the
+budget, so the pre-fix bound is unchanged.
+
+**Observed failure mode (pre-fix).** In the bounded replay, ~69 of ~171
+frames (~40%) had their entire dynamic layer erased. The trigger was
+almost always a single AB3DMOT track carrying ~350-370 m^2 position
+covariance (KF uncertainty, std ~19 m) -> 2-sigma inflation ~38 m ->
+grid-clipped footprint >20000 cells. Object box dimensions were tiny
+(0.1-1.7 m); coarse detector geometry was not the cause. The underlying KF
+covariance is out of scope for this fix and is not tuned.
 
 Checked-in `dynamic.yaml` keeps `road_gate.enabled: true`, so in
 production the node pairs each prediction with an exact-stamp
@@ -196,6 +222,33 @@ mode, not a fabricated mask.
   end-to-end callback-to-publish figure was separately instrumented in
   this run.
 
+## Oversized-object A/B replay result
+
+Same 180-frame `static_20260805_003151` window, dynamic OGM before vs
+after the per-object skip fix (`docs/agent/STATUS.md` has the same table):
+
+| | before (whole-frame clear) | after (per-object skip) |
+| --- | --- | --- |
+| oversized-object instances | 138 | 165 |
+| distinct frames with an oversized object | 69 | 77 |
+| dynamic grids erased by an oversized object | 69 | 0 |
+| empty dynamic grids | 69 (all had valid objects) | 1 (post-replay stale clear, no objects) |
+| non-empty dynamic grids | 102 | 160 |
+| occupied cells, non-empty grids (median / p95 / max) | 5296 / 28859 / 65804 | 9450 / 43682 / 91366 |
+| invalid / non-finite cells | 0 | 0 |
+| combined grids published | 171 / 171 | 160 / 160 |
+| dynamic step latency (median / p95 / max ms) | 0.478 / 1.379 / 1.758 | 0.663 / 1.484 / 3.440 |
+
+Every previously-erased frame now publishes its valid objects. Occupied
+cell counts rise because the recovered frames (which by construction
+contain a high-uncertainty track) contribute real, bounded footprints
+that were previously dropped -- this is the intended behaviour, not
+runaway occupancy: each rasterized object is still under the per-object
+budget and the grid is never more than ~44% occupied. Latency rises for
+the same reason (those frames now do rasterization work they previously
+skipped by throwing); it stays far below the ~167 ms replay frame budget
+and the 0.5 s prediction-timeout, and the structural bound is unchanged.
+
 ## Known limitations
 
 1. **Execution / interface evidence only** - one static-scene window, no
@@ -206,14 +259,15 @@ mode, not a fabricated mask.
    (`rosbag2_storage_mcap` missing). The exact-stamp mask pairing,
    geometry-mismatch rejection, and stale-mask rejection remain covered by
    `test_occupancy_layer_launch.py` with a synthetic mask driver.
-3. **Covariance-inflated footprints.** The Linear-KF AB3DMOT tracks carry
-   large position covariance on young / coasting tracks; the 2-sigma
-   inflation can push a coarse Euclidean AABB past
-   `maximum_cells_per_object`, and the dynamic node then safely clears
-   that frame (77 of 171 grids in the replay were empty, at least 13 from
-   this path). With `road_gate.enabled` and a real drivable mask most of
-   these off-road clusters would be masked out. Not tuned here (Phase 13);
-   a covariance cap or occupancy inflation review is a separate task.
+3. **Covariance-inflated footprints (mitigated downstream).** Some
+   Linear-KF AB3DMOT tracks carry ~350-370 m^2 position covariance, whose
+   2-sigma inflation (~38 m) pushes a small box past
+   `maximum_cells_per_object`. The dynamic node used to erase the whole
+   frame; it now skips only that object. The underlying KF covariance is
+   out of scope -- a covariance cap in the estimator or a physical
+   uncertainty ceiling in prediction is a separate task. A frame whose
+   *every* in-grid object is oversized still yields a correctly-empty grid
+   (none occurred in the replay).
 4. **From-scratch replay boundary loss.** Feeding Patchwork++ a cold 6 Hz
    stream dropped ~8 of 180 frames at the start / stop boundaries;
    Patchwork++ re-emitted the final buffered frame, and AB3DMOT correctly

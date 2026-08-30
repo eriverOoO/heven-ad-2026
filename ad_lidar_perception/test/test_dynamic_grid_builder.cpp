@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -315,15 +316,134 @@ TEST(DynamicGridBuilder, RejectsInvalidObjectsAndNonPsdCovariance)
     build_dynamic_grid(geometry(), {invalid}, config()), std::invalid_argument);
 }
 
-TEST(DynamicGridBuilder, RejectsOversizedPerObjectCandidateBeforeRasterizing)
+TEST(DynamicGridBuilder, SkipsOversizedPerObjectCandidateWithoutRasterizing)
 {
   auto guarded = config();
   guarded.maximum_cells_per_object = 10U;
 
+  std::size_t skipped = 99U;
+  const auto grid = build_dynamic_grid(
+    geometry(100U, 100U), {box(50.0, 50.0, 0.0, 100.0, 100.0)}, guarded,
+    &skipped);
+
+  EXPECT_EQ(skipped, 1U);
+  EXPECT_EQ(grid.size(), 100U * 100U);
+  EXPECT_TRUE(
+    std::all_of(
+      grid.begin(), grid.end(),
+      [](const std::int8_t value) {return value == 0;}));
+}
+
+TEST(DynamicGridBuilder, OversizedObjectDoesNotEraseOtherValidObjects)
+{
+  auto guarded = config();
+  guarded.maximum_cells_per_object = 10U;
+  const auto grid_geometry = geometry(100U, 100U);
+
+  std::size_t skipped = 0U;
+  const auto grid = build_dynamic_grid(
+    grid_geometry,
+    {
+      box(2.0, 2.0, 0.0, 1.0, 1.0),                 // small, valid
+      box(50.0, 50.0, 0.0, 100.0, 100.0),           // oversized -> skipped
+      box(90.0, 90.0, 0.0, 1.0, 1.0),               // small, valid
+    },
+    guarded, &skipped);
+
+  EXPECT_EQ(skipped, 1U);
+  EXPECT_EQ(at(grid, grid_geometry, 2U, 2U), 100);
+  EXPECT_EQ(at(grid, grid_geometry, 90U, 90U), 100);
+  const auto occupied = std::count_if(
+    grid.begin(), grid.end(),
+    [](const std::int8_t value) {return value > 0;});
+  EXPECT_GT(occupied, 0);
+  EXPECT_LT(occupied, 100 * 100);  // the 100x100 oversized box was not painted
+}
+
+TEST(DynamicGridBuilder, CountsEveryOversizedObjectSeparately)
+{
+  auto guarded = config();
+  guarded.maximum_cells_per_object = 10U;
+
+  std::size_t skipped = 0U;
+  const auto grid = build_dynamic_grid(
+    geometry(100U, 100U),
+    {
+      box(20.0, 20.0, 0.0, 100.0, 100.0),
+      box(60.0, 60.0, 0.0, 100.0, 100.0),
+      box(80.0, 80.0, 0.0, 1.0, 1.0),
+    },
+    guarded, &skipped);
+
+  EXPECT_EQ(skipped, 2U);
+  EXPECT_GT(
+    std::count_if(
+      grid.begin(), grid.end(),
+      [](const std::int8_t value) {return value > 0;}),
+    0);
+}
+
+TEST(DynamicGridBuilder, HighButFiniteCovarianceIsSkippedNotFatal)
+{
+  auto guarded = config();
+  guarded.covariance_sigma = 2.0;
+  guarded.maximum_cells_per_object = 20000U;
+
+  std::size_t skipped = 0U;
+  // 359 m^2 position variance -> ~38 m inflation, the observed AB3DMOT case.
+  const auto grid = build_dynamic_grid(
+    GridGeometry{-4.0, -10.0, 0.1, 1040U, 200U},
+    {box(40.0, 0.0, 0.0, 1.0, 1.0, 359.0, 0.0, 359.0)},
+    guarded, &skipped);
+
+  EXPECT_EQ(skipped, 1U);
+  EXPECT_EQ(grid.size(), 1040U * 200U);
+  EXPECT_TRUE(
+    std::all_of(
+      grid.begin(), grid.end(),
+      [](const std::int8_t value) {return value == 0;}));
+}
+
+TEST(DynamicGridBuilder, MalformedObjectStillThrowsForFailSafeClear)
+{
+  std::size_t skipped = 0U;
+  // NaN position: genuine upstream corruption, not merely large -> fatal.
   EXPECT_THROW(
     build_dynamic_grid(
-      geometry(100U, 100U), {box(50.0, 50.0, 0.0, 100.0, 100.0)}, guarded),
-    std::length_error);
+      geometry(), {box(std::nan(""), 0.0, 0.0, 1.0, 1.0)}, config(), &skipped),
+    std::invalid_argument);
+  // Negative covariance diagonal: not positive-semidefinite -> fatal.
+  EXPECT_THROW(
+    build_dynamic_grid(
+      geometry(), {box(1.0, 1.0, 0.0, 1.0, 1.0, -5.0, 0.0, 1.0)}, config(),
+      &skipped),
+    std::invalid_argument);
+}
+
+TEST(DynamicGridBuilder, OversizedSkipIsDeterministicAndOutParamResets)
+{
+  auto guarded = config();
+  guarded.maximum_cells_per_object = 10U;
+  const std::vector<DynamicBox> objects{
+    box(2.0, 2.0, 0.0, 1.0, 1.0),
+    box(50.0, 50.0, 0.0, 100.0, 100.0)};
+
+  std::size_t skipped_a = 7U;
+  const auto grid_a = build_dynamic_grid(
+    geometry(100U, 100U), objects, guarded, &skipped_a);
+  std::size_t skipped_b = 0U;
+  const auto grid_b = build_dynamic_grid(
+    geometry(100U, 100U), objects, guarded, &skipped_b);
+
+  EXPECT_EQ(skipped_a, 1U);
+  EXPECT_EQ(skipped_b, 1U);
+  EXPECT_EQ(grid_a, grid_b);
+
+  // No oversized object -> counter resets to 0, not left stale.
+  std::size_t skipped_c = 5U;
+  (void)build_dynamic_grid(
+    geometry(100U, 100U), {box(2.0, 2.0, 0.0, 1.0, 1.0)}, guarded, &skipped_c);
+  EXPECT_EQ(skipped_c, 0U);
 }
 
 }  // namespace

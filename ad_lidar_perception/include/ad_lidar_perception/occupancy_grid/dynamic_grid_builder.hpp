@@ -42,16 +42,25 @@ std::vector<DynamicBox> interpolate_dynamic_trajectory(
   double maximum_center_spacing_m,
   std::size_t maximum_output_samples);
 
+// A single predicted object whose grid-clipped, uncertainty-inflated footprint
+// would exceed config.maximum_cells_per_object is skipped (not rasterized)
+// rather than aborting the whole grid. When oversized_objects_skipped is not
+// null it receives the count of such objects for this call so the caller can
+// surface a diagnostic. Genuinely malformed objects (non-finite fields,
+// non-positive dimensions, non-positive-semidefinite covariance) and invalid
+// geometry/config/mask still throw and are the caller's fail-safe concern.
 std::vector<std::int8_t> build_dynamic_grid(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
-  const DynamicGridConfig & config);
+  const DynamicGridConfig & config,
+  std::size_t * oversized_objects_skipped = nullptr);
 
 std::vector<std::int8_t> build_dynamic_grid(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
   const DynamicGridConfig & config,
-  const std::vector<std::int8_t> & drivable_mask);
+  const std::vector<std::int8_t> & drivable_mask,
+  std::size_t * oversized_objects_skipped = nullptr);
 
 }  // namespace ad_lidar_perception::occupancy_grid
 
