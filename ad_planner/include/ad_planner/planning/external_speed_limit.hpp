@@ -1,6 +1,7 @@
 #ifndef AD_PLANNER__PLANNING__EXTERNAL_SPEED_LIMIT_HPP_
 #define AD_PLANNER__PLANNING__EXTERNAL_SPEED_LIMIT_HPP_
 
+#include <initializer_list>
 #include <optional>
 
 namespace ad_planner {
@@ -16,6 +17,15 @@ namespace ad_planner {
 // can never poison the combined bound.
 std::optional<double> combine_speed_limits(std::optional<double> a,
                                            std::optional<double> b);
+
+// Fold an arbitrary set of external longitudinal speed limits with the binary
+// combiner above. min is associative and combine_speed_limits is symmetric, so
+// the result is independent of the order the sources appear in the list; an
+// empty list or a list of all-absent / all-non-finite entries yields
+// std::nullopt. Used where more than two independent sources (cut-in,
+// roundabout, highway merge) are combined.
+std::optional<double>
+combine_speed_limits(std::initializer_list<std::optional<double>> limits);
 
 } // namespace ad_planner
 

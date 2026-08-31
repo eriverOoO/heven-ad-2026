@@ -53,6 +53,27 @@ ad_planner:
     enable_roundabout_response_constraint: false
     roundabout_response_max_age_s: 0.5
 
+    # Opt-in: consume the highway merge gap response at the planner / highway
+    # mission boundary. Default off -> no subscription, no merge authorization,
+    # no behaviour change. A fresh active MERGE_READY exposes a revocable
+    # merge-authorization fact (context.highway_merge_authorized, the
+    # HighwayMergeReady BT condition, and the
+    # /ad/planner/highway_merge_authorized diagnostic) without executing a lane
+    # change; it imposes no longitudinal cap. WAIT caps the path-tracking target
+    # at the response's own published comfortable-stop envelope (final target =
+    # min(existing target, cut-in limit, roundabout limit, highway merge limit),
+    # most-restrictive wins, order-independent); HOLD caps at 0.0. Every merge
+    # policy threshold and the comfortable deceleration stay owned by Highway
+    # Merge Gap Response and are not repeated here.
+    # highway_merge_response_max_age_s is the consumer-side freshness timeout
+    # (mirrors the response node's own maximum_input_age_s); absent or stale ->
+    # no constraint and no authorization (never latched). A response whose
+    # merge_zone_id is not expected_highway_merge_zone is ignored wholesale; an
+    # empty value accepts any zone.
+    enable_highway_merge_response_integration: false
+    highway_merge_response_max_age_s: 0.5
+    expected_highway_merge_zone: "kcity_highway_onramp"
+
     # Current Stanley baseline: dynamic steering preview + curvature speed cap.
     stanley.target_speed_mps: 16.25
     stanley.cross_track_gain: 0.91
@@ -227,6 +248,11 @@ ad_planner:
     # true.
     topics.roundabout_gap_response: "/ad/planning/roundabout_gap_response"
     topics.roundabout_speed_limit: "/ad/planner/roundabout_speed_limit"
+    # Only subscribed / published when
+    # enable_highway_merge_response_integration is true.
+    topics.highway_merge_gap_response: "/ad/planning/highway_merge_gap_response"
+    topics.highway_merge_speed_limit: "/ad/planner/highway_merge_speed_limit"
+    topics.highway_merge_authorized: "/ad/planner/highway_merge_authorized"
     topics.command: "/ad/control/command"
     topics.planner_status: "/ad/planner/status"
     topics.path: "/ad/planner/path"

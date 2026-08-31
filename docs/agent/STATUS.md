@@ -1,5 +1,116 @@
 # STATUS
 
+## Highway Merge Response Integration v1 — COMPLETE
+
+Branch `feat/highway-merge-response-integration-v1`, from merged PR #22 main
+`6ae7f8922bc966e6bd31dd872d209283d9599b11` (`feat(planning): add highway merge
+gap response (#22)`). First planner-side consumer of `HighwayMergeGapResponse`.
+**Opt-in, off by default** (`enable_highway_merge_response_integration: false`):
+disabled => no subscription, no observability publisher, no merge authorization,
+behaviour identical to current main.
+
+Consumes `HighwayMergeGapResponse` **only** (never `HighwayMergeGapRisk` /
+`DynamicObjectRisk` / raw tracker). Two responsibilities, neither commanding
+steering or a lane change:
+
+1. **Longitudinal**: `WAIT` / `HOLD` lower the path-tracking target through the
+   existing 6th `target_speed_mps` arg of `PathTrackingController::update()` in
+   `run_path_tracking()` (`FollowGlobalPath` leaf) -- the same point cut-in
+   (PR #16) and roundabout (PR #20) use. No second longitudinal controller, no
+   extra `CtrlCmd`.
+2. **Authorization**: a fresh active `ACTION_MERGE_READY` sets a revocable
+   `PlannerContext::highway_merge_authorized` fact (recomputed every tick before
+   the BT runs, never latched), exposed by a new registered-but-unwired
+   `HighwayMergeReady` `BT::SimpleCondition` and a
+   `/ad/planner/highway_merge_authorized` (`std_msgs/Bool`) diagnostic.
+
+**No highway merge / lane-change mission path exists in the repo** (BT has no
+merge branch; no route-change primitive; Frenet `lane_change_weight` is a local
+trajectory-scoring cost, not a mission transition). Phase 21: no mission was
+fabricated. `HighwayMergeReady` is registered + in `ad_bt_node_ids()` but the
+production tree (`ad_planner.xml`) is byte-unchanged.
+
+Pure core `highway_merge_speed_constraint.{hpp,cpp}` (`ad_planner_core`, no ROS
+dep): `highway_merge_response_speed_limit()` -- not received / stale / inactive /
+wrong zone / `MERGE_READY` / unknown -> `nullopt`; `HOLD` -> `0.0`; `WAIT` ->
+`ego_speed * sqrt(available / comfortable_stop)` == `sqrt(2 * a_comfortable *
+available)` (ego terms cancel -- **no deceleration / standoff / gap constant
+duplicated**, no new yield-speed param); malformed WAIT facts -> `nullopt`.
+`highway_merge_response_merge_authorized()` -- true only when received && fresh
+&& active && zone matches && `action == ACTION_MERGE_READY` (the enum-0 trap:
+`active` must be checked; `reason` is never branched on).
+
+Zone: `expected_highway_merge_zone` (default `kcity_highway_onramp`) must equal
+`response.merge_zone_id` or the frame is ignored wholesale (no auth, no cap),
+mirroring the upstream node's wrong-zone rejection. Empty value accepts any zone.
+
+`combine_speed_limits` gained an `initializer_list` fold (binary form unchanged);
+`run_path_tracking()` composes `min(nominal, cut_in, roundabout, highway_merge)`
+-- order-independent, associative, most-restrictive-wins. `MERGE_READY` never
+lifts a cut-in/roundabout cap; `WAIT` never raises nominal; `HOLD` -> `0.0`.
+
+Freshness: steady receipt time only (`highway_merge_response_max_age_s: 0.5`);
+header stamp never consulted. Never latched -- a following `WAIT` / `HOLD` /
+stale / missing / inactive / wrong-zone frame immediately revokes both the cap
+and `merge_authorized`. Stale `HOLD` expires to no constraint (inherited
+cut-in/roundabout freshness contract; documented downstream assumption).
+
+Scope: `FollowGlobalPath` (Stanley / profile-Stanley) longitudinal only.
+`PerceptionMission` (DWA/Frenet/MPPI) unconstrained (same `HOLD = 0` /
+lateral-selection limitation as cut-in/roundabout).
+`VehicleConstraints.maximum_speed_mps` unchanged. Exactly one
+`/ad/control/command` publisher. No actuator / steering / lane-change / route /
+trajectory / `ad_interfaces` change.
+
+`planner.launch.py enable_highway_merge_response_integration:=true` sets the
+param and starts `ad_highway_merge_gap_response` + (forced)
+`ad_highway_merge_gap_risk` (`_highway_merge_response_requested` now ORs in the
+new integration flag).
+
+Validation: `test_highway_merge_speed_constraint` 26 gtests (action mapping,
+zone / stale / inactive / enum-0, malformed WAIT facts, cap properties,
+authorization + revocation). `test_external_speed_limit` +`initializer_list`
+fold + Phase-16 three-source matrix A-G + `AllThreeActive` + full 6-permutation
+order-independence over every (cut-in, roundabout, merge) triple + MERGE_READY
+never overrides. `test_behavior_tree` `registered_node_ids` 6->7 +
+`HighwayMergeReadyConditionMirrorsAuthorizationFact` (false->true->false, no
+latch); production-tree exact-XML assertion unchanged. `test_planner_launch`
++declared arg + `test_highway_merge_response_integration_is_opt_in_and_default_off`.
+`test_planner_highway_merge_constraint.py` live `ad_planner` in `FollowGlobalPath`,
+ego 8 m/s: baseline target 16.25 / limit -1 / auth False; inactive MERGE_READY
+enum -1 / False / 16.25; MERGE_READY -1 / **True** / 16.25 (byte-identical to
+baseline); WAIT (avail 34) limit 11.063 = sqrt(2*1.8*34) / False / target 11.063;
+HOLD (avail 8) limit 0.0 / False / target 0.0 / brake; wrong-zone MERGE_READY -1
+/ False / 16.25; re-armed MERGE_READY then silence -> -1 / False / 16.25 (no
+latch); steering byte-identical (0.0) every state; 1 `/ad/control/command`
+publisher. Full `ad_planner` gtest 36/36; `test_planner_cut_in_constraint` /
+`test_planner_roundabout_constraint` / all cut-in/roundabout/highway-merge
+risk+response launch + runtime tests pass. Isolated `colcon build
+--packages-select ad_planner --symlink-install` clean. Pre-existing unrelated
+host failures unchanged (`test_mppi_nav2_launch` nav2 absent;
+`test_cut_in_response_runtime` / `test_cut_in_risk_runtime` perception-node OOM;
+`test_frenet_runtime_contract` parallel contention -- passes isolated).
+
+Files: `ad_planner`
+`include/ad_planner/planning/highway_merge_speed_constraint.hpp`,
+`include/ad_planner/planning/external_speed_limit.hpp`,
+`include/ad_planner/behavior/planner_context.hpp`,
+`src/planning/highway_merge_speed_constraint.cpp`,
+`src/planning/external_speed_limit.cpp`, `src/behavior/bt_nodes.cpp`,
+`src/planner/planner_node.cpp`, `src/planner/planner_ros_interfaces.{hpp,cpp}`,
+`config/planner.yaml`, `launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_highway_merge_speed_constraint.cpp,test_external_speed_limit.cpp,
+test_behavior_tree.cpp,test_planner_launch.py,test_planner_highway_merge_constraint.py}`;
+`docs/planning/highway_merge_response_integration_v1.md`, this file. No
+`ad_interfaces` change.
+
+**Recommended next task:** Highway Merge Mission Transition v1 -- but first build
+the missing mission primitive (a route/corridor change or merge lane-selection
+state the `HighwayMergeReady` condition can gate); no executable
+merge/lane-selection mission path exists to wire `merge_authorized` into yet.
+
+---
+
 ## Highway Merge Gap Response v1 — COMPLETE
 
 Branch `feat/highway-merge-gap-response-v1`, from merged PR #21 main

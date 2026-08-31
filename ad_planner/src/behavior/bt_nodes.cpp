@@ -494,7 +494,8 @@ make_perception_forward_check(const PerceptionMissionConfig &config,
 
 std::vector<std::string> ad_bt_node_ids() {
   return {"CollisionRecovery", "FailSafeBrake",     "FollowGlobalPath",
-          "InputsReady",       "PerceptionMission", "TrafficStop"};
+          "HighwayMergeReady", "InputsReady",       "PerceptionMission",
+          "TrafficStop"};
 }
 
 void register_ad_bt_nodes(BT::BehaviorTreeFactory &factory,
@@ -502,6 +503,19 @@ void register_ad_bt_nodes(BT::BehaviorTreeFactory &factory,
   factory.registerSimpleCondition("InputsReady", [environment](BT::TreeNode &) {
     return inputs_ready(*environment);
   });
+  // Read-only mission-authorization condition. SUCCESS only when a fresh,
+  // active, matching-zone HighwayMergeGapResponse MERGE_READY advisory is in
+  // hand (AdPlannerNode recomputes context.highway_merge_authorized every tick,
+  // before this tree runs, and never latches it). It publishes no control,
+  // changes no path/route/steering, and never internally latches. Registered
+  // for a future Highway Merge Mission Transition; the current production tree
+  // does not reference it.
+  factory.registerSimpleCondition(
+      "HighwayMergeReady", [environment](BT::TreeNode &) {
+        return environment->context.highway_merge_authorized
+                   ? BT::NodeStatus::SUCCESS
+                   : BT::NodeStatus::FAILURE;
+      });
   factory.registerBuilder<CollisionRecoveryNode>(
       "CollisionRecovery",
       [environment](const std::string &name, const auto &config) {

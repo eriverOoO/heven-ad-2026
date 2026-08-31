@@ -395,6 +395,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "highway_merge_gap_response",
         "enable_cut_in_response_constraint",
         "enable_roundabout_response_constraint",
+        "enable_highway_merge_response_integration",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
@@ -408,6 +409,10 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
     assert perform_substitutions(
         LaunchContext(),
         arguments["enable_roundabout_response_constraint"].default_value,
+    ) == ""
+    assert perform_substitutions(
+        LaunchContext(),
+        arguments["enable_highway_merge_response_integration"].default_value,
     ) == ""
     assert perform_substitutions(
         LaunchContext(), arguments["roundabout_gap_response"].default_value
@@ -571,6 +576,61 @@ def test_highway_merge_gap_response_node_is_opt_in_and_forces_the_risk_node(
         module._create_highway_merge_gap_response_node(
             _launch_context(
                 data_dir=str(tmp_path), highway_merge_gap_response="maybe"
+            )
+        )
+
+
+def test_highway_merge_response_integration_is_opt_in_and_default_off(
+    monkeypatch, tmp_path
+):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    # Default off: the planner node carries no override (config false stands),
+    # so no HighwayMergeGapResponse subscription or observability publisher is
+    # created, and no response / forced risk node is composed.
+    disabled = _launch_context(data_dir=str(tmp_path))
+    default_planner = module._create_planner_node(disabled)
+    assert (
+        "enable_highway_merge_response_integration"
+        not in _parameter_overrides(default_planner, disabled)
+    )
+    assert module._create_highway_merge_gap_response_node(disabled) is None
+
+    # The planner-side integration alone starts the response node and forces the
+    # highway merge gap risk node it ultimately consumes.
+    integrated = _launch_context(
+        data_dir=str(tmp_path),
+        enable_highway_merge_response_integration="true",
+    )
+    assert isinstance(
+        module._create_highway_merge_gap_response_node(integrated), Node
+    )
+    forced_risk = module._create_highway_merge_gap_risk_node(
+        integrated, force=True
+    )
+    assert isinstance(forced_risk, Node)
+    assert (
+        forced_risk._Node__node_executable == "ad_highway_merge_gap_risk_node"
+    )
+    planner = module._create_planner_node(integrated)
+    overrides = _parameter_overrides(planner, integrated)
+    assert overrides["enable_highway_merge_response_integration"] is True
+
+    with pytest.raises(
+        RuntimeError,
+        match="enable_highway_merge_response_integration must be empty",
+    ):
+        module._create_planner_node(
+            _launch_context(
+                data_dir=str(tmp_path),
+                enable_highway_merge_response_integration="maybe",
             )
         )
 

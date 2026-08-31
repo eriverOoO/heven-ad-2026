@@ -7,6 +7,7 @@
 #include <utility>
 
 #include <ad_interfaces/msg/cut_in_response.hpp>
+#include <ad_interfaces/msg/highway_merge_gap_response.hpp>
 #include <ad_interfaces/msg/planner_status.hpp>
 #include <ad_interfaces/msg/predicted_object_array.hpp>
 #include <ad_interfaces/msg/roundabout_gap_response.hpp>
@@ -32,6 +33,7 @@ struct PlannerRosInterfaceConfig {
   bool external_velocity_enabled{false};
   bool cut_in_response_constraint_enabled{false};
   bool roundabout_response_constraint_enabled{false};
+  bool highway_merge_response_integration_enabled{false};
 };
 
 struct PlannerRosCallbacks {
@@ -51,6 +53,8 @@ struct PlannerRosCallbacks {
   std::function<void(const ad_interfaces::msg::CutInResponse &)> cut_in_response;
   std::function<void(const ad_interfaces::msg::RoundaboutGapResponse &)>
       roundabout_response;
+  std::function<void(const ad_interfaces::msg::HighwayMergeGapResponse &)>
+      highway_merge_response;
   std::function<void()> tuning_lease;
   std::function<std::pair<bool, std::string>(bool)> hold_control;
   std::function<std::pair<bool, std::string>()> reset_controllers;
@@ -73,6 +77,12 @@ public:
   // No-op unless the roundabout response constraint is enabled (the publisher
   // is only created in that case).
   void publish_roundabout_speed_limit(float value);
+
+  // No-ops unless the highway merge response integration is enabled (the
+  // publishers are only created in that case). The Bool is a diagnostic mirror
+  // of the merge-authorization fact, not a lane-change command.
+  void publish_highway_merge_speed_limit(float value);
+  void publish_highway_merge_authorized(bool value);
 
 private:
   PlannerRosCallbacks callbacks_;
@@ -105,6 +115,12 @@ private:
       roundabout_response_subscription_;
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr
       roundabout_speed_limit_publisher_;
+  rclcpp::Subscription<ad_interfaces::msg::HighwayMergeGapResponse>::SharedPtr
+      highway_merge_response_subscription_;
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr
+      highway_merge_speed_limit_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr
+      highway_merge_authorized_publisher_;
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr
       tuning_lease_subscription_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr tuning_hold_service_;
