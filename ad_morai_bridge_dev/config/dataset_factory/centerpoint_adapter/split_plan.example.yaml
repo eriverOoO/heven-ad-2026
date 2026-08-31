@@ -1,0 +1,21 @@
+# Explicit train/val/test plan for ad_morai_dataset_export_centerpoint --split-plan.
+#
+# Groups are assigned at (scenario_id, requested_seed) level - never per frame -
+# so all frames of one capture run stay in one split. A group listed in two
+# splits is a hard error; a group referenced here but absent from the source is
+# a hard error; a source group not referenced here is dropped with a warning.
+#
+# This example matches the factory dataset_plan.example.yaml groups
+# (lead_constant seeds 0,1; cut_in seeds 0,1; dense_multi_object seed 0).
+splits:
+  train:
+    - scenario: lead_constant
+      seeds: [0, 1]
+    - scenario: cut_in
+      seeds: [0]
+  val:
+    - scenario: dense_multi_object
+      seeds: [0]
+  test:
+    - scenario: cut_in
+      seeds: [1]
