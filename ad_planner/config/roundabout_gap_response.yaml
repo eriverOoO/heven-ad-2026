@@ -1,0 +1,26 @@
+ad_roundabout_gap_response:
+  ros__parameters:
+    topics.roundabout_gap_risks: "/ad/planning/roundabout_gap_risks"
+    topics.output: "/ad/planning/roundabout_gap_response"
+    topics.diagnostics: "/ad/planning/roundabout_gap_response/diagnostics"
+    expected_frame_id: "map"
+    conflict_zone_id: "kcity_roundabout"
+
+    maximum_input_age_s: 0.5
+
+    # Competition-v1 policy tuning, not a universal safety guarantee. At the
+    # audited 8 m/s approach speed, 2 s corresponds to about 16 m of arrival
+    # separation; the response still requires full prediction coverage and no
+    # all-interval occupancy overlap from every relevant object.
+    minimum_release_gap_s: 2.0
+    # Mirrors the existing cut-in response clearance (approximately the IONIQ 5
+    # front overhang/reference offset plus margin); the point remains before the
+    # conflict polygon rather than inside it.
+    entry_standoff_m: 6.0
+    # Canonical comfortable planner/perception braking deceleration.
+    comfortable_deceleration_mps2: 1.8
+    # Mirrors the upstream roundabout-risk ego ETA validity threshold.
+    stopped_speed_threshold_mps: 0.5
+
+    maximum_relevant_objects: 256
+    runtime_summary_interval_frames: 200

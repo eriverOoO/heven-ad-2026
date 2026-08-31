@@ -1,14 +1,16 @@
 """Deterministic canonical replay: synthetic DynamicObjectRisk -> live
 ad_roundabout_gap_risk against the real checksum-verified route corridor and the
-shipped K-City roundabout conflict geometry.
+shipped K-City roundabout conflict geometry, then the live roundabout response
+node.
 
 No MORAI roundabout bag with provenance-verified circulating-actor trajectories
 exists in the repo, so the object trajectories here are synthetic but the
 conflict region, the ego route, and both nodes are real. The ego is swept along
-the roundabout approach over a bounded set of frames; four temporal cases
+the roundabout approach over a bounded set of frames; five temporal cases
 (object clears first / occupancy overlap / object arrives after ego / nearby
-non-conflicting object) are exercised, and per-frame counts and distributions
-are recorded.
+non-conflicting object / leave then re-enter) are exercised. A separate valid
+zero-object response frame proves RELEASE, and per-frame counts and
+distributions are recorded.
 """
 
 import hashlib
@@ -24,10 +26,11 @@ from ad_interfaces.msg import (
     DynamicObjectRiskArray,
     DynamicObjectRiskState,
     RoundaboutGapRiskArray,
+    RoundaboutGapResponse,
 )
 from builtin_interfaces.msg import Duration
 from launch import LaunchDescription
-from launch.actions import SetEnvironmentVariable
+from launch.actions import SetEnvironmentVariable, Shutdown, TimerAction
 import launch_testing
 import launch_testing.actions
 import launch_testing.asserts
@@ -44,10 +47,12 @@ REPO = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO / "ad_data"
 GLOBAL_PATH = DATA_DIR / "path" / "2026_molit_comp_global_path.txt"
 CONFIG = REPO / "ad_planner" / "config" / "roundabout_gap_risk.yaml"
+RESPONSE_CONFIG = REPO / "ad_planner" / "config" / "roundabout_gap_response.yaml"
 
 RISK_TOPIC = "/ad/planning/dynamic_object_risks"
 ODOM_TOPIC = "/ad/localization/odometry"
 OUTPUT_TOPIC = "/ad/planning/roundabout_gap_risks"
+RESPONSE_TOPIC = "/ad/planning/roundabout_gap_response"
 
 # Primary-route centreline samples on the roundabout approach (station -> pose).
 # Taken from ad_data/map/route_corridor.json.
@@ -92,11 +97,29 @@ def generate_test_description():
                         "data_dir": str(DATA_DIR),
                         "route_corridor_file": "map/route_corridor.json",
                         "route_corridor.expected_global_path_sha256": digest,
+                        "maximum_input_age_s": 5.0,
                         "runtime_summary_interval_frames": 0,
                     },
                 ],
             ),
+            LaunchNode(
+                package="ad_planner",
+                executable="ad_roundabout_gap_response_node",
+                name="ad_roundabout_gap_response",
+                output="screen",
+                parameters=[
+                    str(RESPONSE_CONFIG),
+                    {
+                        "maximum_input_age_s": 5.0,
+                        "runtime_summary_interval_frames": 6,
+                    },
+                ],
+            ),
             launch_testing.actions.ReadyToTest(),
+            TimerAction(
+                period=30.0,
+                actions=[Shutdown(reason="roundabout runtime validation complete")],
+            ),
         ]
     )
 
@@ -164,12 +187,23 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         rclpy.init()
         cls.node = Node("roundabout_gap_risk_probe")
         cls.frames = []
+        cls.responses = []
         cls.latency_ms = []
+        cls.response_latency_ms = []
         cls.node.create_subscription(
             RoundaboutGapRiskArray, OUTPUT_TOPIC, lambda m: cls.frames.append(m), _QOS_1
         )
+        cls.node.create_subscription(
+            RoundaboutGapResponse,
+            RESPONSE_TOPIC,
+            lambda m: cls.responses.append(m),
+            _QOS_1,
+        )
         cls.risk_pub = cls.node.create_publisher(DynamicObjectRiskArray, RISK_TOPIC, _QOS_1)
         cls.odom_pub = cls.node.create_publisher(Odometry, ODOM_TOPIC, _QOS_10)
+        cls.response_input_pub = cls.node.create_publisher(
+            RoundaboutGapRiskArray, OUTPUT_TOPIC, _QOS_1
+        )
 
     @classmethod
     def tearDownClass(cls):
@@ -210,19 +244,26 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         array.header.frame_id = "base_link"
         array.objects = objects
         want = len(self.frames) + 1
+        want_response = len(self.responses) + 1
         started = time.monotonic()
         self.risk_pub.publish(array)
         self.assertTrue(
-            self._spin_until(lambda: len(self.frames) >= want, 3.0),
-            "roundabout node did not publish",
+            self._spin_until(
+                lambda: len(self.frames) >= want
+                and len(self.responses) >= want_response,
+                3.0,
+            ),
+            "roundabout risk/response pipeline did not publish",
         )
-        self.latency_ms.append((time.monotonic() - started) * 1e3)
+        elapsed_ms = (time.monotonic() - started) * 1e3
+        self.latency_ms.append(elapsed_ms)
+        self.response_latency_ms.append(elapsed_ms)
         return self.frames[-1]
 
     def test_roundabout_conflict_timing_facts(self):
         self.assertTrue(
             self._spin_until(
-                lambda: self.node.count_publishers(OUTPUT_TOPIC) == 1
+                lambda: self.node.count_publishers(OUTPUT_TOPIC) >= 1
                 and self.node.count_subscribers(RISK_TOPIC) == 1,
                 10.0,
             ),
@@ -393,9 +434,75 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
 
         self.assertEqual(representative.relevant_object_count, 4)
 
+        # The canonical five-object scenario always contains an overlap/re-entry
+        # object, so exercise RELEASE with a separate valid zero-relevant-object
+        # frame rather than weakening that scenario.
+        gap_message_count = len(self.frames)
+        release_input = RoundaboutGapRiskArray()
+        release_input.header.stamp = self.node.get_clock().now().to_msg()
+        release_input.header.frame_id = "map"
+        release_input.conflict_zone_id = "kcity_roundabout"
+        release_input.ego_entry_valid = True
+        release_input.ego_entry_time_s = 4.0
+        release_input.ego_exit_valid = True
+        release_input.ego_exit_time_s = 7.0
+        release_input.ego_route_distance_to_entry_m = 32.0
+        release_input.ego_route_distance_to_exit_m = 56.0
+        release_input.ego_speed_mps = EGO_SPEED
+        want_response = len(self.responses) + 1
+        self.response_input_pub.publish(release_input)
+        self.assertTrue(
+            self._spin_until(lambda: len(self.responses) >= want_response, 3.0),
+            "roundabout response node did not publish zero-object RELEASE",
+        )
+        self.assertEqual(
+            self.responses[-1].action, RoundaboutGapResponse.ACTION_RELEASE
+        )
+        self.assertTrue(self.responses[-1].active)
+
+        actions = [response.action for response in self.responses]
+        reasons = [response.reason for response in self.responses]
+        self.assertEqual(actions.count(RoundaboutGapResponse.ACTION_RELEASE), 1)
+        self.assertEqual(actions.count(RoundaboutGapResponse.ACTION_YIELD), 2)
+        self.assertEqual(actions.count(RoundaboutGapResponse.ACTION_HOLD), 3)
+        self.assertEqual(
+            reasons.count(RoundaboutGapResponse.REASON_OVERLAP), 5
+        )
+        for response in self.responses:
+            for name in (
+                "ego_speed_mps", "ego_route_distance_to_entry_m",
+                "available_distance_m", "comfortable_stop_distance_m",
+                "limiting_gap_s",
+            ):
+                self.assertTrue(math.isfinite(getattr(response, name)))
+
         result = {
             "input_risk_messages": input_frames,
-            "gap_messages": len(self.frames),
+            "gap_messages": gap_message_count,
+            "response_messages": len(self.responses),
+            "response_release_frames": actions.count(
+                RoundaboutGapResponse.ACTION_RELEASE
+            ),
+            "response_yield_frames": actions.count(
+                RoundaboutGapResponse.ACTION_YIELD
+            ),
+            "response_hold_frames": actions.count(
+                RoundaboutGapResponse.ACTION_HOLD
+            ),
+            "response_rejected_frames": 0,
+            "response_reason_counts": {
+                "clear_gap": reasons.count(RoundaboutGapResponse.REASON_CLEAR_GAP),
+                "overlap": reasons.count(RoundaboutGapResponse.REASON_OVERLAP),
+                "gap_too_small": reasons.count(
+                    RoundaboutGapResponse.REASON_GAP_TOO_SMALL
+                ),
+                "insufficient_prediction": reasons.count(
+                    RoundaboutGapResponse.REASON_INSUFFICIENT_PREDICTION
+                ),
+                "invalid_ego_state": reasons.count(
+                    RoundaboutGapResponse.REASON_INVALID_EGO_STATE
+                ),
+            },
             "input_objects": input_objects,
             "relevant_object_frames": relevant_object_frames,
             "unique_relevant_uuids": len(relevant_uuids),
@@ -438,6 +545,51 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
                 "p95": round(_pctile(self.latency_ms, 0.95), 3),
                 "max": round(max(self.latency_ms), 3),
                 "samples": len(self.latency_ms),
+            },
+            "risk_input_to_response_receive_latency_ms": {
+                "median": round(statistics.median(self.response_latency_ms), 3),
+                "p95": round(_pctile(self.response_latency_ms, 0.95), 3),
+                "max": round(max(self.response_latency_ms), 3),
+                "samples": len(self.response_latency_ms),
+            },
+            "response_examples": {
+                "release": {
+                    "ego_distance_m": round(
+                        self.responses[-1].ego_route_distance_to_entry_m, 3
+                    ),
+                    "relevant_objects": self.responses[-1].relevant_object_count,
+                    "complete_coverage": (
+                        self.responses[-1].complete_prediction_coverage
+                    ),
+                },
+                "yield": {
+                    "ego_distance_m": round(
+                        next(
+                            r for r in self.responses
+                            if r.action == RoundaboutGapResponse.ACTION_YIELD
+                        )
+                        .ego_route_distance_to_entry_m,
+                        3,
+                    ),
+                    "reason": next(
+                        r for r in self.responses
+                        if r.action == RoundaboutGapResponse.ACTION_YIELD
+                    ).reason,
+                },
+                "hold": {
+                    "ego_distance_m": round(
+                        next(
+                            r for r in self.responses
+                            if r.action == RoundaboutGapResponse.ACTION_HOLD
+                        )
+                        .ego_route_distance_to_entry_m,
+                        3,
+                    ),
+                    "reason": next(
+                        r for r in self.responses
+                        if r.action == RoundaboutGapResponse.ACTION_HOLD
+                    ).reason,
+                },
             },
             "representative_870m": {
                 "ego_entry_time_s": round(representative.ego_entry_time_s, 3),

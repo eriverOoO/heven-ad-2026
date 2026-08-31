@@ -13,6 +13,7 @@ from ad_interfaces.msg import (
     DynamicObjectRiskState,
     RoundaboutGapRisk,
     RoundaboutGapRiskArray,
+    RoundaboutGapResponse,
     DynamicObstacleStatus,
     PlannerStatus,
     PredictedObject,
@@ -361,6 +362,56 @@ def test_roundabout_gap_risk_interface_is_stable_and_policy_free():
             for name in message_type.get_fields_and_field_types()
         }
         assert fields.isdisjoint(forbidden)
+
+
+EXPECTED_ROUNDABOUT_GAP_RESPONSE_DECLARATION = """\
+uint8 ACTION_RELEASE=0
+uint8 ACTION_YIELD=1
+uint8 ACTION_HOLD=2
+uint8 REASON_NONE=0
+uint8 REASON_CLEAR_GAP=1
+uint8 REASON_OVERLAP=2
+uint8 REASON_GAP_TOO_SMALL=3
+uint8 REASON_INSUFFICIENT_PREDICTION=4
+uint8 REASON_INVALID_EGO_STATE=5
+std_msgs/Header header
+uint8 action
+bool active
+uint8 reason
+string conflict_zone_id
+bool source_object_valid
+unique_identifier_msgs/UUID source_object_id
+uint16 relevant_object_count
+float32 ego_speed_mps
+float32 ego_route_distance_to_entry_m
+float32 available_distance_m
+float32 comfortable_stop_distance_m
+bool limiting_gap_valid
+float32 limiting_gap_s
+bool conflict_overlap_present
+bool complete_prediction_coverage
+"""
+
+
+def test_roundabout_gap_response_is_an_advisory_not_a_command():
+    assert _declarations(
+        PACKAGE_ROOT / "msg" / "RoundaboutGapResponse.msg"
+    ) == EXPECTED_ROUNDABOUT_GAP_RESPONSE_DECLARATION.strip()
+    message = RoundaboutGapResponse()
+    assert message.action == RoundaboutGapResponse.ACTION_RELEASE
+    assert message.active is False
+    assert message.reason == RoundaboutGapResponse.REASON_NONE
+    assert message.source_object_valid is False
+    forbidden = {
+        "brake", "throttle", "steering", "steering_angle", "cmd_vel",
+        "gear", "actuation", "ctrl_cmd", "requested_speed",
+        "requested_max_speed_mps", "path", "trajectory",
+    }
+    fields = {
+        name.lower()
+        for name in RoundaboutGapResponse.get_fields_and_field_types()
+    }
+    assert fields.isdisjoint(forbidden)
 
 
 def test_traffic_light_status_preserves_composite_aspects():
