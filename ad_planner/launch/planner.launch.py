@@ -311,6 +311,49 @@ def _create_cut_in_risk_node(context, force=False):
     )
 
 
+def _create_roundabout_gap_risk_node(context):
+    enabled = LaunchConfiguration(
+        "roundabout_gap_risk", default="false"
+    ).perform(context).strip().lower()
+    if enabled not in {"true", "false"}:
+        raise RuntimeError("roundabout_gap_risk must be true or false")
+    if enabled == "false":
+        return None
+
+    config_file = LaunchConfiguration("config_file").perform(context)
+    data_dir = LaunchConfiguration("data_dir").perform(context)
+    path_override = LaunchConfiguration("path_file", default="").perform(context)
+    corridor_override = LaunchConfiguration(
+        "route_corridor_file", default=""
+    ).perform(context)
+    common_parameters = _load_parameter_file(config_file)
+    selected_path = path_override or common_parameters.get("path_file")
+    selected_corridor = corridor_override or common_parameters.get(
+        "route_corridor_file", "map/route_corridor.json"
+    )
+    if not isinstance(selected_path, str) or not selected_path:
+        raise RuntimeError("roundabout gap risk requires a configured global path")
+    if not isinstance(selected_corridor, str) or not selected_corridor:
+        raise RuntimeError("roundabout gap risk requires route_corridor_file")
+    package_share = get_package_share_directory("ad_planner")
+    return Node(
+        package="ad_planner",
+        executable="ad_roundabout_gap_risk_node",
+        name="ad_roundabout_gap_risk",
+        output="screen",
+        parameters=[
+            os.path.join(package_share, "config", "roundabout_gap_risk.yaml"),
+            {
+                "data_dir": data_dir,
+                "route_corridor_file": selected_corridor,
+                "route_corridor.expected_global_path_sha256": (
+                    _global_path_sha256(data_dir, selected_path)
+                ),
+            },
+        ],
+    )
+
+
 def _cut_in_response_constraint_requested(context):
     value = LaunchConfiguration(
         "enable_cut_in_response_constraint", default=""
@@ -360,11 +403,14 @@ def _create_planner_actions(context):
     ) and cut_in_risk_node is None:
         cut_in_risk_node = _create_cut_in_risk_node(context, force=True)
     cut_in_response_node = _create_cut_in_response_node(context)
+    roundabout_gap_risk_node = _create_roundabout_gap_risk_node(context)
     planning_nodes = [planner_node, road_corridor_mask_node]
     if cut_in_risk_node is not None:
         planning_nodes.append(cut_in_risk_node)
     if cut_in_response_node is not None:
         planning_nodes.append(cut_in_response_node)
+    if roundabout_gap_risk_node is not None:
+        planning_nodes.append(roundabout_gap_risk_node)
     config_file = LaunchConfiguration("config_file").perform(context)
     backend = _load_parameter_file(config_file).get("local_motion.backend")
     if backend != "mppi_nav2":
@@ -404,6 +450,7 @@ def generate_launch_description():
             DeclareLaunchArgument("route_corridor_file", default_value=""),
             DeclareLaunchArgument("cut_in_risk", default_value="false"),
             DeclareLaunchArgument("cut_in_response", default_value="false"),
+            DeclareLaunchArgument("roundabout_gap_risk", default_value="false"),
             DeclareLaunchArgument(
                 "enable_cut_in_response_constraint", default_value=""
             ),

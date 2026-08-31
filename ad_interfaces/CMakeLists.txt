@@ -17,6 +17,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/DynamicObjectRisk.msg"
   "msg/DynamicObjectRiskArray.msg"
   "msg/DynamicObjectRiskState.msg"
+  "msg/RoundaboutGapRisk.msg"
+  "msg/RoundaboutGapRiskArray.msg"
   "msg/DynamicObstacleStatus.msg"
   "msg/PlannerStatus.msg"
   "msg/PredictedState.msg"
