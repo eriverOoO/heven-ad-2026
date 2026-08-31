@@ -1,5 +1,45 @@
 # STATUS
 
+## Roundabout Gap Response v1 — COMPLETE
+
+Branch `feat/roundabout-gap-response-v1`, from merged PR #18 main
+`813b9dda78179e1ca7d06a8bd7162ef2f3113d83`. New opt-in aggregate policy node
+`ad_roundabout_gap_response`: `/ad/planning/roundabout_gap_risks`
+(`RoundaboutGapRiskArray`) -> `/ad/planning/roundabout_gap_response`
+(`RoundaboutGapResponse`). Advisory only: RELEASE/YIELD/HOLD, no requested
+speed, CtrlCmd, brake, throttle, steering, planner consumer, or BehaviorTree
+change.
+
+RELEASE is an all-object conjunction over PR #18 fields: applicable/fresh/valid
+ego timing, every relevant prediction covers ego exit, no
+`any_occupancy_overlap`, every `minimum_temporal_gap` valid and `>= 2.0 s`.
+Legacy first-interval overlap/gap never drive release. Zero objects release.
+Stopped ego with invalid ETA holds. Inside or past the conflict is inactive.
+Unsafe frames are YIELD while `max(0, distance_to_entry - 6 m) > v²/(2*1.8)`
+and HOLD otherwise. Arbitration: overlap > incomplete evidence > smallest gap,
+then lexicographic UUID. Stateless; rejected/missing inputs never latch release.
+
+Validation: interface contract 10/10; response core/frame 18/18; response
+launch 2/2. Canonical live chain: 5 gap-risk frames + one zero-object response
+frame -> 6 responses, 1 RELEASE / 2 YIELD / 3 HOLD / 0 rejected; reason counts
+CLEAR=1, OVERLAP=5; later-reentry and short-prediction regressions cannot
+release; no NaN/Inf/exceptions. Internal callback latency 0.003742 / 0.010621 /
+0.010621 ms median/p95/max; chain publish-to-receive 2.266 / 2.665 / 7.325 ms.
+Isolated `ad_interfaces` + `ad_planner` build passes. Full regression result is
+39/39 non-launch-runtime `ad_planner` tests pass, plus the canonical roundabout
+launch-runtime test; `test_mppi_nav2_launch` remains the known unrelated host
+dependency failure (7/15 cases fail because `nav2_common`/`nav2_controller` are
+absent). The monolithic all-launch-runtime invocation was stopped after more
+than six silent minutes; required roundabout runtime validation was run and
+passed independently.
+
+**Recommended next task:** Roundabout Response Planner Integration v1 — connect
+fresh RoundaboutGapResponse YIELD/HOLD/RELEASE advisories to the existing
+planner longitudinal constraint path, opt-in and default-off, while preserving
+exactly one CtrlCmd publisher and leaving steering/lateral planning unchanged.
+
+---
+
 ## Roundabout Gap Risk multi-interval summary — COMPLETE
 
 Branch `fix/roundabout-gap-multi-interval-summary`, from merged PR #17 main

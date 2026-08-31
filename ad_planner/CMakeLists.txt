@@ -59,6 +59,7 @@ add_library(ad_planner_core
   src/planning/cut_in_response.cpp
   src/planning/cut_in_speed_constraint.cpp
   src/planning/roundabout_gap_risk.cpp
+  src/planning/roundabout_gap_response.cpp
   src/visualization/path_tracking_markers.cpp
   src/visualization/planner_visualization.cpp
   src/visualization/route_markers.cpp)
@@ -196,6 +197,20 @@ ament_target_dependencies(
   tf2_geometry_msgs
   tf2_ros)
 
+add_executable(ad_roundabout_gap_response_node
+  src/planning/roundabout_gap_response_main.cpp
+  src/planning/roundabout_gap_response_node.cpp)
+target_compile_features(ad_roundabout_gap_response_node PUBLIC cxx_std_17)
+target_include_directories(ad_roundabout_gap_response_node PRIVATE include src/planning)
+target_link_libraries(ad_roundabout_gap_response_node ad_planner_core)
+ament_target_dependencies(
+  ad_roundabout_gap_response_node
+  ad_interfaces
+  builtin_interfaces
+  diagnostic_msgs
+  rclcpp
+  std_msgs)
+
 if(AD_PLANNER_ENABLE_NAV2_MPPI)
   find_package(nav2_msgs REQUIRED)
   find_package(rclcpp_action REQUIRED)
@@ -230,6 +245,7 @@ install(
     ad_cut_in_risk_node
     ad_cut_in_response_node
     ad_roundabout_gap_risk_node
+    ad_roundabout_gap_response_node
     ad_occupancy_grid_reprojector_node
     ad_road_corridor_mask_node
   DESTINATION lib/${PROJECT_NAME})
@@ -384,6 +400,20 @@ if(BUILD_TESTING)
     tf2_ros)
 
   ament_add_gtest(
+    test_roundabout_gap_response
+    test/test_roundabout_gap_response.cpp
+    src/planning/roundabout_gap_response_node.cpp)
+  target_include_directories(test_roundabout_gap_response PRIVATE include src/planning)
+  target_link_libraries(test_roundabout_gap_response ad_planner_core)
+  ament_target_dependencies(
+    test_roundabout_gap_response
+    ad_interfaces
+    builtin_interfaces
+    diagnostic_msgs
+    rclcpp
+    std_msgs)
+
+  ament_add_gtest(
     test_road_corridor_grid test/test_road_corridor_grid.cpp)
   target_include_directories(test_road_corridor_grid PRIVATE include)
   target_link_libraries(test_road_corridor_grid ad_planner_core)
@@ -439,6 +469,8 @@ if(BUILD_TESTING)
     test_cut_in_response_launch test/test_cut_in_response_launch.py)
   ament_add_pytest_test(
     test_roundabout_gap_risk_launch test/test_roundabout_gap_risk_launch.py)
+  ament_add_pytest_test(
+    test_roundabout_gap_response_launch test/test_roundabout_gap_response_launch.py)
   add_launch_test(
     test/test_cut_in_risk_runtime.py
     TIMEOUT 240
