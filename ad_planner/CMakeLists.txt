@@ -664,6 +664,13 @@ if(BUILD_TESTING)
       "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
       "ROS_LOCALHOST_ONLY=1")
   add_launch_test(
+    test/test_highway_merge_end_to_end.py
+    TIMEOUT 360
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
     test/test_roundabout_gap_risk_runtime.py
     TIMEOUT 240
     ENV

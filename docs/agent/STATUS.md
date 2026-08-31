@@ -1,5 +1,147 @@
 # STATUS
 
+## Highway Merge End-to-End Execution Validation v1 — COMPLETE (planning-side milestone closed)
+
+Branch `test/highway-merge-end-to-end-v1`, from merged PR #26 main
+`730fd4941a6de241f3d0cbb477c042723f757dc7` (`feat(planning): add highway merge
+reference path (#26)`). **Test harness + validation + observability + docs
+only. No new algorithm, no policy retune, no new planner / mission behaviour,
+no code fix — the composed test found zero bugs.**
+
+**Boundary:** planning-side end-to-end from a synthetic `DynamicObjectRiskArray`
+(tracking / prediction / Dynamic Object Risk producer NOT run — own runtime
+validation, real producer OOMs this host; PR guidance says the merge chain's
+canonical boundary is `DynamicObjectRisk`). Chain is **connected not mocked**:
+real `ad_highway_merge_gap_risk` -> real `ad_highway_merge_gap_response` ->
+real `ad_planner` (response integration + mission + online reference path all
+on, **PRODUCTION base path** `2026_molit_comp_global_path.txt`) -> existing
+FollowGlobalPath -> existing PathTrackingController(s) -> the one
+`/ad/control/command` publisher. The test never publishes
+`HighwayMergeGapResponse` / `highway_merge_authorized` for the main chain and
+never recomputes a policy equation — it drives inputs and asserts composed
+outputs. **Real MORAI run: NO** (no simulator / grpc here).
+
+**Deterministic traffic script (steps A-J), real `route:0:left:1` ego poses:**
+
+| step | ego s | traffic | GapResponse | reason | merge_authorized | mission | reference_active | merge cap |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A unsafe rear | 1120 | fast rear+front | WAIT | REAR_CLOSING | false | WAITING | true | -1 |
+| B gap opens | 1150 | zero relevant | MERGE_READY | CLEAR_GAP | **true** | AUTHORIZED | true | -1 |
+| B2 auth @ pose A | 1120 | zero | MERGE_READY | CLEAR_GAP | true | AUTHORIZED | true | -1 |
+| C pre-commit revoke | 1160 | fast rear | WAIT | REAR_CLOSING | **false** | WAITING | true | -1 |
+| D reauthorize | 1180 | zero | MERGE_READY | CLEAR_GAP | **true** | AUTHORIZED | true | -1 |
+| E commit | 1220 | zero | MERGE_READY | CLEAR_GAP | true | **COMMITTED** | true | -1 |
+| F post-commit revoke | 1250 | fast rear | WAIT | PREDICTED_ROUTE_CONFLICT (6) | **false** | COMMITTED (held) | true | **10.36 m/s** |
+| F2 post-commit HOLD | 1283 | fast rear | **HOLD** | ALONGSIDE (5) | false | COMMITTED (held) | true | **0.0** |
+| G complete | route:0 1295 | zero | inactive | NONE | false | **COMPLETE** | **false** | -1 |
+| H release | route:0 1330 | zero | inactive | NONE | false | **INACTIVE** | false | -1 |
+| I cut-in HOLD during merge | 1120 | fast rear + cut-in HOLD | WAIT | REAR_CLOSING | false | WAITING | true (+ braking) | -1 |
+| J reset backward | route:0 400 | zero | inactive | NONE | false | INACTIVE (latch cleared) | false | -1 |
+
+**Causal linkage is real** (each arrow a separate node): fast rear ->
+`REAR_CLOSING` -> `WAIT` -> `highway_merge_authorized` false -> mission
+`WAITING`; zero relevant -> `CLEAR_GAP` -> `MERGE_READY` ->
+`highway_merge_authorized` true -> mission `AUTHORIZED`. Mission state trace
+A-H `[2,3,3,2,3,4,4,4,5,0]`; reference-active A-H
+`[T,T,T,T,T,T,T,T,F,F]`; authorization A-H `[F,T,F,T,T,F,F,F,F,F]`.
+
+**Key findings:**
+- **Pre-commit auth loss** (C): `AUTHORIZED -> WAITING`, `reference_active`
+  stays true, no lateral swap. B2 vs A at the identical ramp pose: mean
+  |steering| 0.0038 vs 0.0038 -> **authorization does not change the lateral
+  command**.
+- **Post-commit auth loss** (F, F2): mission stays `COMMITTED`,
+  `reference_active` stays true -> lateral merge not reversed; **independent
+  longitudinal safety still bites** -- F applies `10.36 m/s`
+  (`= sqrt(2*1.8*available)`) and F2 applies `0.0` (braking through the
+  existing external-constraint / controller path, no brake published by merge
+  code). Mandatory cross-layer separation validated.
+- **COMPLETE handoff** (E -> G): mean |steering| 0.0084 -> 0.0026 rad, ego
+  lateral offset to route:0 3.23 -> 0.13 m; seamless because the
+  merge-reference tail past merge-complete IS route:0 and the production
+  controller is kept warm every tick. Empirical continuity: |steering| stays
+  < 0.02 rad, command valid every frame.
+- **Cut-in composition** (I): a cut-in `HOLD` during a ramp `WAITING` frame
+  still brakes -- highway-merge state does not lift a stricter cut-in cap.
+- **Reset mid-merge** (J): mission -> INACTIVE, latch clears, production path,
+  no stale COMMITTED / authorization / reference.
+
+**Second-controller audit (PR #26), confirmed:** two internal
+`PathTrackingController` instances while enabled (production + merge-reference);
+no duplicate subs/pubs; PID / route-progress / launch-ramp state duplicated **by
+design**; **same** backend / gains / speed profile / PID (both via
+`make_path_tracking_controller` + `RosControllerParameterProvider`); the
+production controller is **warm-updated every active tick** (result discarded
+while merge reference selected) so the COMPLETE handoff never re-triggers the
+launch ramp. **One control publisher, one selected `ControllerResult` per tick,
+no blending.**
+
+**Timing (loopback, not internal compute):** risk publish -> gap-risk frame
+median 6.15 / p95 ~6.8 / max ~8.2 ms; -> gap-response median 6.25 / p95 ~6.9 /
+max ~8.4 ms (both modes identical). publish -> next command median ~43 ms
+(driver cadence + ~20 Hz planner tick dominated) -- **reference-active vs
+reference-inactive statistically identical** -> the PR #26 doubled `update()`
+costs nothing measurable. E2E DynamicRisk -> command latency **not measured**
+(4-node async correlation ambiguous; not invented). ~1180 commands over the
+run, no missed cycles.
+
+**Metrics** (frame counts are settle-dwell dependent, ~+/-1% run to run;
+traces + qualitative counts are deterministic and asserted): ~2700 gap-risk
+frames, ~2680 responses, ~1180 commands, ~1145 MERGE_READY, ~580 WAIT, ~145
+HOLD, ~465 authorization-true frames, ~735 reference-active frames, **0 invalid
+commands, 0 NaN/Inf/exceptions** (asserted), 1 `/ad/control/command` publisher
+(asserted).
+
+**Stale response (documented, unchanged):** pre-commit stale -> auth false ->
+`WAITING`, merge reference retained while on ramp + `WAITING`, merge cap
+expires; post-commit stale -> auth false, mission stays `COMMITTED`, reference
+active, merge cap expires. **Known limitation retained: a stale `HOLD` expires
+rather than latching** (downstream assumption since PR #22). Not retuned.
+
+**Traffic-present MERGE_READY (Phase 9):** a ramp ego at 8 m/s vs mainline at
+24-33 m/s -> any in-window mainline vehicle overtakes within the horizon and
+correctly trips `WAIT` (PR #25 finding). A "safe" traffic frame would need
+mainline speeds ~8 m/s (not a highway) or vehicles outside the relevance window
+(= zero relevant objects). The **zero-relevant-object `CLEAR_GAP` frame is the
+realistic traffic-present-but-clear case** and is what the positive steps use.
+No threshold changed.
+
+**Bugs found / fixed: none.** The composed chain behaved exactly as PR #21-#26
+specify on the first composed run.
+
+**Tests:** `test_highway_merge_end_to_end.py` (new composed launch test, ~60 s;
+full A-J sequence, F2 HOLD, cut-in composition, mid-merge reset, timing block,
+Phase-35 state/reference/authorization trace assertions). Regression:
+`test_highway_merge_reference_path` 10 + `_golden` 6, `test_highway_merge_mission`
+27, `test_highway_merge_speed_constraint`, `test_external_speed_limit`,
+`test_cut_in_speed_constraint`, `test_roundabout_speed_constraint`,
+`test_behavior_tree` (unchanged, `registered_node_ids().size() == 8`),
+`test_planner_launch` 30 -- all pass. Highway-merge launch-test regression
+(`ctest`): `test_planner_highway_merge_mission`,
+`test_planner_highway_merge_reference_path`,
+`test_highway_merge_ego_ramp_pipeline`, `test_highway_merge_gap_risk_runtime`,
+`test_highway_merge_end_to_end` -- 5/5 pass. `ad_control` (Stanley /
+Profile-Stanley / PID) **byte-unchanged** (`git diff origin/main -- ad_control`
+empty; no `test_stanley` run needed -- controller math untouched by
+construction). No `ad_interfaces` change. Isolated `colcon build
+--packages-select ad_planner --symlink-install` clean.
+
+**Files:** `ad_planner/test/test_highway_merge_end_to_end.py`,
+`ad_planner/CMakeLists.txt`, `docs/planning/highway_merge_end_to_end_validation_v1.md`,
+this file.
+
+**PLANNING-SIDE HIGHWAY-MERGE MILESTONE CLOSED** (pending real simulator /
+vehicle validation). No further highway-merge planning feature work is
+recommended until real MORAI / vehicle testing exposes a concrete issue.
+
+**Recommended next task:** MORAI Tracking Dataset Factory v1 -- deterministic
+scenario / reset / data-capture pipeline recording LiDAR, ego pose / TF, actor
+GT IDs / poses / 3D boxes, timestamps, scenario seed + manifest for repeated
+tracking / CenterPoint / KalmanNet development, without changing the frozen
+tracking research claims.
+
+---
+
 ## Highway Merge Lateral Reference Path Primitive v1 — COMPLETE
 
 Branch `feat/highway-merge-reference-path-v1`, from merged PR #25 main
