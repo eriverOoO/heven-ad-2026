@@ -1,5 +1,122 @@
 # STATUS
 
+## CenterPoint MORAI Data Adapter v1 — COMPLETE (data adaptation only)
+
+Branch `feat/centerpoint-morai-data-adapter-v1`, from merged PR #28 main
+`8bb25f938a2d2b187b947e68217107e911dce4e2` (`feat(data): add MORAI tracking
+dataset factory (#28)`). **Dataset adaptation only. No CenterPoint training,
+no weights downloaded, no model architecture / config / production detector
+default / AB3DMOT / tracker / planner change, no frozen benchmark conclusion
+revisited, no simulator-to-real or generalization claim.**
+
+**What it is:** deterministically converts detection-valid frames of a
+canonical `morai_tracking_dataset_v1` into the exact LiDAR dataset contract
+read by this repo's CenterPoint integration
+(`tools/centerpoint_offline/morai_dataset.py::MoraiHevenDatasetCore` — a
+torch-free **per-sample-JSON** loader, **not** an OpenPCDet `.pkl` info
+file; no `infos/`, no KITTI camera metadata, because the loader reads
+neither). New modules
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{centerpoint_adapter.py,
+centerpoint_adapter_cli.py,centerpoint_adapter_validate.py}`. Entry points:
+`ad_morai_dataset_export_centerpoint`, `ad_morai_dataset_validate_centerpoint`.
+
+**Audited target contract** (from `morai_dataset.py` + `configs/morai_heven_dataset.yaml`
++ `morai_centerpoint_smoke.yaml`): class names `("vehicle","pedestrian","obstacle")`
+(order = id-1); box `("x","y","z","length","width","height","yaw")` 7-dim,
+geometric centre, `lidar_link`, yaw CCW +X `[-π,π]`; points `Nx4` little-endian
+`float32` `[x,y,z,intensity]`; `POINT_CLOUD_RANGE [-4,-25,-3,100,25,5]` applied
+by the model's `DATA_PROCESSOR` (not the loader/adapter). A parity test asserts
+`TARGET_CLASS_NAMES`/`TARGET_BOX_FIELDS` still equal the loader's.
+
+**Canonical never modified.** Output tree: `<root>/{.centerpoint_morai_adapter,
+export_manifest.json, metadata.json, sample_mapping.jsonl, split_manifest.json,
+splits/{train,val,test}.txt, labels/<id>.json, points/<id>.bin}`.
+
+**Conversions (all explicit + tested):**
+- box centre / dims copied **verbatim** from the factory's already-derived
+  `box.lidar_frame` — the adapter recomputes **no** `map→lidar` transform.
+  **No z shift** (`±h/2`): the factory `lidar_frame.center` is already the
+  geometric centre, matching the loader's `_identity_box_delta`.
+- yaw wrapped to `[-π,π]` via `atan2(sin,cos)` (identity on factory output);
+  tested at 0, ±π/2, near π, wrapped 3.0 with sin/cos parity.
+- dims `length,width,height` in that order; explicit no-l/w-swap test.
+- intensity: **identity** (no /255, clip, normalize) — `metadata.intensity_transform`.
+- points: `[x,y,z,intensity]` only; `time`/`ring` stay in the canonical npz;
+  non-finite points **dropped** (loader asserts finite) — per-sample
+  `source_point_count`/`finite_count`/`nonfinite_dropped`, so the derived
+  `.bin` is **not lossless**. No point-range cropping; outside-range boxes
+  counted not deleted.
+
+**Class map** (`config/dataset_factory/centerpoint_adapter/class_map.yaml`):
+**vehicle-only v1** (`{vehicle: vehicle}`). An adapter-unmapped source box is
+**omitted from the frame** (frame still exported) and counted in
+`counts.boxes_omitted_by_source_class` — never relabelled. "Adapter-unmapped"
+≠ "factory-unmapped" (the factory already invalidates `CLASS_UNKNOWN` frames);
+the omit path only ever hits factory-mapped `pedestrian`/`obstacle`.
+
+**Frame eligibility:** `valid_for_detection_gt == true` only — the adapter
+never loosens the factory criteria. Excluded frames tallied by sorted-flag
+reason. **Negative frames** (detection-valid, zero mapped boxes) exported by
+default with empty `boxes` (`counts.negative_frames`).
+
+**Split — leakage prevention (first-class):** grouping key
+`(scenario_id, requested_seed)` from `run_manifest.config.seed`, fallback
+`run_id`. **Frames of one run are never split.** Explicit `--split-plan`
+(priority; double-listed group / absent-referenced group → hard error;
+unreferenced source group → dropped + warning) or deterministic **SHA-256**
+auto-split (`0.7/0.15/0.15`, never process-salted `hash()`). `<3` groups →
+all-train + warning; a single run is never frame-split to fake val/test.
+`check_split_leakage` (run in `export` and the standalone validator) fails on
+any group/run spanning splits or duplicate sample id. This directly prevents
+the prior 1764-train / 0-val / 100%-overlap failure mode.
+
+**Provenance:** `sample_id` = factory `sample_id` (`<run_id>_<stamp>`);
+`sample_mapping.jsonl` + label `source` block + manifest
+`source_dataset_manifest_sha256` + `adapter_repository_commit`.
+`content_fingerprint` = SHA-256 over adapter schema + source manifest sha +
+canonical adapter config + canonical split manifest + sorted per-artifact
+hashes (`created_at` excluded). Repeat-export bit-identical test.
+
+**Real source dataset: NO** (no `morai_tracking_dataset_v1` on disk; MORAI
+absent). **Full OpenPCDet `DatasetTemplate`: NOT run** (torch/CUDA
+env-blocked). Validated by 22 tests (`test_centerpoint_adapter.py`): repo
+loader-**core** parity + `MoraiHevenDatasetCore` loading the export
+(runtime-proven), box yaw/z/dim conversions, point features + non-finite
+drop, unknown-class omit, invalid-detection exclusion, negative frame,
+explicit + auto + tiny-dataset split, leakage validator catches deliberate
+overlap, deterministic repeat export, wrong-source-schema rejection.
+Source datasets built through the **real** factory writer with 6
+`(scenario, seed)` groups, pytest `tmp_path` only.
+
+**Regression:** `test_dataset_factory.py` 27, `test_centerpoint_adapter.py`
+22, `tools/morai_dataset_exporter/test_exporter_core.py` 9 — pass.
+`tools/centerpoint_offline/test_centerpoint_offline.py` 11/12
+(`test_training_dataloader_creation` needs `torch` — pre-existing env gap,
+unrelated). `colcon build --packages-select ad_morai_bridge_dev` still
+can't complete here (deps not built — pre-existing); `find_packages` +
+`py_compile` + entry-point import + config parse verified.
+
+**Size:** derived `.bin` `N×16` bytes → ≈ 0.22 MB/frame, ≈ 0.22 GB/1000
+frames (vs ~0.64 MB canonical npz; ~1/3, 4 of 6 fields, no zip).
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{centerpoint_adapter.py,
+centerpoint_adapter_cli.py,centerpoint_adapter_validate.py}`;
+`ad_morai_bridge_dev/config/dataset_factory/centerpoint_adapter/{class_map.yaml,
+split_plan.example.yaml}`; `ad_morai_bridge_dev/test/test_centerpoint_adapter.py`;
+`ad_morai_bridge_dev/setup.py` (+2 entry points, +config data_files);
+`docs/perception/centerpoint_morai_data_adapter_v1.md`, this file. Canonical
+dataset factory code unchanged; `tools/centerpoint_offline/` unchanged.
+
+**Recommended next task:** CenterPoint MORAI Training Prep v1 — audit the
+repository's current CenterPoint model / config / checkpoint path against the
+new leakage-safe adapter output, create a reproducible training/validation
+experiment configuration and preflight dataset/model compatibility without
+starting full training yet; preserve the simulator-to-real domain-gap caveat
+and do not compare against the frozen historical CenterPoint result until a
+non-overlapping validation split actually exists.
+
+---
+
 ## MORAI Tracking Dataset Factory v1 — COMPLETE (data infrastructure only)
 
 Branch `feat/morai-tracking-dataset-factory-v1`, from merged PR #27 main

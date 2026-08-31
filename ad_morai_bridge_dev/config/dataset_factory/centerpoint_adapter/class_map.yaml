@@ -1,0 +1,16 @@
+# CenterPoint MORAI Data Adapter class map (adapter schema centerpoint_morai_adapter_v1).
+#
+# source normalized class (morai_tracking_dataset_v1)  ->  target CenterPoint class
+#   target must be one of: vehicle, pedestrian, obstacle
+#
+# v1 is vehicle-only: the MORAI Tracking Dataset Factory starter catalog only
+# reliably ground-truths vehicles. A detection-valid source box whose class is
+# not a key here is OMITTED from that frame (the frame is still exported) and
+# counted in export_manifest.json -> counts.boxes_omitted_by_source_class.
+# It is NEVER relabelled. Add "pedestrian: pedestrian" / "obstacle: obstacle"
+# only once a scenario re-confirms that class' GT.
+class_map:
+  vehicle: vehicle
+
+dataset_version: morai_centerpoint_v1
+compute_points_in_box: true
