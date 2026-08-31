@@ -63,6 +63,7 @@ add_library(ad_planner_core
   src/planning/highway_merge_gap_risk.cpp
   src/planning/highway_merge_gap_response.cpp
   src/planning/highway_merge_mission.cpp
+  src/planning/highway_merge_reference_path.cpp
   src/planning/highway_merge_speed_constraint.cpp
   src/planning/roundabout_gap_risk.cpp
   src/planning/roundabout_gap_response.cpp
@@ -441,6 +442,12 @@ if(BUILD_TESTING)
   target_link_libraries(test_highway_merge_mission ad_planner_core)
 
   ament_add_gtest(
+    test_highway_merge_reference_path
+    test/test_highway_merge_reference_path.cpp)
+  target_include_directories(test_highway_merge_reference_path PRIVATE include)
+  target_link_libraries(test_highway_merge_reference_path ad_planner_core)
+
+  ament_add_gtest(
     test_external_speed_limit test/test_external_speed_limit.cpp)
   target_include_directories(test_external_speed_limit PRIVATE include)
   target_link_libraries(test_external_speed_limit ad_planner_core)
@@ -571,6 +578,9 @@ if(BUILD_TESTING)
     test_highway_merge_ego_ramp_scenario
     test/test_highway_merge_ego_ramp_scenario.py)
   ament_add_pytest_test(
+    test_highway_merge_reference_path_golden
+    test/test_highway_merge_reference_path.py)
+  ament_add_pytest_test(
     test_cut_in_risk_launch test/test_cut_in_risk_launch.py)
   ament_add_pytest_test(
     test_cut_in_response_launch test/test_cut_in_response_launch.py)
@@ -641,6 +651,13 @@ if(BUILD_TESTING)
       "ROS_LOCALHOST_ONLY=1")
   add_launch_test(
     test/test_highway_merge_ego_ramp_pipeline.py
+    TIMEOUT 300
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_planner_highway_merge_reference_path.py
     TIMEOUT 300
     ENV
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"

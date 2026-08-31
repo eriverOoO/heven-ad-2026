@@ -119,6 +119,30 @@ ad_planner:
     # Empty -> ad_planner/config/highway_merge.json from the package share.
     merge_geometry_file: ""
 
+    # Opt-in ONLINE highway-merge lateral reference path (default off; also
+    # requires enable_highway_merge_mission). When enabled AND a genuine ramp
+    # ego is WAITING / AUTHORIZED / COMMITTED, FollowGlobalPath's lateral
+    # reference is the real route:0:left:1 acceleration-lane centerline followed
+    # by the real route:0 mainline past the merge point -- so the vehicle
+    # follows the ramp instead of being pulled toward the production mainline
+    # path. No synthetic lane-change curve: the map geometry already tapers in.
+    # Longitudinal WAIT / HOLD (highway merge response integration) still owns
+    # merge permission; this only selects the lateral centerline. The existing
+    # Stanley / Profile-Stanley controller is the sole lateral executor
+    # (a second controller is built with identical gains for the merge route).
+    #   reference_path_proximity_m       : ego is treated as "on the ramp" when
+    #                                      within this of the route:0:left:1
+    #                                      centerline. 1.75 m == that lane's own
+    #                                      half-width in the route corridor; a
+    #                                      route:0 ego near the zone entry is
+    #                                      ~3.9 m off the ramp centerline.
+    #   reference_path_target_continuation_m : how much real route:0 mainline to
+    #                                      append after the merge-complete
+    #                                      splice for controller lookahead.
+    enable_highway_merge_reference_path: false
+    reference_path_proximity_m: 1.75
+    reference_path_target_continuation_m: 200.0
+
     # Current Stanley baseline: dynamic steering preview + curvature speed cap.
     stanley.target_speed_mps: 16.25
     stanley.cross_track_gain: 0.91
@@ -300,6 +324,8 @@ ad_planner:
     topics.highway_merge_authorized: "/ad/planner/highway_merge_authorized"
     # Only published when enable_highway_merge_mission is true.
     topics.highway_merge_mission_state: "/ad/planner/highway_merge_mission_state"
+    # Only published when enable_highway_merge_reference_path is true.
+    topics.highway_merge_reference_active: "/ad/planner/highway_merge_reference_active"
     topics.command: "/ad/control/command"
     topics.planner_status: "/ad/planner/status"
     topics.path: "/ad/planner/path"

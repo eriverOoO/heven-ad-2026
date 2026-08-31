@@ -63,12 +63,14 @@
 #include "ad_planner/local_planning/common/occupancy.hpp"
 #include "ad_planner/local_planning/common/prediction_admission.hpp"
 #include "ad_planner/local_planning/common/road_corridor_grid.hpp"
+#include "ad_planner/local_planning/frenet/frenet_geometry.hpp"
 #include "ad_planner/local_planning/local_motion_factory.hpp"
 #include "ad_planner/planner/planner_node.hpp"
 #include "ad_planner/planning/cut_in_speed_constraint.hpp"
 #include "ad_planner/io/merge_geometry_loader.hpp"
 #include "ad_planner/planning/external_speed_limit.hpp"
 #include "ad_planner/planning/highway_merge_mission.hpp"
+#include "ad_planner/planning/highway_merge_reference_path.hpp"
 #include "ad_planner/planning/highway_merge_speed_constraint.hpp"
 #include "ad_planner/planning/roundabout_speed_constraint.hpp"
 #include "ad_planner/visualization/path_tracking_markers.hpp"
@@ -458,6 +460,21 @@ public:
         "mission_route_s_reset_jump_m");
     highway_merge_mission_zone_id_ = declare_parameter<std::string>(
         "highway_merge_mission_zone_id", "kcity_highway_onramp");
+
+    // Opt-in online highway-merge lateral reference path (default off). When
+    // enabled it also requires the mission (its activation is a function of the
+    // mission state); when disabled the loaded production global path and
+    // FollowGlobalPath behaviour are byte-identical to a build without it.
+    highway_merge_reference_path_enabled_ =
+        declare_parameter<bool>("enable_highway_merge_reference_path", false);
+    highway_merge_reference_path_proximity_m_ = positive_finite_parameter(
+        declare_parameter<double>("reference_path_proximity_m", 1.75),
+        "reference_path_proximity_m");
+    highway_merge_reference_path_target_continuation_m_ =
+        positive_finite_parameter(
+            declare_parameter<double>("reference_path_target_continuation_m",
+                                      200.0),
+            "reference_path_target_continuation_m");
     {
       std::filesystem::path merge_geometry_file =
           declare_parameter<std::string>("merge_geometry_file", "");
@@ -470,6 +487,9 @@ public:
       if (highway_merge_mission_enabled_) {
         configure_highway_merge_mission(merge_geometry_file,
                                         highway_merge_mission_zone_id_);
+      }
+      if (highway_merge_reference_path_enabled_) {
+        configure_highway_merge_reference_path();
       }
     }
 
@@ -902,7 +922,8 @@ private:
             cut_in_response_constraint_enabled_,
             roundabout_response_constraint_enabled_,
             highway_merge_response_integration_enabled_,
-            highway_merge_mission_enabled_},
+            highway_merge_mission_enabled_,
+            highway_merge_reference_path_enabled_},
         std::move(callbacks));
   }
 
@@ -1463,6 +1484,10 @@ private:
       highway_merge_mission_geometry_ = geometry.validated();
       highway_merge_mission_source_lane_id_ = loaded.zone.source_lane_id;
       highway_merge_mission_target_lane_id_ = loaded.zone.target_lane_id;
+      highway_merge_mission_zone_entry_route_s_m_ =
+          loaded.zone.route_s_zone_entry_m;
+      highway_merge_mission_merge_complete_route_s_m_ =
+          loaded.zone.route_s_merge_complete_m;
       RCLCPP_INFO(
           get_logger(),
           "highway merge mission enabled: zone '%s' source '%s' -> target "
@@ -1527,6 +1552,147 @@ private:
     last_highway_merge_mission_state_ = output.state;
   }
 
+  // Build the online source-grounded route:0:left:1 -> route:0 merge reference
+  // path once, and a SECOND path-tracking controller for it, using the exact
+  // same backend / gains / speed-profile config as the production controller.
+  // Soft-fails (feature inert, production path untouched) on any inconsistency.
+  void configure_highway_merge_reference_path() {
+    try {
+      if (!highway_merge_mission_geometry_.has_value()) {
+        throw std::runtime_error(
+            "highway merge mission geometry is unavailable (enable "
+            "enable_highway_merge_mission)");
+      }
+      if (!route_corridor_.has_value()) {
+        throw std::runtime_error("route corridor is unavailable");
+      }
+      const auto &corridor = route_corridor_->corridor;
+      const auto find_lane =
+          [&corridor](const std::string &id) -> const ReferenceLane * {
+        for (const auto &lane : corridor.lanes) {
+          if (lane.lane_sequence_id == id) {
+            return &lane;
+          }
+        }
+        return nullptr;
+      };
+      const ReferenceLane *source =
+          find_lane(highway_merge_mission_source_lane_id_);
+      const ReferenceLane *target =
+          find_lane(highway_merge_mission_target_lane_id_);
+      if (source == nullptr || target == nullptr) {
+        throw std::runtime_error(
+            "merge source / target lane is not in the route corridor");
+      }
+      HighwayMergeReferencePathConfig cfg;
+      cfg.target_continuation_m =
+          highway_merge_reference_path_target_continuation_m_;
+      const auto built = build_highway_merge_reference_path(
+          *source, *target, highway_merge_mission_merge_complete_route_s_m_,
+          cfg);
+      RosControllerParameterProvider parameters(*this);
+      auto controller = make_path_tracking_controller(
+          path_tracking_backend_, built.route, parameters);
+      highway_merge_reference_path_ = built;
+      highway_merge_reference_controller_ = std::move(controller);
+      RCLCPP_INFO(
+          get_logger(),
+          "highway merge reference path enabled: %zu source (route:0:left:1) + "
+          "%zu target (route:0) points; splice route_s %.2f m, join gap %.4f m, "
+          "join heading delta %.5f rad; proximity tolerance %.2f m",
+          built.source_point_count, built.target_point_count,
+          built.splice_route_s_m, built.splice_join_gap_m,
+          built.splice_join_heading_delta_rad,
+          highway_merge_reference_path_proximity_m_);
+    } catch (const std::exception &error) {
+      highway_merge_reference_controller_.reset();
+      highway_merge_reference_path_.reset();
+      RCLCPP_ERROR(
+          get_logger(),
+          "highway merge reference path disabled (build failed): %s",
+          error.what());
+    }
+  }
+
+  // Decide whether this tick's FollowGlobalPath lateral reference is the online
+  // merge reference (route:0:left:1 -> route:0) or the production global path.
+  // Owns a tiny two-state latch so authorization changes never chatter the
+  // lateral centerline: once a genuine ramp ego is on the merge reference it
+  // stays there through COMMITTED (even if authorized_now drops) until COMPLETE
+  // -- at which point the ego is already on route:0 and the merge-reference
+  // tail IS route:0, so returning to the production path is geometrically
+  // seamless. INACTIVE / APPROACH / a traversal reset clear the latch.
+  bool select_highway_merge_reference() {
+    if (!highway_merge_reference_path_enabled_ ||
+        highway_merge_reference_controller_ == nullptr ||
+        !highway_merge_mission_geometry_.has_value()) {
+      highway_merge_reference_latched_ = false;
+      return false;
+    }
+    const std::uint8_t state = context_.highway_merge_mission.state;
+    const bool ramp_participation_state =
+        state == static_cast<std::uint8_t>(HighwayMergeMissionState::kWaiting) ||
+        state ==
+            static_cast<std::uint8_t>(HighwayMergeMissionState::kAuthorized) ||
+        state == static_cast<std::uint8_t>(HighwayMergeMissionState::kCommitted);
+    const bool terminal_state =
+        state == static_cast<std::uint8_t>(HighwayMergeMissionState::kInactive) ||
+        state == static_cast<std::uint8_t>(HighwayMergeMissionState::kApproach) ||
+        state == static_cast<std::uint8_t>(HighwayMergeMissionState::kComplete);
+    if (terminal_state) {
+      // COMPLETE releases the latch (seamless -- see method comment); INACTIVE /
+      // APPROACH mean the ego is not on the ramp this traversal.
+      highway_merge_reference_latched_ = false;
+      return false;
+    }
+
+    // Source-grounded proximity guard: the mission state alone does not prove
+    // the ego is physically on the acceleration lane. Require it to be within
+    // the source lane's own half-width of the route:0:left:1 centerline AND its
+    // source-lane projection to lie inside the merge interval. A route:0 ego
+    // near the zone entry is ~3.9 m off the ramp centerline -> excluded.
+    bool on_ramp = false;
+    if (route_corridor_.has_value() && local_motion_pose_valid_) {
+      const auto &corridor = route_corridor_->corridor;
+      const ReferenceLane *source = nullptr;
+      for (const auto &lane : corridor.lanes) {
+        if (lane.lane_sequence_id == highway_merge_mission_source_lane_id_) {
+          source = &lane;
+          break;
+        }
+      }
+      if (source != nullptr) {
+        try {
+          const EgoState ego{context_.inputs.status.value.pose,
+                             context_.inputs.status.value.speed_mps, 0.0};
+          const auto frenet = project_to_frenet(*source, ego);
+          on_ramp =
+              std::isfinite(frenet.d_m) && std::isfinite(frenet.s_m) &&
+              std::abs(frenet.d_m) <=
+                  highway_merge_reference_path_proximity_m_ &&
+              frenet.s_m >=
+                  highway_merge_mission_zone_entry_route_s_m_ - 1.0 &&
+              frenet.s_m <=
+                  highway_merge_mission_merge_complete_route_s_m_ + 1.0;
+        } catch (const std::exception &) {
+          on_ramp = false;
+        }
+      }
+    }
+
+    if (highway_merge_reference_latched_) {
+      // Hold through any ramp-participation state; only a terminal state (above)
+      // or reset releases it -- a transient loss of `on_ramp` near the taper
+      // end (where the lanes have converged) must not drop the reference.
+      return ramp_participation_state;
+    }
+    if (ramp_participation_state && on_ramp) {
+      highway_merge_reference_latched_ = true;
+      return true;
+    }
+    return false;
+  }
+
   ControllerResult remember(ControllerResult result, std::string frame) {
     last_controller_result_ = result;
     last_result_frame_ = std::move(frame);
@@ -1548,13 +1714,41 @@ private:
     const auto combined_target_override =
         combine_speed_limits({cut_in_target_override, roundabout_target_override,
                               highway_merge_target_override});
-    return remember(
-        path_tracking_->update(context_.inputs.status.value.pose,
-                               context_.inputs.status.value.speed_mps,
-                               control_period_s_, 0,
-                               context_.inputs.status.value.gear,
-                               combined_target_override),
-        "map");
+
+    const auto &pose = context_.inputs.status.value.pose;
+    const double speed_mps = context_.inputs.status.value.speed_mps;
+    const int gear = context_.inputs.status.value.gear;
+
+    const bool use_merge_reference = select_highway_merge_reference();
+    // The production controller is updated every tick regardless of which
+    // reference is active, so its route progress / PID / launch-ramp state
+    // stays warm and the COMPLETE handoff back to it never re-triggers the
+    // launch ramp or a nearest-segment jump. Its longitudinal caps are
+    // identical to the merge controller's (same combined override).
+    ControllerResult production_result = path_tracking_->update(
+        pose, speed_mps, control_period_s_, 0, gear, combined_target_override);
+
+    if (use_merge_reference && highway_merge_reference_controller_ != nullptr) {
+      ControllerResult merge_result =
+          highway_merge_reference_controller_->update(
+              pose, speed_mps, control_period_s_, 0, gear,
+              combined_target_override);
+      if (merge_result.valid) {
+        highway_merge_reference_active_ = true;
+        return remember(std::move(merge_result), "map");
+      }
+      // Narrow fail-safe: the merge reference was selected but its controller
+      // returned an invalid result (e.g. ego past the built continuation). Fall
+      // back to the production controller (kept warm above) rather than holding
+      // a stale lateral command; longitudinal WAIT/HOLD and the independent
+      // safety systems still apply.
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "highway merge reference controller returned an invalid result; "
+          "falling back to the production path this tick");
+    }
+    highway_merge_reference_active_ = false;
+    return remember(std::move(production_result), "map");
   }
 
   FrameTransform2 lookup_planar_transform(const std::string &target_frame,
@@ -2095,6 +2289,13 @@ private:
       ros_interfaces_->publish_highway_merge_mission_state(
           static_cast<std::uint8_t>(last_highway_merge_mission_state_));
     }
+    if (highway_merge_reference_path_enabled_) {
+      // Observability only: whether FollowGlobalPath's lateral reference this
+      // tick is the online merge reference (true) or the production global
+      // path (false). Diagnostic; carries no control semantics.
+      ros_interfaces_->publish_highway_merge_reference_active(
+          highway_merge_reference_active_);
+    }
     if (last_controller_result_) {
       publish_visualization(*last_controller_result_, last_result_frame_);
     }
@@ -2275,6 +2476,17 @@ private:
       HighwayMergeMissionState::kInactive};
   bool highway_merge_mission_prev_route_s_valid_{false};
   double highway_merge_mission_prev_route_s_m_{0.0};
+  double highway_merge_mission_zone_entry_route_s_m_{0.0};
+  double highway_merge_mission_merge_complete_route_s_m_{0.0};
+
+  bool highway_merge_reference_path_enabled_{false};
+  double highway_merge_reference_path_proximity_m_{1.75};
+  double highway_merge_reference_path_target_continuation_m_{200.0};
+  std::optional<HighwayMergeReferencePath> highway_merge_reference_path_;
+  std::unique_ptr<PathTrackingController> highway_merge_reference_controller_;
+  bool highway_merge_reference_latched_{false};
+  bool highway_merge_reference_active_{false};
+
   visualization_msgs::msg::MarkerArray route_profile_markers_;
 
   std::unique_ptr<PlannerRosInterfaces> ros_interfaces_;
