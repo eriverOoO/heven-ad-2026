@@ -389,6 +389,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "route_corridor_file",
         "cut_in_risk",
         "cut_in_response",
+        "roundabout_gap_risk",
         "enable_cut_in_response_constraint",
         "path_tracking_backend",
         "target_speed_mps",

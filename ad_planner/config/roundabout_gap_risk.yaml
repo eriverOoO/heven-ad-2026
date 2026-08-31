@@ -1,0 +1,30 @@
+ad_roundabout_gap_risk:
+  ros__parameters:
+    data_dir: ""
+    route_corridor_file: "map/route_corridor.json"
+    route_corridor.expected_global_path_sha256: ""
+
+    # Empty -> ad_planner/config/roundabout_conflicts.json from the package share.
+    conflict_geometry_file: ""
+    conflict_zone_id: "kcity_roundabout"
+
+    topics.dynamic_object_risks: "/ad/planning/dynamic_object_risks"
+    topics.odometry: "/ad/localization/odometry"
+    topics.output: "/ad/planning/roundabout_gap_risks"
+    topics.diagnostics: "/ad/planning/roundabout_gap_risks/diagnostics"
+
+    risk_frame_id: "base_link"
+    maximum_input_age_s: 0.5
+    maximum_odometry_skew_s: 0.5
+    maximum_future_skew_s: 0.1
+    transform_timeout_s: 0.05
+    maximum_objects: 256
+
+    # Conflict-region geometry comes from conflict_geometry_file. These
+    # parameters only bound the ego arrival estimate; there is no safe-gap or
+    # yield-gap threshold here.
+    ego_speed_epsilon_mps: 0.5
+    maximum_ego_approach_distance_m: 400.0
+    polygon_consistency_margin_m: 2.0
+
+    runtime_summary_interval_frames: 200

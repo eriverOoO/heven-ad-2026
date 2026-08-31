@@ -11,6 +11,8 @@ from ad_interfaces.msg import (
     DynamicObjectRisk,
     DynamicObjectRiskArray,
     DynamicObjectRiskState,
+    RoundaboutGapRisk,
+    RoundaboutGapRiskArray,
     DynamicObstacleStatus,
     PlannerStatus,
     PredictedObject,
@@ -262,6 +264,87 @@ def test_cut_in_response_is_a_longitudinal_request_not_a_command():
         name.lower() for name in CutInResponse.get_fields_and_field_types()
     }
     assert fields.isdisjoint(forbidden)
+
+
+EXPECTED_ROUNDABOUT_GAP_RISK_DECLARATION = """\
+unique_identifier_msgs/UUID object_id
+uint8 classification
+float32 classification_probability
+float32 existence_probability
+bool relevant_to_conflict
+float32 object_map_distance_to_conflict_m
+bool object_in_conflict_now
+bool object_entry_valid
+float32 object_entry_time_s
+bool object_exit_valid
+float32 object_exit_time_s
+bool arrival_delta_valid
+float32 arrival_delta_s
+bool temporal_gap_valid
+float32 temporal_gap_s
+bool occupancy_overlap
+bool ttc_valid
+float32 ttc_s
+bool cpa_valid
+float32 cpa_time_s
+float32 cpa_distance_m
+bool predicted_min_separation_valid
+float32 predicted_min_separation_m
+float32 predicted_min_separation_time_s
+"""
+
+EXPECTED_ROUNDABOUT_GAP_RISK_ARRAY_DECLARATION = """\
+std_msgs/Header header
+string conflict_zone_id
+bool ego_in_conflict_now
+bool ego_entry_valid
+float32 ego_entry_time_s
+bool ego_exit_valid
+float32 ego_exit_time_s
+float32 ego_route_distance_to_entry_m
+float32 ego_route_distance_to_exit_m
+float32 ego_speed_mps
+uint16 relevant_object_count
+RoundaboutGapRisk[] objects
+"""
+
+
+def test_roundabout_gap_risk_interface_is_stable_and_policy_free():
+    """Roundabout gap risk exposes conflict-timing facts only -- never GO /
+    YIELD / STOP / gap-accepted / safe-to-enter."""
+    assert _declarations(PACKAGE_ROOT / "msg" / "RoundaboutGapRisk.msg") == (
+        EXPECTED_ROUNDABOUT_GAP_RISK_DECLARATION.strip()
+    )
+    assert _declarations(PACKAGE_ROOT / "msg" / "RoundaboutGapRiskArray.msg") == (
+        EXPECTED_ROUNDABOUT_GAP_RISK_ARRAY_DECLARATION.strip()
+    )
+    message = RoundaboutGapRisk()
+    assert message.relevant_to_conflict is False
+    assert message.occupancy_overlap is False
+    assert message.temporal_gap_s == 0.0
+    assert RoundaboutGapRiskArray().objects == []
+    forbidden = {
+        "go",
+        "stop",
+        "yield",
+        "yield_required",
+        "hold",
+        "brake",
+        "safe_to_enter",
+        "gap_accepted",
+        "accepted_gap",
+        "safe_gap_s",
+        "requested_speed",
+        "steering",
+        "risk_score",
+        "decision",
+    }
+    for message_type in (RoundaboutGapRisk, RoundaboutGapRiskArray):
+        fields = {
+            name.lower()
+            for name in message_type.get_fields_and_field_types()
+        }
+        assert fields.isdisjoint(forbidden)
 
 
 def test_traffic_light_status_preserves_composite_aspects():

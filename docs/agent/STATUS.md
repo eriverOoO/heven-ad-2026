@@ -1,5 +1,112 @@
 # STATUS
 
+## Roundabout Gap Risk v1 — COMPLETE
+
+Branch `feat/roundabout-gap-risk-v1`, from merged PR #16 main
+`cc47007ad97e66f13c21cf804fba3f42f88770be`. Policy-free roundabout
+conflict-timing facts: `DynamicObjectRiskArray` + ego route state + a fixed
+shared conflict region -> `/ad/planning/roundabout_gap_risks`
+(`ad_interfaces/msg/RoundaboutGapRiskArray`). No GO / YIELD / STOP / HOLD /
+speed / brake / steering / BehaviorTree output; no planner consumer.
+
+New opt-in node `ad_roundabout_gap_risk` (`planner.launch.py
+roundabout_gap_risk:=true`, default `false`, or `roundabout_gap_risk.launch.py`).
+Consumes the canonical `DynamicObjectRiskArray` (base_link) + `/ad/localization/
+odometry`; loads the checksum-verified primary `ReferenceCorridor` (for ego
+`project_to_frenet` station) and a new conflict-geometry config. No pairer, no
+mask. Backend-agnostic pure core (no tracker/prediction branch).
+
+Conflict region = an **annular sector** of the K-City roundabout, materialised
+as an explicit 58-vertex map polygon in `ad_planner/config/roundabout_conflicts
+.json` (`conflict_zone_id: kcity_roundabout`). Provenance: circulating-loop
+centroid `(-101.717930, 343.622922)` = mean of the four `kcity-roundabout-loop`
+link entry nodes in `ad_morai_bridge_dev/config/actor_presets.provenance.yaml`
+(pinned `link_set_sha256 5ce0fd57...`); inner/outer radius `12.68 / 22.68` m =
+mean corner radius `17.679` m ∓ a documented `5.0` m carriageway half-width;
+angular span `[-80, -10] deg` = the SE arc where the primary route centreline
+is inside the annulus; `route_s_enter/exit = 890.1006 / 914.0039` m from
+`ad_data/map/route_corridor.json` (sha `c66d978c...`, recorded in the config,
+**not modified**). The node cross-checks route<->polygon at startup (route
+centreline at enter/exit/mid must be inside the polygon within
+`polygon_consistency_margin_m` 2 m) and fails to start on mismatch / degenerate
+polygon / unknown zone / bad corridor.
+
+Facts (`RoundaboutGapRisk` per object): `relevant_to_conflict` (currently
+inside OR a discrete predicted centroid enters within the horizon -- never
+Euclidean proximity), `object_map_distance_to_conflict_m` (diagnostic only),
+`object_in_conflict_now`, `object_entry_valid/time_s`, `object_exit_valid/
+time_s` (exit invalid = still inside at horizon end), `arrival_delta_s =
+object_entry_time_s - ego_entry_time_s` (signed; <0 object first), `temporal_
+gap_s` (>=0, 0 on overlap and on touching boundary), `occupancy_overlap`
+(strict), plus copied ttc/cpa/min-sep. Array header carries ego timing:
+`ego_entry_valid/time_s`, `ego_exit_valid/time_s` (constant-current-speed ETA
+along the primary route: `max(0, route_s_enter - ego_s)/v_ego`; invalid when
+`v_ego < ego_speed_epsilon_mps` 0.5, ego past exit this lap [single-lap,
+forward-only], or `> maximum_ego_approach_distance_m` 400), `ego_in_conflict_
+now` (polygon containment), `ego_route_distance_to_entry/exit_m`,
+`relevant_object_count`. Object centroids -> map via `ego_pose (+)
+R(ego_yaw)*(v_ego*t + x_rel, y_rel)` (same CV-ego reconstruction as Cut-in
+Risk; discrete samples follow curved circulating paths). Objects[] includes
+all admitted objects (each with the flag), not just relevant ones. No
+`safe_gap`/`yield_gap`/`go`/`risk_score` anywhere.
+
+Ego route crosses the circulating carriageway once, along the SE quadrant
+(enters from S, cuts the SE corner where circulating flow converges, exits NE);
+~24 m / ~3 s of shared arc at 8 m/s.
+
+New config: `ad_planner/config/roundabout_gap_risk.yaml`,
+`ad_planner/config/roundabout_conflicts.json`. `ad_interfaces`:
+`msg/RoundaboutGapRisk.msg`, `msg/RoundaboutGapRiskArray.msg`, CMakeLists,
+contract test. `ad_data` untouched (route_corridor.json unchanged; its sha is
+referenced from the new package config).
+
+Files: `ad_planner` `include/ad_planner/planning/roundabout_gap_risk.hpp`,
+`include/ad_planner/io/roundabout_conflict_loader.hpp`,
+`src/planning/roundabout_gap_risk.cpp`,
+`src/planning/{roundabout_gap_risk_node.{hpp,cpp},roundabout_gap_risk_main.cpp}`,
+`src/io/roundabout_conflict_loader.cpp`, `config/roundabout_gap_risk.yaml`,
+`config/roundabout_conflicts.json`, `launch/roundabout_gap_risk.launch.py`,
+`launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_roundabout_gap_risk.cpp, test_roundabout_gap_risk_launch.py,
+test_roundabout_gap_risk_runtime.py, test_planner_launch.py}`;
+`docs/planning/roundabout_gap_risk_v1.md`, this file.
+
+Tests: `test_roundabout_gap_risk` 30 pure cases (geometry, ego ETA, object
+entry/exit incl. first-contiguous-interval-only, Phase-19 interval A/B/C +
+touching + unbounded exit, arrival-delta sign, multi-object, zero, malformed,
+budget, degenerate polygon, determinism, curved-trajectory).
+`test_roundabout_gap_risk_runtime.py` live deterministic
+replay: ego swept `s = 850..886` (8 m/s), 4 synthetic circulating objects/frame
+-> 5/5 msgs, 20 objects, 15 relevant object-frames, 3 unique UUIDs, 5 valid
+ego-entry, 15 valid temporal-gap, 8 overlap; ego entry ETA median/min/max
+`2.512 / 0.500 / 4.999` s; arrival delta median/min/max `0.0 / -4.499 / 6.5` s;
+non-overlap gap median/p10/min `2.262 / 0.25 / 0.25` s; publish->receive latency
+(loopback DDS probe, NOT internal compute cost; 5 samples) median/p95/max
+~`1.2 / 1.3 / 1.5` ms (run-to-run ~1.2-1.6 ms); representative frame
+(ego `s=870`) ego `[2.512, 5.500]`, object intervals `[0.5,1.5]` /
+`[2.5,5.0]` overlap / `[7.0,inf)`; clears-first gap `1.012` / overlap `0.0` /
+after-ego gap `1.500`; 0 NaN/Inf. Full `ad_planner` ctest **42/43** (only
+pre-existing `test_mppi_nav2_launch` -- host lacks `nav2_common`/`nav2_controller`).
+`test_interface_contract.py` 9/9. `test_dynamic_object_risk` unchanged.
+Isolated `colcon build` of `ad_interfaces` + `ad_planner` clean.
+
+Occupancy semantics locked in v1: only the FIRST contiguous conflict-region
+occupancy interval per object is reported; a predicted leave-then-re-enter is
+not represented (documented in the `.msg`, the design doc, and
+`OnlyFirstContiguousOccupancyIntervalIsReported`).
+
+No provenance-verified MORAI roundabout circulating-actor bag exists (only the
+`kcity-roundabout-loop` preset with pinned link IDs, no recorded actor state),
+so validation is a deterministic canonical ROS replay on the real geometry, not
+a simulator run.
+
+**Recommended next task:** Roundabout Gap Response v1 -- consume
+RoundaboutGapRisk and produce a planner-facing YIELD/HOLD versus RELEASE
+advisory using an explicit temporal gap policy, without directly publishing
+CtrlCmd or steering commands.
+
+---
+
 ## Planner Cut-in Speed Constraint v1 — COMPLETE
 
 Branch `feat/planner-cut-in-constraint-v1`, from merged PR #15 main

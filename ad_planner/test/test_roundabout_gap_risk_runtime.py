@@ -1,0 +1,398 @@
+"""Deterministic canonical replay: synthetic DynamicObjectRisk -> live
+ad_roundabout_gap_risk against the real checksum-verified route corridor and the
+shipped K-City roundabout conflict geometry.
+
+No MORAI roundabout bag with provenance-verified circulating-actor trajectories
+exists in the repo, so the object trajectories here are synthetic but the
+conflict region, the ego route, and both nodes are real. The ego is swept along
+the roundabout approach over a bounded set of frames; four temporal cases
+(object clears first / occupancy overlap / object arrives after ego / nearby
+non-conflicting object) are exercised, and per-frame counts and distributions
+are recorded.
+"""
+
+import hashlib
+import json
+import math
+import statistics
+from pathlib import Path
+import time
+import unittest
+
+from ad_interfaces.msg import (
+    DynamicObjectRisk,
+    DynamicObjectRiskArray,
+    DynamicObjectRiskState,
+    RoundaboutGapRiskArray,
+)
+from builtin_interfaces.msg import Duration
+from launch import LaunchDescription
+from launch.actions import SetEnvironmentVariable
+import launch_testing
+import launch_testing.actions
+import launch_testing.asserts
+from launch_ros.actions import Node as LaunchNode
+from nav_msgs.msg import Odometry
+import pytest
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+
+
+DOMAIN_ID = 94
+REPO = Path(__file__).resolve().parents[2]
+DATA_DIR = REPO / "ad_data"
+GLOBAL_PATH = DATA_DIR / "path" / "2026_molit_comp_global_path.txt"
+CONFIG = REPO / "ad_planner" / "config" / "roundabout_gap_risk.yaml"
+
+RISK_TOPIC = "/ad/planning/dynamic_object_risks"
+ODOM_TOPIC = "/ad/localization/odometry"
+OUTPUT_TOPIC = "/ad/planning/roundabout_gap_risks"
+
+# Primary-route centreline samples on the roundabout approach (station -> pose).
+# Taken from ad_data/map/route_corridor.json.
+ROUTE_SAMPLES = {
+    850.0: (-99.4150, 282.8157, 1.5779),
+    860.0: (-99.4479, 292.7058, 1.5680),
+    870.0: (-99.4142, 302.7051, 1.6004),
+    880.0: (-99.4847, 312.7037, 1.5620),
+    886.0: (-99.0833, 318.7723, 1.3235),
+}
+EGO_SPEED = 8.0
+S_ENTER, S_EXIT = 890.1006, 914.0039
+HORIZON_S = 8.0
+DT_S = 0.5
+
+_QOS_1 = QoSProfile(
+    depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE
+)
+_QOS_10 = QoSProfile(
+    depth=10, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.VOLATILE
+)
+
+
+@pytest.mark.launch_test
+def generate_test_description():
+    digest = hashlib.sha256(GLOBAL_PATH.read_bytes()).hexdigest()
+    return LaunchDescription(
+        [
+            SetEnvironmentVariable("ROS_DOMAIN_ID", str(DOMAIN_ID)),
+            SetEnvironmentVariable("ROS_LOCALHOST_ONLY", "1"),
+            SetEnvironmentVariable(
+                "ROS_LOG_DIR", "/tmp/heven_roundabout_gap_risk_ros_log"
+            ),
+            LaunchNode(
+                package="ad_planner",
+                executable="ad_roundabout_gap_risk_node",
+                name="ad_roundabout_gap_risk",
+                output="screen",
+                parameters=[
+                    str(CONFIG),
+                    {
+                        "data_dir": str(DATA_DIR),
+                        "route_corridor_file": "map/route_corridor.json",
+                        "route_corridor.expected_global_path_sha256": digest,
+                        "runtime_summary_interval_frames": 0,
+                    },
+                ],
+            ),
+            launch_testing.actions.ReadyToTest(),
+        ]
+    )
+
+
+def _duration(seconds):
+    message = Duration()
+    message.sec = int(seconds)
+    message.nanosec = int(round((seconds - int(seconds)) * 1e9))
+    return message
+
+
+def _to_body(px, py, ego_x, ego_y, ego_yaw):
+    dx, dy = px - ego_x, py - ego_y
+    c, s = math.cos(ego_yaw), math.sin(ego_yaw)
+    return c * dx + s * dy, -s * dx + c * dy
+
+
+def _object(uuid_byte, current_xy, sample_positions, ego_pose):
+    ex, ey, eyaw = ego_pose
+    risk = DynamicObjectRisk()
+    risk.object_id.uuid = [uuid_byte] + [0] * 15
+    risk.classification = 1
+    risk.classification_probability = 0.9
+    risk.existence_probability = 0.9
+    bx, by = _to_body(current_xy[0], current_xy[1], ex, ey, eyaw)
+    risk.x_rel_m = bx
+    risk.y_rel_m = by
+    for t, mx, my in sample_positions:
+        state = DynamicObjectRiskState()
+        state.time_from_start = _duration(t)
+        rel_x, rel_y = _to_body(mx, my, ex, ey, eyaw)
+        state.x_rel_m = rel_x - EGO_SPEED * t
+        state.y_rel_m = rel_y
+        risk.predicted_states.append(state)
+    return risk
+
+
+def _window_track(inside_xy, outside_xy, window):
+    lo, hi = window
+    out = []
+    t = DT_S
+    while t <= HORIZON_S + 1e-6:
+        out.append((t, *(inside_xy if lo - 1e-6 <= t <= hi + 1e-6 else outside_xy)))
+        t += DT_S
+    return out
+
+
+def _pctile(values, q):
+    if not values:
+        return None
+    ordered = sorted(values)
+    idx = min(len(ordered) - 1, max(0, int(q * (len(ordered) - 1))))
+    return ordered[idx]
+
+
+class TestRoundaboutGapRiskRuntime(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        rclpy.init()
+        cls.node = Node("roundabout_gap_risk_probe")
+        cls.frames = []
+        cls.latency_ms = []
+        cls.node.create_subscription(
+            RoundaboutGapRiskArray, OUTPUT_TOPIC, lambda m: cls.frames.append(m), _QOS_1
+        )
+        cls.risk_pub = cls.node.create_publisher(DynamicObjectRiskArray, RISK_TOPIC, _QOS_1)
+        cls.odom_pub = cls.node.create_publisher(Odometry, ODOM_TOPIC, _QOS_10)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.node.destroy_node()
+        rclpy.shutdown()
+
+    def _spin(self, seconds):
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.02)
+
+    def _spin_until(self, predicate, timeout):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self.node, timeout_sec=0.02)
+            if predicate():
+                return True
+        return False
+
+    def _odom(self, stamp, pose):
+        message = Odometry()
+        message.header.stamp = stamp
+        message.header.frame_id = "map"
+        message.child_frame_id = "base_link"
+        message.pose.pose.position.x = pose[0]
+        message.pose.pose.position.y = pose[1]
+        message.pose.pose.orientation.z = math.sin(pose[2] / 2.0)
+        message.pose.pose.orientation.w = math.cos(pose[2] / 2.0)
+        message.twist.twist.linear.x = EGO_SPEED
+        return message
+
+    def _publish(self, pose, objects):
+        stamp = self.node.get_clock().now().to_msg()
+        self.odom_pub.publish(self._odom(stamp, pose))
+        self._spin(0.1)
+        array = DynamicObjectRiskArray()
+        array.header.stamp = stamp
+        array.header.frame_id = "base_link"
+        array.objects = objects
+        want = len(self.frames) + 1
+        started = time.monotonic()
+        self.risk_pub.publish(array)
+        self.assertTrue(
+            self._spin_until(lambda: len(self.frames) >= want, 3.0),
+            "roundabout node did not publish",
+        )
+        self.latency_ms.append((time.monotonic() - started) * 1e3)
+        return self.frames[-1]
+
+    def test_roundabout_conflict_timing_facts(self):
+        self.assertTrue(
+            self._spin_until(
+                lambda: self.node.count_publishers(OUTPUT_TOPIC) == 1
+                and self.node.count_subscribers(RISK_TOPIC) == 1,
+                10.0,
+            ),
+            "roundabout node not discovered",
+        )
+        first_pose = ROUTE_SAMPLES[870.0]
+        for _ in range(5):
+            self.odom_pub.publish(
+                self._odom(self.node.get_clock().now().to_msg(), first_pose)
+            )
+            self._spin(0.1)
+
+        zone_a = (-90.5, 330.0)   # inside the conflict polygon
+        zone_b = (-88.0, 334.0)   # inside
+        zone_c = (-85.0, 337.0)   # inside
+        far = (-101.5, 343.6)     # roundabout centre island, outside the annulus
+        never_samples = [
+            (DT_S * k, *far) for k in range(1, int(HORIZON_S / DT_S) + 1)
+        ]
+
+        input_frames = 0
+        input_objects = 0
+        relevant_object_frames = 0
+        relevant_uuids = set()
+        ego_entry_valid = 0
+        object_entry_valid = 0
+        temporal_gap_valid = 0
+        overlap_frames = 0
+        ego_entry_eta = []
+        object_entry_eta = []
+        arrival_delta = []
+        non_overlap_gap = []
+        representative = None
+
+        for station in sorted(ROUTE_SAMPLES):
+            pose = ROUTE_SAMPLES[station]
+            objects = [
+                _object(1, far, _window_track(zone_a, far, (0.5, 1.0)), pose),
+                _object(2, far, _window_track(zone_b, far, (2.5, 4.5)), pose),
+                _object(3, far, _window_track(zone_c, far, (7.0, HORIZON_S)), pose),
+                _object(4, far, never_samples, pose),
+            ]
+            frame = self._publish(pose, objects)
+            input_frames += 1
+            input_objects += len(objects)
+            self.assertEqual(frame.conflict_zone_id, "kcity_roundabout")
+            self.assertEqual(frame.header.frame_id, "map")
+            if frame.ego_entry_valid:
+                ego_entry_valid += 1
+                ego_entry_eta.append(frame.ego_entry_time_s)
+            for obj in frame.objects:
+                for name in (
+                    "object_entry_time_s", "object_exit_time_s", "arrival_delta_s",
+                    "temporal_gap_s", "object_map_distance_to_conflict_m",
+                ):
+                    self.assertTrue(math.isfinite(getattr(obj, name)))
+                if obj.relevant_to_conflict:
+                    relevant_object_frames += 1
+                    relevant_uuids.add(obj.object_id.uuid[0])
+                if obj.object_entry_valid:
+                    object_entry_valid += 1
+                    object_entry_eta.append(obj.object_entry_time_s)
+                if obj.arrival_delta_valid:
+                    arrival_delta.append(obj.arrival_delta_s)
+                if obj.temporal_gap_valid:
+                    temporal_gap_valid += 1
+                    if obj.occupancy_overlap:
+                        overlap_frames += 1
+                    else:
+                        non_overlap_gap.append(obj.temporal_gap_s)
+            if abs(station - 870.0) < 1e-6:
+                representative = frame
+
+        # Representative frame (ego ~20 m before the conflict entry).
+        self.assertIsNotNone(representative)
+        by_uuid = {o.object_id.uuid[0]: o for o in representative.objects}
+        self.assertEqual(len(by_uuid), 4)
+        self.assertTrue(representative.ego_entry_valid)
+        self.assertAlmostEqual(
+            representative.ego_entry_time_s, (S_ENTER - 870.0) / EGO_SPEED, delta=0.7
+        )
+        self.assertGreater(representative.ego_exit_time_s, representative.ego_entry_time_s)
+
+        a = by_uuid[1]
+        self.assertTrue(a.relevant_to_conflict)
+        self.assertFalse(a.occupancy_overlap)
+        self.assertTrue(a.temporal_gap_valid)
+        self.assertGreater(a.temporal_gap_s, 0.0)
+        self.assertLess(a.arrival_delta_s, 0.0)
+
+        b = by_uuid[2]
+        self.assertTrue(b.relevant_to_conflict)
+        self.assertTrue(b.occupancy_overlap)
+        self.assertAlmostEqual(b.temporal_gap_s, 0.0, places=5)
+
+        c = by_uuid[3]
+        self.assertTrue(c.relevant_to_conflict)
+        self.assertFalse(c.occupancy_overlap)
+        self.assertGreater(c.temporal_gap_s, 0.0)
+        self.assertGreater(c.arrival_delta_s, 0.0)
+
+        d = by_uuid[4]
+        self.assertFalse(d.relevant_to_conflict)
+        self.assertFalse(d.object_entry_valid)
+        self.assertFalse(d.temporal_gap_valid)
+        self.assertEqual(representative.relevant_object_count, 3)
+
+        result = {
+            "input_risk_messages": input_frames,
+            "gap_messages": len(self.frames),
+            "input_objects": input_objects,
+            "relevant_object_frames": relevant_object_frames,
+            "unique_relevant_uuids": len(relevant_uuids),
+            "ego_entry_valid_frames": ego_entry_valid,
+            "object_entry_valid": object_entry_valid,
+            "temporal_gap_valid": temporal_gap_valid,
+            "overlap_object_frames": overlap_frames,
+            "ego_entry_eta": {
+                "median": round(statistics.median(ego_entry_eta), 3),
+                "p10": round(_pctile(ego_entry_eta, 0.10), 3),
+                "min": round(min(ego_entry_eta), 3),
+                "max": round(max(ego_entry_eta), 3),
+            },
+            "object_entry_eta": {
+                "median": round(statistics.median(object_entry_eta), 3),
+                "p10": round(_pctile(object_entry_eta, 0.10), 3),
+                "min": round(min(object_entry_eta), 3),
+                "max": round(max(object_entry_eta), 3),
+            },
+            "arrival_delta": {
+                "median": round(statistics.median(arrival_delta), 3),
+                "p10": round(_pctile(arrival_delta, 0.10), 3),
+                "min": round(min(arrival_delta), 3),
+                "max": round(max(arrival_delta), 3),
+            },
+            "non_overlap_gap": {
+                "median": round(statistics.median(non_overlap_gap), 3),
+                "p10": round(_pctile(non_overlap_gap, 0.10), 3),
+                "min": round(min(non_overlap_gap), 3),
+            },
+            "publish_to_receive_latency_ms": {
+                "median": round(statistics.median(self.latency_ms), 3),
+                "p95": round(_pctile(self.latency_ms, 0.95), 3),
+                "max": round(max(self.latency_ms), 3),
+                "samples": len(self.latency_ms),
+            },
+            "representative_870m": {
+                "ego_entry_time_s": round(representative.ego_entry_time_s, 3),
+                "ego_exit_time_s": round(representative.ego_exit_time_s, 3),
+                "clears_first_object_interval_s": [
+                    round(a.object_entry_time_s, 3),
+                    round(a.object_exit_time_s, 3),
+                ],
+                "clears_first_object_exit_valid": a.object_exit_valid,
+                "clears_first_gap_s": round(a.temporal_gap_s, 3),
+                "clears_first_arrival_delta_s": round(a.arrival_delta_s, 3),
+                "overlap_object_interval_s": [
+                    round(b.object_entry_time_s, 3),
+                    round(b.object_exit_time_s, 3),
+                ],
+                "overlap_object_exit_valid": b.object_exit_valid,
+                "overlap_gap_s": round(b.temporal_gap_s, 3),
+                "overlap_arrival_delta_s": round(b.arrival_delta_s, 3),
+                "after_ego_object_entry_s": round(c.object_entry_time_s, 3),
+                "after_ego_object_exit_valid": c.object_exit_valid,
+                "after_ego_gap_s": round(c.temporal_gap_s, 3),
+                "after_ego_arrival_delta_s": round(c.arrival_delta_s, 3),
+            },
+        }
+        Path("/tmp/heven_roundabout_gap_risk_result.json").write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print("ROUNDABOUT_GAP_RISK_RESULT=" + json.dumps(result, sort_keys=True))
+
+
+@launch_testing.post_shutdown_test()
+class TestRoundaboutGapRiskRuntimeShutdown(unittest.TestCase):
+    def test_clean_shutdown(self, proc_info):
+        launch_testing.asserts.assertExitCodes(proc_info)
