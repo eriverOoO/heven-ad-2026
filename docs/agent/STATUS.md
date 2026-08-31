@@ -1,5 +1,146 @@
 # STATUS
 
+## Highway Merge Gap Response v1 — COMPLETE
+
+Branch `feat/highway-merge-gap-response-v1`, from merged PR #21 main
+`605d911c7457ead3d86c8a8e674ca5ef02b62749` (`feat(planning): add highway merge
+gap risk (#21)`). New opt-in policy/advisory node `ad_highway_merge_gap_response`:
+`/ad/planning/highway_merge_gap_risks` (`HighwayMergeGapRiskArray`) ->
+`/ad/planning/highway_merge_gap_response` (`HighwayMergeGapResponse`). Advisory
+only: MERGE_READY / WAIT / HOLD. No lane-change command, steering, path,
+trajectory, gear, brake, throttle, acceleration/speed request, CtrlCmd,
+BehaviorTree change, or production planner consumer. `MERGE_READY` is a fact for
+a future mission layer, not "start steering now".
+
+New message `ad_interfaces/msg/HighwayMergeGapResponse.msg` (no reuse of
+CutInResponse / RoundaboutGapResponse -- distinct mission semantics). Actions
+`ACTION_MERGE_READY=0 / ACTION_WAIT=1 / ACTION_HOLD=2` (monotone: higher =
+more restrictive). Reasons `NONE / CLEAR_GAP / FRONT_GAP / REAR_GAP /
+REAR_CLOSING / ALONGSIDE / PREDICTED_ROUTE_CONFLICT / INSUFFICIENT_PREDICTION /
+INVALID_EGO_STATE` (DECISION_BOUNDARY folded into the HOLD action +
+available/comfortable-stop fields). Output carries merge_zone_id, source
+object, relevant_object_count, ego speed/distance-to-merge/merge-timing/eta,
+available_distance_m + comfortable_stop_distance_m, complete_prediction_coverage,
+front/rear object + gap_m + time_headway, rear_closing object + time, and the
+smallest predicted minimum route gap. **No `merge_gap_m`** (Phase 17: the total
+span never authorizes a merge; a consumer reads the two signed
+`front_gap_m` / `rear_gap_m` individually).
+
+Consumed GapRisk fields: `merge_reference_route_s_m`, `ego_route_distance_to_merge_m`,
+`ego_route_distance_to_zone_entry_m`, `ego_longitudinal_speed_mps`,
+`ego_merge_timing_valid`, `ego_merge_time_s`, `relevant_object_count`; per
+relevant object `delta_s_now_m`, `object_longitudinal_speed_mps`,
+`delta_s_at_merge_valid/_m`, `is_ahead/behind/alongside_at_merge`,
+`longitudinal_gap_closing`, `longitudinal_closing_speed_mps`,
+`time_to_route_coincidence_valid/_s`, `predicted_min_route_gap_valid/_m`,
+`prediction_covers_merge_time`.
+
+Applicability: active while ego is in the merge approach/zone this traversal.
+`ego_route_distance_to_merge_m < 0` (past merge) or
+`ego_route_distance_to_zone_entry_m > maximum_approach_distance_m` (400, must be
+<= risk node's `maximum_ego_approach_distance_m`) -> `active=false`,
+non-restrictive `ACTION_MERGE_READY` enum, `REASON_NONE`.
+
+MERGE_READY rule (all of): applicable; `ego_merge_timing_valid` and route speed
+above `stopped_speed_threshold_mps` (0.5); no over-budget relevant object;
+**every** relevant object `prediction_covers_merge_time` (fallback constant-speed
+`delta_s_at_merge_m` never authorizes -- mandatory, Phase 8/26); no relevant
+object `is_alongside_at_merge`; every valid `predicted_min_route_gap_m >=
+minimum_predicted_route_gap_m` (6.0); no closing rear object (`delta_s_now_m<0`
+AND `longitudinal_gap_closing`) with `time_to_route_coincidence_s <
+minimum_rear_closing_time_s` (3.0) or invalid coincidence; nearest rear at merge
+(if any) rear time headway `-delta_s_at_merge_m / max(obj_long_speed, 0.5) >=
+minimum_rear_time_headway_s` (2.0); nearest front at merge (if any) front time
+headway `delta_s_at_merge_m / max(ego_speed, 0.5) >=
+minimum_front_time_headway_s` (1.5). Zero relevant objects + valid timing ->
+MERGE_READY / CLEAR_GAP. Absent front or rear side is vacuously satisfied.
+Front/rear selected from per-object `is_ahead/behind_at_merge` relations, never
+raw Cartesian (Phase 27).
+
+Rear-closing is a **current-time** condition gated on `delta_s_now_m < 0`
+(`longitudinal_gap_closing` is symmetric, so a slow front the ego overtakes
+never trips REAR_CLOSING -- caught instead by the predicted route-gap tier
+above FRONT_GAP).
+
+WAIT/HOLD: `available = max(0, ego_route_distance_to_merge_m - merge_standoff_m)`,
+`comfortable_stop = v^2/(2*1.8)`; stopped ego -> HOLD/INVALID_EGO_STATE (no
+fabricated ETA); else `available > comfortable_stop` -> WAIT else HOLD. Strict
+`>`. Moving ego with invalid timing (config-mismatch only) -> never MERGE_READY,
+WAIT/HOLD by the margin rule.
+
+Threshold provenance (competition-v1, not universal-safety):
+`minimum_front_time_headway_s 1.5` (standard highway following-headway lower
+bound), `minimum_rear_time_headway_s 2.0` (rear mainline has right of way),
+`minimum_rear_closing_time_s 3.0`, `minimum_predicted_route_gap_m 6.0` (~IONIQ 5
+length + margin; mirrors `merge_standoff_m`), `merge_standoff_m 6.0` (mirrors
+cut-in/roundabout standoff; boundary before merge completion),
+`comfortable_deceleration_mps2 1.8` (`perception.braking_deceleration_mps2`),
+`stopped_speed_threshold_mps` / `speed_epsilon_mps 0.5` (mirror risk ego-speed
+epsilon). No existing planner following-headway parameter existed to reuse.
+
+Arbitration precedence: ALONGSIDE > INSUFFICIENT_PREDICTION >
+PREDICTED_ROUTE_CONFLICT > REAR_CLOSING > REAR_GAP > FRONT_GAP; within a tier the
+most restrictive metric, then lexicographically smallest UUID. Stateless, no
+hysteresis (reported: none; canonical replay showed no MERGE_READY<->WAIT
+flicker). Malformed/stale/future/duplicate/backward frame rejected (backward jump
+> 0.5 s = sim reset, clears latch); `delta_s_at_merge_valid=true` with
+`prediction_covers_merge_time=false` is permitted (the fallback). One response
+per accepted frame, never latched.
+
+Validation: `test_highway_merge_gap_response` 34 gtests (pure policy + frame
+builder; incl. front/rear/rear-closing/predicted-route-gap threshold boundaries,
+a coverage-claimed-shorter-than-merge-time rejection, and the Phase-26
+fallback-extrapolation regression). Internal response callback latency
+0.0039 / 0.030 / 0.030 ms median/p95/max (chained runtime summary). Interface contract 12/12 (added the actuator/speed/lane-change/CtrlCmd
+disjoint-set test for the new message). Launch/planner-launch 35/35 (+opt-in composition, force-start
+of risk node, default-off, `maximum_approach_distance_m <= 400`).
+`test_highway_merge_gap_response_policy.py` live synthetic replay: 23 inputs ->
+22 responses / 1 rejected (stale/backward); 5 MERGE_READY / 13 WAIT / 3 HOLD /
+1 inactive; reason counts
+CLEAR_GAP 5, FRONT_GAP 3, REAR_GAP 7, REAR_CLOSING 2, ALONGSIDE 1,
+PREDICTED_ROUTE_CONFLICT 1, INSUFFICIENT_PREDICTION 1, INVALID_EGO_STATE 1;
+MERGE_READY example front gap 45 m / headway 5.625 s, rear gap 70 m / headway
+7.0 s, predicted min route gap 25 m; WAIT example (200 m) available 194 /
+comfortable-stop 17.78; HOLD example (8 m) available 2.0 / comfortable-stop
+17.78; insufficient-prediction example fallback delta_s_at_merge 200 m coverage
+false; WAIT->HOLD approach + unsafe-rear-closing->MERGE_READY sequences both
+exercised; 0 NaN/Inf/exceptions. `test_highway_merge_gap_risk_runtime.py` now
+chains `-> HighwayMergeGapResponse`: 6 responses, 0 MERGE_READY / 5 WAIT / 1
+inactive / 0 rejected (reasons NONE 1, PREDICTED_ROUTE_CONFLICT 3,
+INSUFFICIENT_PREDICTION 2) -- the canonical replay's prediction-uncovered +
+rollout-crossing objects mean it never earns MERGE_READY and the coverage policy
+is NOT weakened to force one (Phase 39). Full `ad_planner` deterministic gtest
+suite 528 cases pass (incl. cut-in / roundabout / external-speed / highway merge
+gap-risk regressions unchanged); `test_data_loader` passes via ctest
+(CWD-dependent fixture). Isolated `colcon build` of `ad_interfaces` + `ad_planner`
+clean. Pre-existing unrelated failures, not caused by this change:
+`test_mppi_nav2_launch` (nav2 absent); `test_cut_in_response_runtime` /
+`test_cut_in_risk_runtime` (`ad_dynamic_object_risk_node` SIGKILL/OOM under load
+-- perception node, untouched; same class documented in the PR #20 STATUS entry);
+`test_frenet_runtime_contract` passes isolated (parallel-run resource
+contention).
+
+Files: `ad_interfaces/msg/HighwayMergeGapResponse.msg`,
+`ad_interfaces/CMakeLists.txt`, `ad_interfaces/test/test_interface_contract.py`;
+`ad_planner` `include/ad_planner/planning/highway_merge_gap_response.hpp`,
+`src/planning/highway_merge_gap_response.{cpp,_node.{hpp,cpp},_main.cpp}`,
+`config/highway_merge_gap_response.yaml`,
+`launch/highway_merge_gap_response.launch.py`, `launch/planner.launch.py`,
+`CMakeLists.txt`,
+`test/{test_highway_merge_gap_response.cpp,_launch.py,_policy.py,
+test_highway_merge_gap_risk_runtime.py,test_planner_launch.py}`;
+`docs/planning/highway_merge_gap_response_v1.md`, this file. No planner node /
+Stanley / DWA / Frenet / MPPI / external speed constraint / BehaviorTree /
+`ad_interfaces` risk message change.
+
+**Recommended next task:** Highway Merge Response Integration v1 — consume fresh
+HighwayMergeGapResponse advisories at the existing highway mission/planner
+boundary: WAIT/HOLD may constrain longitudinal progression while MERGE_READY
+exposes a merge-authorization fact to the mission layer, without directly
+commanding steering or creating a second CtrlCmd publisher.
+
+---
+
 ## Highway Merge Gap Risk v1 — COMPLETE
 
 Branch `feat/highway-merge-gap-risk-v1`, from merged PR #20 main

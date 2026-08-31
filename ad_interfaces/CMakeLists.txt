@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RoundaboutGapResponse.msg"
   "msg/HighwayMergeGapRisk.msg"
   "msg/HighwayMergeGapRiskArray.msg"
+  "msg/HighwayMergeGapResponse.msg"
   "msg/DynamicObstacleStatus.msg"
   "msg/PlannerStatus.msg"
   "msg/PredictedState.msg"
