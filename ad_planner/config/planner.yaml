@@ -74,6 +74,51 @@ ad_planner:
     highway_merge_response_max_age_s: 0.5
     expected_highway_merge_zone: "kcity_highway_onramp"
 
+    # Opt-in Highway Merge Mission Primitive. Default off -> no merge geometry
+    # loaded, mission state INACTIVE, no BT / behaviour change. It commands
+    # nothing (no steering, lane change, CtrlCmd, or speed): it only tracks
+    # approach / waiting / authorization / commitment / completion from
+    # source-grounded route geometry so a future lateral executor knows when
+    # authorization is still revocable (before commit) versus when a merge is
+    # committed and must not be reversed mid-maneuver. Its only decision input
+    # is the merge-authorization fact from
+    # enable_highway_merge_response_integration; the two flags are independent
+    # (mission on / response integration off -> authorization always false ->
+    # the mission never leaves APPROACH / WAITING).
+    #   mission_approach_window_m       : APPROACH begins this far (route_s)
+    #                                     before the merge zone entry. Keep
+    #                                     <= the risk node's
+    #                                     maximum_ego_approach_distance_m (400).
+    #   commit_lateral_separation_m     : the commit boundary is the first
+    #                                     source-lane (route:0:left:1) station
+    #                                     whose lateral separation from the
+    #                                     target lane (route:0) has fallen below
+    #                                     this. 3.5 m == the first ~0.44 m
+    #                                     (>10 %) of taper below the ~3.94 m
+    #                                     nominal accel-lane offset, i.e. the
+    #                                     road geometry itself is now funneling
+    #                                     toward route:0. Derived at startup;
+    #                                     it is NOT merge_standoff_m (that is
+    #                                     the response's WAIT/HOLD boundary and
+    #                                     stays owned upstream).
+    #   mission_exit_release_m          : COMPLETE ends this far past
+    #                                     merge_complete (ego established on the
+    #                                     target corridor).
+    #   mission_route_s_reset_jump_m    : a backward jump in ego route_s larger
+    #                                     than this in one tick is a sim reset
+    #                                     or the 2184 m route loop wrapping ->
+    #                                     mission resets to INACTIVE. Derived
+    #                                     from ~2 x control_period (0.05 s) x
+    #                                     the 33.33 m/s merge-region speed limit.
+    enable_highway_merge_mission: false
+    mission_approach_window_m: 400.0
+    commit_lateral_separation_m: 3.5
+    mission_exit_release_m: 20.0
+    mission_route_s_reset_jump_m: 3.5
+    highway_merge_mission_zone_id: "kcity_highway_onramp"
+    # Empty -> ad_planner/config/highway_merge.json from the package share.
+    merge_geometry_file: ""
+
     # Current Stanley baseline: dynamic steering preview + curvature speed cap.
     stanley.target_speed_mps: 16.25
     stanley.cross_track_gain: 0.91
@@ -253,6 +298,8 @@ ad_planner:
     topics.highway_merge_gap_response: "/ad/planning/highway_merge_gap_response"
     topics.highway_merge_speed_limit: "/ad/planner/highway_merge_speed_limit"
     topics.highway_merge_authorized: "/ad/planner/highway_merge_authorized"
+    # Only published when enable_highway_merge_mission is true.
+    topics.highway_merge_mission_state: "/ad/planner/highway_merge_mission_state"
     topics.command: "/ad/control/command"
     topics.planner_status: "/ad/planner/status"
     topics.path: "/ad/planner/path"

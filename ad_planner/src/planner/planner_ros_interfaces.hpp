@@ -1,6 +1,7 @@
 #ifndef AD_PLANNER__PLANNER__PLANNER_ROS_INTERFACES_HPP_
 #define AD_PLANNER__PLANNER__PLANNER_ROS_INTERFACES_HPP_
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include <std_msgs/msg/empty.hpp>
 #include <std_msgs/msg/float32.hpp>
 #include <std_msgs/msg/int8.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
@@ -34,6 +36,7 @@ struct PlannerRosInterfaceConfig {
   bool cut_in_response_constraint_enabled{false};
   bool roundabout_response_constraint_enabled{false};
   bool highway_merge_response_integration_enabled{false};
+  bool highway_merge_mission_enabled{false};
 };
 
 struct PlannerRosCallbacks {
@@ -84,6 +87,10 @@ public:
   void publish_highway_merge_speed_limit(float value);
   void publish_highway_merge_authorized(bool value);
 
+  // No-op unless the highway merge mission primitive is enabled. Diagnostic
+  // mirror of the mission-state enum, never a control or lane-change channel.
+  void publish_highway_merge_mission_state(std::uint8_t value);
+
 private:
   PlannerRosCallbacks callbacks_;
 
@@ -121,6 +128,8 @@ private:
       highway_merge_speed_limit_publisher_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr
       highway_merge_authorized_publisher_;
+  rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr
+      highway_merge_mission_state_publisher_;
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr
       tuning_lease_subscription_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr tuning_hold_service_;

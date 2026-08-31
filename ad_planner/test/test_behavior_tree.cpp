@@ -218,7 +218,7 @@ TEST(BehaviorTree, HasExpectedPriorityAndCruises) {
   const auto result = supervisor->tick();
   EXPECT_EQ(result.active_behavior, "follow_global_path");
   EXPECT_DOUBLE_EQ(result.command.motion.accel, 0.2);
-  EXPECT_EQ(supervisor->registered_node_ids().size(), 7U);
+  EXPECT_EQ(supervisor->registered_node_ids().size(), 8U);
 }
 
 // HighwayMergeReady is registered but the production tree above does not
@@ -245,6 +245,31 @@ TEST(BehaviorTree, HighwayMergeReadyConditionMirrorsAuthorizationFact) {
   // Revocation is immediate - the condition never latches SUCCESS.
   context.highway_merge_authorized = false;
   EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kFailure);
+}
+
+// HighwayMergeCommitted mirrors context.highway_merge_mission.committed - the
+// monotone commit fact from the mission primitive. Registered but not in the
+// production tree (the exact-XML assertion above is the standing proof).
+TEST(BehaviorTree, HighwayMergeCommittedConditionMirrorsMissionCommitFact) {
+  const std::string tree =
+      "<root main_tree_to_execute=\"Probe\">\n"
+      "  <BehaviorTree ID=\"Probe\">\n"
+      "    <HighwayMergeCommitted/>\n"
+      "  </BehaviorTree>\n"
+      "</root>\n";
+  auto context = nominal_context();
+  PlannerSupervisor supervisor(context, test_config(), tree);
+
+  context.highway_merge_mission.committed = false;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kFailure);
+
+  context.highway_merge_mission.committed = true;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kSuccess);
+
+  // A transient upstream authorization loss does not clear the commit fact -
+  // the mission state machine keeps it set; the condition just mirrors it.
+  context.highway_merge_mission.authorized_now = false;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kSuccess);
 }
 
 TEST(BehaviorTree, WaitsForDriveAcknowledgementBeforeRunningPathTracker) {

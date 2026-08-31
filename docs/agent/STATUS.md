@@ -1,5 +1,131 @@
 # STATUS
 
+## Highway Merge Mission Primitive v1 — COMPLETE (CASE B)
+
+Branch `feat/highway-merge-mission-primitive-v1`, from merged PR #23 main
+`9da4e869aec1d104ee159223b49d775acb65f3aa` (`feat(planning): integrate highway
+merge response (#23)`). The explicit mission-state layer between the revocable
+merge authorization (`PlannerContext::highway_merge_authorized`, PR #23) and a
+future lateral executor. **Opt-in, off by default** (`enable_highway_merge_mission:
+false`): disabled => no merge geometry loaded, state permanently INACTIVE, no
+publisher, behaviour identical to current main. Commands **nothing** (no
+steering / lane change / CtrlCmd / speed).
+
+**PHASE-1 FORK: CASE B.** The committed competition global path does NOT encode
+a ramp->mainline merge, and the ego is never on the acceleration lane at all.
+Locked by `test_highway_merge_mission_geometry.py` against the real
+`ad_data/path/2026_molit_comp_global_path.txt` + `route_corridor.json`: global
+path lateral offset to `route:0` (mainline) is **~0.00 m at every station
+1080-1320 m** (the global path IS `route:0`), and **~3.9 m from `route:0:left:1`**
+(accel lane) at the zone entry, closing to ~0 only where that lane tapers into
+`route:0` at merge-complete. Checkpoints 10/11 sit on `route:0`; `kcity-highway`
+is `heven-highway-npc` (an NPC on the accel lane, not the ego); the upstream
+risk replay sweeps the ego on `route:0`. So there is no lateral transition to
+reuse and no lateral maneuver for the ego on this route -- the primitive tracks
+mission state + exposes a source/target corridor intent; it generates no path.
+If a future route reroutes the ego via the ramp the geometry test fails and the
+decision is revisited.
+
+Pure core `highway_merge_mission.{hpp,cpp}` (`ad_planner_core`, no ROS dep).
+States `INACTIVE 0 / APPROACH 1 / WAITING 2 / AUTHORIZED 3 / COMMITTED 4 /
+COMPLETE 5`. `step_highway_merge_mission(input, geometry)` -- pure, deterministic,
+no clock/hidden state. Source-grounded stations on `route:0` derived once at
+startup: `approach_entry = zone_entry - mission_approach_window_m` (400);
+`zone_entry 1118.74` / `merge_complete 1286.15` (from `highway_merge.json`,
+cross-checked <=2 m against `route:0:left:1` in the corridor, same margin the
+risk node uses); `commit ~1213.3` **derived** by
+`derive_highway_merge_commit_station()` -- the first `route:0:left:1` station
+whose lateral separation from `route:0` (`project_to_frenet`) falls below
+`commit_lateral_separation_m` (3.5 m = first ~0.44 m / >10 % of taper below the
+~3.94 m nominal offset, safely below the ~3.73 m plateau noise; NOT
+`merge_standoff_m` which stays owned upstream); `exit = merge_complete +
+mission_exit_release_m` (20). Soft-fails to permanently INACTIVE (logged, no
+throw) on any geometry mismatch.
+
+Semantics: authorization **revocable before commit** (`AUTHORIZED -> WAITING`
+immediately, no latch); **not revocable after commit** (once `COMMITTED`, an
+upstream `WAIT`/`HOLD`/stale drives `authorized_now` false but the state stays
+`COMMITTED` until `COMPLETE` -- a lateral executor must not reverse a merge
+mid-maneuver; `committed` and `authorized_now` are separate outputs). Commit
+monotone within a traversal (swept + locked). Crossing `commit` unauthorized
+never commits. Stopped ego never advances (state = f(route_s, authorization),
+never wall-clock). Sim reset / 2184 m route-loop wrap: a backward ego route_s
+jump > `mission_route_s_reset_jump_m` (3.5 = ~2 x control_period 0.05 s x
+33.33 m/s) -> INACTIVE, dropping any carried COMMITTED. Route-projection failure
+(`project_primary_route` wrapped in try/catch) -> hold previous state, never
+advance.
+
+Consumes `PlannerContext::highway_merge_authorized` **only** (never the response
+/ risk / DynamicObjectRisk topics; no freshness or gap-policy duplicated). The
+mission and response-integration flags are **independent**: mission on +
+response integration off -> authorization always false -> mission never leaves
+APPROACH/WAITING (correct fail-safe). The mission flag does NOT force-enable the
+response integration.
+
+BT exposure: mission state recomputed in `tick()` before `supervisor_->tick()`,
+written to `PlannerContext::highway_merge_mission` (`{state, active, committed,
+authorized_now}`, decoupled from the Frenet-carrying header). One new read-only
+`HighwayMergeCommitted` `BT::SimpleCondition` (SUCCESS iff `committed`; the one
+fact `HighwayMergeReady` can't express -- stays SUCCESS through a transient
+post-commit auth loss). `ad_bt_node_ids()` 7->8; `test_behavior_tree` expects
+`registered_node_ids().size() == 8`. **Production BT XML unchanged** (no
+merge/lane-selection path exists to gate; exact-XML assertion still passes).
+CollisionRecovery / TrafficStop / PerceptionMission / FollowGlobalPath /
+FailSafeBrake priority + authority untouched; COMMITTED disables no safety
+system.
+
+Observability: `/ad/planner/highway_merge_mission_state` (`std_msgs/UInt8`, the
+state enum), published only when enabled. Config: `enable_highway_merge_mission
+false`, `mission_approach_window_m 400`, `commit_lateral_separation_m 3.5`,
+`mission_exit_release_m 20`, `mission_route_s_reset_jump_m 3.5`,
+`highway_merge_mission_zone_id kcity_highway_onramp`, `merge_geometry_file ""`
+(-> package-share `highway_merge.json`). `planner.launch.py
+enable_highway_merge_mission:=true` sets the param, forces no other node.
+
+Validation: `test_highway_merge_mission` **27 gtests** (geometry validation,
+commit-station derivation, full Phase-30 transition set incl. sim-reset /
+small-noise / wrong-zone / no-backward-after-commit sweep / hold-on-invalid,
+Phase 31-34 sequences). `test_highway_merge_mission_geometry.py` 3 data tests
+locking CASE B + commit boundary ~1213 m / >60 m committed span.
+`test_behavior_tree` `registered_node_ids` 8 +
+`HighwayMergeCommittedConditionMirrorsMissionCommitFact`. `test_planner_launch`
++arg + opt-in/default-off. `test_planner_highway_merge_mission.py` live
+`ad_planner` on the **real** corridor + global path + merge geometry,
+`FollowGlobalPath`, mission + response integration on, ego teleported through
+`route:0` stations: 400->INACTIVE / 1000->APPROACH / 1150 unauth->WAITING /
+1150 MERGE_READY->AUTHORIZED / 1160 WAIT->WAITING (no latch) / 1175
+MERGE_READY->AUTHORIZED / 1235 MERGE_READY->COMMITTED (crossed ~1213) / 1255
+WAIT->COMMITTED (post-commit revocation NOT honored, `highway_merge_authorized`
+False) / 1295 WAIT->COMPLETE / 1330->INACTIVE; steering < 0.2 rad throughout;
+one `/ad/control/command` publisher; clean shutdown. Full `ad_planner` gtest
+37/37; cut-in / roundabout / highway-merge constraint + risk + response
+regressions pass. Isolated `colcon build --packages-select ad_planner
+--symlink-install` clean. Pre-existing unrelated host failures unchanged
+(`test_mppi_nav2_launch`; `test_cut_in_response_runtime` /
+`test_cut_in_risk_runtime` perception OOM; `test_frenet_runtime_contract`
+parallel contention).
+
+Files: `ad_planner` `include/ad_planner/planning/highway_merge_mission.hpp`,
+`include/ad_planner/behavior/planner_context.hpp`,
+`src/planning/highway_merge_mission.cpp`, `src/behavior/bt_nodes.cpp`,
+`src/planner/planner_node.cpp`, `src/planner/planner_ros_interfaces.{hpp,cpp}`,
+`config/planner.yaml`, `launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_highway_merge_mission.cpp,test_highway_merge_mission_geometry.py,
+test_planner_highway_merge_mission.py,test_behavior_tree.cpp,test_planner_launch.py}`;
+`docs/planning/highway_merge_mission_primitive_v1.md`, this file. No
+`ad_interfaces` change.
+
+**Recommended next task:** Highway Merge Lateral Path Primitive v1 -- consume
+the committed target-corridor intent and generate a source-grounded
+ramp-to-mainline reference path for the existing lateral controller, without
+publishing steering directly or a second CtrlCmd publisher. **Prerequisite:** on
+the committed route the ego is already on `route:0` (CASE B), so a
+ramp-to-mainline path has no consumer scenario -- a route/actor-spawn placing
+the ego on `route:0:left:1` through the merge zone (or an explicit decision to
+model the ego-on-ramp scenario) must come first.
+
+---
+
 ## Highway Merge Response Integration v1 — COMPLETE
 
 Branch `feat/highway-merge-response-integration-v1`, from merged PR #22 main

@@ -201,6 +201,22 @@ struct PlannerTickResult {
   std::size_t claim_count{0};
 };
 
+// Highway Merge Mission Primitive state, exposed to BehaviorTree conditions.
+// Decoupled from ad_planner/planning/highway_merge_mission.hpp so the context /
+// BT layer carries no Frenet / route-geometry dependency. `state` mirrors
+// HighwayMergeMissionState's underlying value (0 == kInactive). AdPlannerNode
+// recomputes this at the top of every tick, before the behavior tree runs;
+// `committed` is monotone within a traversal (a post-commit authorization loss
+// does not clear it), everything else follows the pure state machine.
+struct HighwayMergeMissionContext {
+  std::uint8_t state{0};
+  bool active{false};
+  bool committed{false};
+  // Echo of the fresh upstream authorization this tick, kept separate from
+  // `committed`.
+  bool authorized_now{false};
+};
+
 class PlannerContext {
 public:
   double steady_time_s{0.0};
@@ -215,6 +231,11 @@ public:
   // advisory is in hand. A read-only BT condition (HighwayMergeReady) exposes
   // it; no production tree transition consumes it yet.
   bool highway_merge_authorized{false};
+
+  // Highway Merge Mission Primitive state (opt-in, default INACTIVE). A
+  // read-only BT condition (HighwayMergeCommitted) exposes the commit fact; no
+  // production tree transition consumes it yet.
+  HighwayMergeMissionContext highway_merge_mission;
 
   void begin_tick() {
     staged_command_ = full_brake_command();
