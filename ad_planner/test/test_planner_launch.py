@@ -391,6 +391,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "cut_in_response",
         "roundabout_gap_risk",
         "roundabout_gap_response",
+        "highway_merge_gap_risk",
         "enable_cut_in_response_constraint",
         "enable_roundabout_response_constraint",
         "path_tracking_backend",
@@ -482,6 +483,50 @@ def test_cut_in_risk_is_opt_in_and_uses_active_corridor(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="cut_in_risk must be true or false"):
         module._create_cut_in_risk_node(
             _launch_context(data_dir=str(tmp_path), cut_in_risk="sometimes")
+        )
+
+
+def test_highway_merge_gap_risk_node_is_opt_in_and_uses_active_corridor(
+    monkeypatch, tmp_path
+):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    disabled = _launch_context(
+        data_dir=str(tmp_path), highway_merge_gap_risk="false"
+    )
+    assert module._create_highway_merge_gap_risk_node(disabled) is None
+
+    enabled = _launch_context(
+        data_dir=str(tmp_path), highway_merge_gap_risk="true"
+    )
+    node = module._create_highway_merge_gap_risk_node(enabled)
+    assert isinstance(node, Node)
+    assert node._Node__node_executable == "ad_highway_merge_gap_risk_node"
+    overrides = _normalized_parameter_mapping(
+        node._Node__parameters[1], enabled
+    )
+    assert overrides == {
+        "data_dir": str(tmp_path),
+        "route_corridor_file": "map/route_corridor.json",
+        "route_corridor.expected_global_path_sha256": hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest(),
+    }
+
+    with pytest.raises(
+        RuntimeError, match="highway_merge_gap_risk must be true or false"
+    ):
+        module._create_highway_merge_gap_risk_node(
+            _launch_context(
+                data_dir=str(tmp_path), highway_merge_gap_risk="maybe"
+            )
         )
 
 

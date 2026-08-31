@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "frame_id": "map",
+  "route_corridor_path": "ad_data/map/route_corridor.json",
+  "route_corridor_link_set_sha256": "5ce0fd57da07b83221c0a4d117b0606b2d9c094c8de476a7d1176c78a4dc5b0f",
+  "provenance": {
+    "source_lane": "route:0:left:1 in the checksum-verified route corridor cache. Its single source link A2256W000409 is waypoint_idx 0 of the ad_morai_bridge_dev 'kcity-highway' actor preset (ad_morai_bridge_dev/config/actor_presets.yaml / actor_presets.provenance.yaml, pinned link_set_sha256 5ce0fd57da07b83221c0a4d117b0606b2d9c094c8de476a7d1176c78a4dc5b0f -- identical to route_corridor.json source_sha256['link_set.json']). route:0:left:1 is a left-adjacent acceleration lane: its lateral offset to primary route route:0 falls from ~+3.94 m at its first station to 0.0 m at its last, i.e. it tapers into route:0. route:0's posted speed limit steps 11.11 -> 33.33 m/s at s ~ 1119, the highway on-ramp entry.",
+    "target_lane": "No separate physical target-lane centerline exists past the merge point (route:0:left:2 is a further-left parallel lane, not the through lane). The post-merge primary route route:0 IS the mainline through lane, so it is used as the target merge corridor. Ego and objects are both projected onto route:0; longitudinal ordering / gaps are route:0 stations.",
+    "derivation": "route_s_zone_entry_m / route_s_merge_complete_m are the first / last route_s_m of route:0:left:1 in the route corridor cache. ad_highway_merge_gap_risk re-derives them from that lane at startup and fails to start on a mismatch beyond merge_geometry_consistency_margin_m. merge_reference_route_s_m = route_s_merge_complete_m (the station by which the acceleration lane ceases to exist and the merge is physically resolved; the target-lane lateral offset there is 0.0)."
+  },
+  "merge_zones": [
+    {
+      "merge_zone_id": "kcity_highway_onramp",
+      "source_lane_sequence_id": "route:0:left:1",
+      "target_lane_sequence_id": "route:0",
+      "route_s_zone_entry_m": 1118.7417511691015,
+      "route_s_merge_complete_m": 1286.1546454384027
+    }
+  ]
+}

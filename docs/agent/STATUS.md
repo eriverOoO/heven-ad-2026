@@ -1,5 +1,98 @@
 # STATUS
 
+## Highway Merge Gap Risk v1 — COMPLETE
+
+Branch `feat/highway-merge-gap-risk-v1`, from merged PR #20 main
+`b81935874eadb74579a69e0c108ca686e10057bd`. New opt-in policy-free facts node
+`ad_highway_merge_gap_risk`: `/ad/planning/dynamic_object_risks`
+(`DynamicObjectRiskArray`) + `/ad/localization/odometry` + a fixed
+source-grounded merge zone -> `/ad/planning/highway_merge_gap_risks`
+(`HighwayMergeGapRiskArray`). No MERGE/WAIT/GO/YIELD/HOLD/RELEASE/lane-change/
+accelerate/decelerate/merge-allowed/merge-safe/accepted-gap/safe-gap/
+requested-speed/CtrlCmd/brake/throttle/steering/risk-score/planner-consumer/
+BehaviorTree output. Facts only.
+
+Merge geometry (`ad_planner/config/highway_merge.json`, zone
+`kcity_highway_onramp`): source lane `route:0:left:1` (single link
+`A2256W000409` = waypoint 0 of the `ad_morai_bridge_dev` `kcity-highway` actor
+preset, pinned `link_set_sha256 5ce0fd57…` identical to the corridor's
+`source_sha256["link_set.json"]`) is a left-adjacent acceleration lane tapering
+into primary route `route:0` (lateral offset +3.94 m -> 0.0 m; `route:0` speed
+limit steps 11.11 -> 33.33 m/s at s ~ 1119). Target corridor = `route:0` itself
+(post-merge primary route is the mainline; no separate target-lane centerline
+exists — documented). `route_s_zone_entry/merge_complete = 1118.7418 /
+1286.1546` are the first/last `route_s_m` of `route:0:left:1` in the
+checksum-verified `route_corridor.json`; the node re-derives them at startup and
+fails to start on a mismatch > 2 m, unknown lane id, target lane not spanning
+the zone, or degenerate station window. `merge_reference_route_s_m =
+route_s_merge_complete_m` (where the accel lane ends; target lateral offset 0).
+
+Ego merge timing: constant-current-speed ETA onto `merge_reference_route_s_m`
+along `project_to_frenet(route:0, ego)` (`s_m` / `s_dot_mps`); invalid when ego
+route speed < 0.5, ego past the merge station this lap, or route distance to
+zone entry > 400 m. Per object: ego projected onto the full
+`route:0`; every object current + predicted centroid projected onto a
+**station-bounded window** of `route:0` around the merge zone (covers the
+approach bound + relevance window; keeps cost `O(objects·samples·window
+points)`, independent of the 2184 m loop; a far object clamps to a window end
+and reports `relevant_to_merge=false` with route/speed context zeroed). A far
+ego (outside the window) still publishes an inactive frame, never a rejection. `relevant_to_merge` = laterally in the
+target corridor AND route station in `[zone_entry - 150, merge_complete + 120]`
+(generous report bounds, not a policy threshold), OR a predicted centroid does
+so — window test first, before any merge-time field. Facts: `delta_s_now_m`;
+`object_longitudinal_speed_mps` (current velocity resolved onto the route
+tangent, NOT differentiated from prediction) + `relative_longitudinal_speed_mps`;
+`delta_s_at_merge_m` (predicted route station at `ego_merge_time_s` minus the
+merge reference — interpolated over the discrete prediction when it spans the
+ego merge time, else constant-speed extrapolation with
+`prediction_covers_merge_time=false`) + mutually-exclusive
+`is_ahead/behind/alongside_at_merge` (5 m band);
+`longitudinal_closing_speed_mps` (`-sign(delta_s_now)·rel_long_speed`) +
+`time_to_route_coincidence_s`; `predicted_min_route_gap_m` (min longitudinal
+separation vs a constant-speed ego route rollout over the horizon);
+`prediction_horizon_s`; copied `ttc/cpa/min_sep`. Array summary:
+`nearest_leading/trailing` (smallest `|delta_s_at_merge|` each side, lexicographic
+UUID tiebreak) + `merge_gap_m` (leading − trailing span). Stateless; malformed
+input never latches.
+
+Validation: interface contract 12/12; `test_highway_merge_gap_risk` 34/34 (core
++ curved-geometry base_link-x-misleads + windowed-lane far-object clamp +
+nearest-trailing arbitration + node frame contract). Canonical live replay: ego
+swept `route_s = 1040 → 1160` at 8 m/s on the real `route:0` centerline, 4
+mainline objects + one merging NPC per frame + one far-ego frame -> 6/6 frames,
+0 rejected, 25 relevant object-frames, 20 ahead / 5 behind, 10 closing w/
+coincidence time, 15 prediction-covers-merge-time / 10 not, 5
+merging-predicted-enter, 5 merge-gap-valid (median 110.8 m); far-ego frame
+inactive (not rejected); representative (ego s=1130): merge ETA 19.5 s,
+`delta_s_at_merge` +69.9 m / −28.0 m now, merge gap 95.4 m; internal callback
+latency ~15.6 / 15.8 / 16.7 ms median/p95/max for a 5-object × 24-sample stress
+frame; no NaN/Inf/exceptions. Isolated `colcon
+build` of `ad_interfaces` + `ad_planner` passes. Regression: `ad_planner` gtest
+suite + cut-in / roundabout / external-speed / dynamic-object-risk / planner
+launch tests unchanged; `test_mppi_nav2_launch` remains the known unrelated host
+dependency failure.
+
+Files: `ad_interfaces/msg/HighwayMergeGapRisk.msg`,
+`HighwayMergeGapRiskArray.msg`, `ad_interfaces/CMakeLists.txt`,
+`ad_interfaces/test/test_interface_contract.py`; `ad_planner`
+`include/ad_planner/planning/highway_merge_gap_risk.hpp`,
+`include/ad_planner/io/merge_geometry_loader.hpp`,
+`src/planning/highway_merge_gap_risk.{cpp,_node.{hpp,cpp},_main.cpp}`,
+`src/io/merge_geometry_loader.cpp`, `config/highway_merge.json`,
+`config/highway_merge_gap_risk.yaml`, `launch/highway_merge_gap_risk.launch.py`,
+`launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_highway_merge_gap_risk.cpp,_launch.py,_runtime.py,
+test_planner_launch.py}`; `docs/planning/highway_merge_gap_risk_v1.md`, this
+file.
+
+**Recommended next task:** Highway Merge Gap Response v1 — consume
+HighwayMergeGapRisk and produce a planner-facing MERGE_READY versus WAIT/HOLD
+advisory using an explicit gap / time-to-coincidence policy, requiring
+`prediction_covers_merge_time` for every relevant object, without directly
+commanding lane change, steering, acceleration, or CtrlCmd.
+
+---
+
 ## Planner Roundabout Response Constraint v1 — COMPLETE
 
 Branch `feat/planner-roundabout-constraint-v1`, from merged PR #19 main
