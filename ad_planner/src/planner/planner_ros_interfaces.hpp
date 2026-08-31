@@ -9,6 +9,7 @@
 #include <ad_interfaces/msg/cut_in_response.hpp>
 #include <ad_interfaces/msg/planner_status.hpp>
 #include <ad_interfaces/msg/predicted_object_array.hpp>
+#include <ad_interfaces/msg/roundabout_gap_response.hpp>
 #include <ad_morai_interfaces/msg/collision_array.hpp>
 #include <ad_morai_interfaces/msg/ctrl_cmd.hpp>
 #include <ad_morai_interfaces/msg/ego_vehicle_status.hpp>
@@ -30,6 +31,7 @@ struct PlannerRosInterfaceConfig {
   bool stop_line_enabled{false};
   bool external_velocity_enabled{false};
   bool cut_in_response_constraint_enabled{false};
+  bool roundabout_response_constraint_enabled{false};
 };
 
 struct PlannerRosCallbacks {
@@ -47,6 +49,8 @@ struct PlannerRosCallbacks {
   std::function<void(const std_msgs::msg::Int8 &)> traffic_signal;
   std::function<void(const std_msgs::msg::Bool &)> stop_line;
   std::function<void(const ad_interfaces::msg::CutInResponse &)> cut_in_response;
+  std::function<void(const ad_interfaces::msg::RoundaboutGapResponse &)>
+      roundabout_response;
   std::function<void()> tuning_lease;
   std::function<std::pair<bool, std::string>(bool)> hold_control;
   std::function<std::pair<bool, std::string>()> reset_controllers;
@@ -65,6 +69,10 @@ public:
   // No-op unless the cut-in response constraint is enabled (the publisher is
   // only created in that case).
   void publish_cut_in_speed_limit(float value);
+
+  // No-op unless the roundabout response constraint is enabled (the publisher
+  // is only created in that case).
+  void publish_roundabout_speed_limit(float value);
 
 private:
   PlannerRosCallbacks callbacks_;
@@ -93,6 +101,10 @@ private:
       cut_in_response_subscription_;
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr
       cut_in_speed_limit_publisher_;
+  rclcpp::Subscription<ad_interfaces::msg::RoundaboutGapResponse>::SharedPtr
+      roundabout_response_subscription_;
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr
+      roundabout_speed_limit_publisher_;
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr
       tuning_lease_subscription_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr tuning_hold_service_;

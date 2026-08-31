@@ -1,5 +1,90 @@
 # STATUS
 
+## Planner Roundabout Response Constraint v1 — COMPLETE
+
+Branch `feat/planner-roundabout-constraint-v1`, from merged PR #19 main
+`5c64c77556f741dbe978e914c1ea69a83abf263d`. First roundabout change that can
+alter production planner longitudinal behaviour. **Opt-in, off by default**
+(`enable_roundabout_response_constraint: false`): disabled ⇒ no subscription, no
+observability publisher, nothing read, behaviour identical to current main.
+
+Integration point: the existing optional 6th `target_speed_mps` arg of
+`PathTrackingController::update()` in `run_path_tracking()` (`FollowGlobalPath`
+leaf) — the same point the cut-in constraint (PR #16) uses. No second
+longitudinal controller, no extra `CtrlCmd`, no steering/path/lane/BehaviorTree/
+tracker/prediction/risk/roundabout-policy change. Exactly one intended
+`/ad/control/command` publisher remains.
+
+Consumes `RoundaboutGapResponse` **only** (never `RoundaboutGapRisk`, never the
+legacy first-interval fields). Pure helper `roundabout_response_speed_limit()`
+(`roundabout_speed_constraint.hpp`, in `ad_planner_core`, no ROS-message dep):
+missing/stale/inactive/RELEASE/unknown-action → `nullopt`; HOLD → `0.0`;
+YIELD → `ego_speed_mps * sqrt(available_distance_m / comfortable_stop_distance_m)`
+which is algebraically exactly `sqrt(2 * a_comfortable * available_distance_m)`
+(the ego-speed terms cancel) — the response's own comfortable-stop envelope,
+read through its published policy facts, **no deceleration constant / standoff /
+gap threshold duplicated in the planner, no new yield-speed parameter**. Malformed
+YIELD facts (non-finite, `available<=0`, `comfortable_stop<=0`, negative ego
+speed) → `nullopt`. Freshness is steady-receipt-time only
+(`roundabout_response_max_age_s: 0.5`); the response header stamp is never
+consulted, so future/backward/duplicate stamps cannot extend freshness or latch
+state. HOLD never latches; a stale RELEASE is never retained.
+
+New `combine_speed_limits(a, b)` (`external_speed_limit.hpp`): symmetric min of
+present finite optionals, `nullopt` if both absent. `run_path_tracking()` clamps
+each of the cut-in and roundabout caps against the nominal cruise target, then
+combines: `final = min(nominal, cut_in_if_active, roundabout_if_active)` —
+order-independent, most-restrictive wins, RELEASE never lifts a lower cut-in cap.
+
+Config (`config/planner.yaml`): `enable_roundabout_response_constraint: false`,
+`roundabout_response_max_age_s: 0.5`, `topics.roundabout_gap_response`,
+`topics.roundabout_speed_limit` (`std_msgs/Float32` observability: active cap or
+`-1.0`, published only when enabled). `planner.launch.py` gained
+`roundabout_gap_response` + `enable_roundabout_response_constraint` args; enabling
+either also starts `ad_roundabout_gap_response` + (forced) `ad_roundabout_gap_risk`.
+
+Scope limitation retained (same as cut-in): `PerceptionMission` (DWA/Frenet/MPPI)
+is not constrained — `VehicleConstraints.maximum_speed_mps` is strictly-positive
+so HOLD's `0.0` cannot be expressed and a DWA speed-cap change could perturb
+lateral `(v, ω)` selection. `VehicleConstraints.maximum_speed_mps` not changed.
+
+Validation: `test_roundabout_speed_constraint.cpp` 22 pure cases;
+`test_external_speed_limit.cpp` 14 (composition + Phase-13 cut-in×roundabout
+matrix + order independence); `test_planner_launch.py` +2 (declared args, opt-in
+node composition, default-off override absent). Full `ad_planner`
+non-launch-runtime suite **40/40** (31 gtest + 9 pytest, incl. pre-existing
+cut-in constraint tests). Live `test_planner_roundabout_constraint.py` (isolated):
+`ad_planner` in `FollowGlobalPath`, ego 8 m/s — baseline governed target 16.25;
+RELEASE 16.25 (byte-identical no-op); YIELD (available 34 m) governed target
+11.063 = `sqrt(2*1.8*34)`, above ego speed, no stop; HOLD (available 8 m) governed
+target 0.0, command flips to brake; stale → 16.25 returns; steering byte-identical
+across all states; 1 `/ad/control/command` publisher; 0 NaN/Inf/exceptions.
+`test_planner_cut_in_constraint.py` regression passes unchanged.
+`test_frenet_runtime_contract` passes isolated (only errors under the parallel
+`colcon test` run — resource contention, documented pattern). Pre-existing
+unrelated host failures, not caused by this change: `test_mppi_nav2_launch`
+(nav2 absent, per PR #17-#19 STATUS entries); `test_cut_in_response_runtime`
+(verified to fail identically on a changes-stashed clean 5c64c77 tree —
+`ad_dynamic_object_risk_node` never publishes frame 0 and hangs; no `ad_planner`
+node in the failing assertion). Isolated `colcon build` of `ad_interfaces` +
+`ad_planner` clean.
+
+Files: `ad_planner` `include/ad_planner/planning/{external_speed_limit.hpp,
+roundabout_speed_constraint.hpp}`, `src/planning/{external_speed_limit.cpp,
+roundabout_speed_constraint.cpp}`, `src/planner/planner_node.cpp`,
+`src/planner/planner_ros_interfaces.{hpp,cpp}`, `config/planner.yaml`,
+`launch/planner.launch.py`, `CMakeLists.txt`,
+`test/{test_roundabout_speed_constraint.cpp,test_external_speed_limit.cpp,
+test_planner_roundabout_constraint.py,test_planner_launch.py}`;
+`docs/planning/planner_roundabout_constraint_v1.md`, this file. `ad_interfaces`
+untouched (no new message).
+
+**Recommended next task:** Highway Merge Gap Risk v1 — reuse Dynamic Object Risk
+and route-relative geometry to estimate front/rear merge-conflict timing and
+usable gap facts, without implementing lane-change or merge GO/WAIT policy yet.
+
+---
+
 ## Roundabout Gap Response v1 — COMPLETE
 
 Branch `feat/roundabout-gap-response-v1`, from merged PR #18 main

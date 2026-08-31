@@ -6,6 +6,7 @@
 #include <ad_interfaces/msg/predicted_object.hpp>
 #include <ad_interfaces/msg/predicted_object_array.hpp>
 #include <ad_interfaces/msg/predicted_state.hpp>
+#include <ad_interfaces/msg/roundabout_gap_response.hpp>
 #include <ad_morai_interfaces/msg/collision_array.hpp>
 #include <ad_morai_interfaces/msg/ctrl_cmd.hpp>
 #include <ad_morai_interfaces/msg/ego_vehicle_status.hpp>
@@ -64,6 +65,8 @@
 #include "ad_planner/local_planning/local_motion_factory.hpp"
 #include "ad_planner/planner/planner_node.hpp"
 #include "ad_planner/planning/cut_in_speed_constraint.hpp"
+#include "ad_planner/planning/external_speed_limit.hpp"
+#include "ad_planner/planning/roundabout_speed_constraint.hpp"
 #include "ad_planner/visualization/path_tracking_markers.hpp"
 #include "ad_planner/visualization/planner_visualization.hpp"
 #include "ad_planner/visualization/route_markers.hpp"
@@ -397,6 +400,17 @@ public:
     cut_in_response_max_age_s_ = positive_finite_parameter(
         declare_parameter<double>("cut_in_response_max_age_s", 0.5),
         "cut_in_response_max_age_s");
+
+    // Opt-in roundabout gap response longitudinal constraint. Default off with
+    // the same guarantee as the cut-in constraint: no subscription, nothing
+    // read, planner behaviour identical to a build without this feature. RELEASE
+    // removes only the roundabout cap; YIELD caps at the response's own
+    // comfortable-stop envelope; HOLD caps the path-tracking target at 0.0.
+    roundabout_response_constraint_enabled_ =
+        declare_parameter<bool>("enable_roundabout_response_constraint", false);
+    roundabout_response_max_age_s_ = positive_finite_parameter(
+        declare_parameter<double>("roundabout_response_max_age_s", 0.5),
+        "roundabout_response_max_age_s");
     // The path-tracking backend's own configured cruise target, used only as the
     // ceiling for the min() clamp so the constraint can never raise the target.
     // Re-read on every controller rebuild (see reset_controllers).
@@ -786,6 +800,9 @@ private:
     callbacks.cut_in_response = [this](const auto &message) {
       on_cut_in_response(message);
     };
+    callbacks.roundabout_response = [this](const auto &message) {
+      on_roundabout_response(message);
+    };
     callbacks.tuning_lease = [this]() {
       tuning_lease_received_ = true;
       tuning_lease_receipt_s_ = steady_now();
@@ -817,7 +834,8 @@ private:
             road_gate_enabled_, planner_config_.traffic.stop_line_enabled,
             local_motion_backend_kind_ == LocalMotionBackendKind::kMppiNav2 &&
                 local_motion_runtime_ != nullptr,
-            cut_in_response_constraint_enabled_},
+            cut_in_response_constraint_enabled_,
+            roundabout_response_constraint_enabled_},
         std::move(callbacks));
   }
 
@@ -1149,6 +1167,13 @@ private:
     cut_in_response_receipt_steady_s_ = steady_now();
   }
 
+  void on_roundabout_response(
+      const ad_interfaces::msg::RoundaboutGapResponse &message) {
+    roundabout_response_message_ = message;
+    roundabout_response_received_ = true;
+    roundabout_response_receipt_steady_s_ = steady_now();
+  }
+
   // The external upper speed limit the cut-in response asks the longitudinal
   // path to honour this tick, already clamped so it can only ever lower the
   // path-tracking target. std::nullopt means "no constraint" and is applied as a
@@ -1181,6 +1206,45 @@ private:
     return capped;
   }
 
+  // The external upper speed limit the roundabout gap response asks the
+  // longitudinal path to honour this tick, already clamped so it can only ever
+  // lower the path-tracking target. std::nullopt means "no roundabout
+  // constraint" (RELEASE, inactive, missing, stale, or malformed) and is a
+  // byte-identical no-op. HOLD returns 0.0; YIELD returns the response's own
+  // comfortable-stop speed envelope. Never depends on the response header
+  // stamp - freshness is measured from the steady receipt time only, so a
+  // future, backward, or duplicate stamp can neither extend freshness nor latch
+  // any state.
+  std::optional<double> roundabout_response_target_speed_override() const {
+    if (!roundabout_response_constraint_enabled_ ||
+        !roundabout_response_received_) {
+      return std::nullopt;
+    }
+    RoundaboutResponseConstraintInput input;
+    input.received = true;
+    input.fresh = context_.steady_time_s -
+                      roundabout_response_receipt_steady_s_ <=
+                  roundabout_response_max_age_s_;
+    input.active = roundabout_response_message_.active;
+    input.action = static_cast<int>(roundabout_response_message_.action);
+    input.ego_speed_mps =
+        static_cast<double>(roundabout_response_message_.ego_speed_mps);
+    input.available_distance_m =
+        static_cast<double>(roundabout_response_message_.available_distance_m);
+    input.comfortable_stop_distance_m = static_cast<double>(
+        roundabout_response_message_.comfortable_stop_distance_m);
+    const auto limit = roundabout_response_speed_limit(input);
+    if (!limit) {
+      return std::nullopt;
+    }
+    const double capped =
+        std::min(path_tracking_nominal_target_speed_mps_, *limit);
+    if (capped >= path_tracking_nominal_target_speed_mps_) {
+      return std::nullopt;
+    }
+    return capped;
+  }
+
   ControllerResult remember(ControllerResult result, std::string frame) {
     last_controller_result_ = result;
     last_result_frame_ = std::move(frame);
@@ -1189,13 +1253,21 @@ private:
 
   ControllerResult run_path_tracking() {
     const auto cut_in_target_override = cut_in_response_target_speed_override();
+    const auto roundabout_target_override =
+        roundabout_response_target_speed_override();
     last_cut_in_constraint_limit_mps_ = cut_in_target_override;
+    last_roundabout_constraint_limit_mps_ = roundabout_target_override;
+    // The two external longitudinal constraints are independent upper bounds:
+    // the most restrictive active one wins and the order they are combined in
+    // never matters (combine_speed_limits is symmetric).
+    const auto combined_target_override = combine_speed_limits(
+        cut_in_target_override, roundabout_target_override);
     return remember(
         path_tracking_->update(context_.inputs.status.value.pose,
                                context_.inputs.status.value.speed_mps,
                                control_period_s_, 0,
                                context_.inputs.status.value.gear,
-                               cut_in_target_override),
+                               combined_target_override),
         "map");
   }
 
@@ -1641,6 +1713,7 @@ private:
     context_.steady_time_s = steady_now();
     last_controller_result_.reset();
     last_cut_in_constraint_limit_mps_.reset();
+    last_roundabout_constraint_limit_mps_.reset();
     // A tuning hold suppresses actuation but must not suppress read-only TF
     // and pose preparation. The tuner waits for inputs_ready before resetting
     // and releasing control, so skipping this work while held creates a
@@ -1695,6 +1768,15 @@ private:
       ros_interfaces_->publish_cut_in_speed_limit(
           last_cut_in_constraint_limit_mps_
               ? static_cast<float>(*last_cut_in_constraint_limit_mps_)
+              : -1.0F);
+    }
+    if (roundabout_response_constraint_enabled_) {
+      // Observability only: the active roundabout cap this tick, or -1.0 when
+      // the constraint did not lower the target. Only published when the
+      // feature is enabled, so the default launch graph is unchanged.
+      ros_interfaces_->publish_roundabout_speed_limit(
+          last_roundabout_constraint_limit_mps_
+              ? static_cast<float>(*last_roundabout_constraint_limit_mps_)
               : -1.0F);
     }
     if (last_controller_result_) {
@@ -1846,6 +1928,13 @@ private:
   double path_tracking_nominal_target_speed_mps_{16.25};
   ad_interfaces::msg::CutInResponse cut_in_response_message_;
   std::optional<double> last_cut_in_constraint_limit_mps_;
+
+  bool roundabout_response_constraint_enabled_{false};
+  bool roundabout_response_received_{false};
+  double roundabout_response_max_age_s_{0.5};
+  double roundabout_response_receipt_steady_s_{0.0};
+  ad_interfaces::msg::RoundaboutGapResponse roundabout_response_message_;
+  std::optional<double> last_roundabout_constraint_limit_mps_;
   visualization_msgs::msg::MarkerArray route_profile_markers_;
 
   std::unique_ptr<PlannerRosInterfaces> ros_interfaces_;

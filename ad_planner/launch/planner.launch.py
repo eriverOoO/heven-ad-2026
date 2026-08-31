@@ -209,6 +209,18 @@ def _create_planner_node(context):
         overrides["enable_cut_in_response_constraint"] = (
             cut_in_response_constraint_override == "true"
         )
+    roundabout_response_constraint_override = LaunchConfiguration(
+        "enable_roundabout_response_constraint", default=""
+    ).perform(context).strip().lower()
+    if roundabout_response_constraint_override:
+        if roundabout_response_constraint_override not in {"true", "false"}:
+            raise RuntimeError(
+                "enable_roundabout_response_constraint must be empty, true, "
+                "or false"
+            )
+        overrides["enable_roundabout_response_constraint"] = (
+            roundabout_response_constraint_override == "true"
+        )
     overrides["route_corridor.expected_global_path_sha256"] = (
         _global_path_sha256(data_dir, selected_path)
     )
@@ -311,13 +323,33 @@ def _create_cut_in_risk_node(context, force=False):
     )
 
 
-def _create_roundabout_gap_risk_node(context):
+def _roundabout_response_constraint_requested(context):
+    value = LaunchConfiguration(
+        "enable_roundabout_response_constraint", default=""
+    ).perform(context).strip().lower()
+    if value not in {"", "true", "false"}:
+        raise RuntimeError(
+            "enable_roundabout_response_constraint must be empty, true, or false"
+        )
+    return value == "true"
+
+
+def _roundabout_response_requested(context):
+    enabled = LaunchConfiguration(
+        "roundabout_gap_response", default="false"
+    ).perform(context).strip().lower()
+    if enabled not in {"true", "false"}:
+        raise RuntimeError("roundabout_gap_response must be true or false")
+    return enabled == "true" or _roundabout_response_constraint_requested(context)
+
+
+def _create_roundabout_gap_risk_node(context, force=False):
     enabled = LaunchConfiguration(
         "roundabout_gap_risk", default="false"
     ).perform(context).strip().lower()
     if enabled not in {"true", "false"}:
         raise RuntimeError("roundabout_gap_risk must be true or false")
-    if enabled == "false":
+    if enabled == "false" and not force:
         return None
 
     config_file = LaunchConfiguration("config_file").perform(context)
@@ -350,6 +382,26 @@ def _create_roundabout_gap_risk_node(context):
                     _global_path_sha256(data_dir, selected_path)
                 ),
             },
+        ],
+    )
+
+
+def _create_roundabout_gap_response_node(context):
+    # Enabling the planner-side roundabout constraint is useless without the
+    # response it consumes, so it also starts the response (and, above, the
+    # risk) node. The standalone roundabout_gap_response:=true does the same.
+    if not _roundabout_response_requested(context):
+        return None
+    package_share = get_package_share_directory("ad_planner")
+    return Node(
+        package="ad_planner",
+        executable="ad_roundabout_gap_response_node",
+        name="ad_roundabout_gap_response",
+        output="screen",
+        parameters=[
+            os.path.join(
+                package_share, "config", "roundabout_gap_response.yaml"
+            ),
         ],
     )
 
@@ -404,6 +456,14 @@ def _create_planner_actions(context):
         cut_in_risk_node = _create_cut_in_risk_node(context, force=True)
     cut_in_response_node = _create_cut_in_response_node(context)
     roundabout_gap_risk_node = _create_roundabout_gap_risk_node(context)
+    # The response node consumes /ad/planning/roundabout_gap_risks, so enabling
+    # it (or the planner-side constraint that consumes the response) also starts
+    # the roundabout gap risk node when it is not already requested.
+    if _roundabout_response_requested(context) and roundabout_gap_risk_node is None:
+        roundabout_gap_risk_node = _create_roundabout_gap_risk_node(
+            context, force=True
+        )
+    roundabout_gap_response_node = _create_roundabout_gap_response_node(context)
     planning_nodes = [planner_node, road_corridor_mask_node]
     if cut_in_risk_node is not None:
         planning_nodes.append(cut_in_risk_node)
@@ -411,6 +471,8 @@ def _create_planner_actions(context):
         planning_nodes.append(cut_in_response_node)
     if roundabout_gap_risk_node is not None:
         planning_nodes.append(roundabout_gap_risk_node)
+    if roundabout_gap_response_node is not None:
+        planning_nodes.append(roundabout_gap_response_node)
     config_file = LaunchConfiguration("config_file").perform(context)
     backend = _load_parameter_file(config_file).get("local_motion.backend")
     if backend != "mppi_nav2":
@@ -452,7 +514,13 @@ def generate_launch_description():
             DeclareLaunchArgument("cut_in_response", default_value="false"),
             DeclareLaunchArgument("roundabout_gap_risk", default_value="false"),
             DeclareLaunchArgument(
+                "roundabout_gap_response", default_value="false"
+            ),
+            DeclareLaunchArgument(
                 "enable_cut_in_response_constraint", default_value=""
+            ),
+            DeclareLaunchArgument(
+                "enable_roundabout_response_constraint", default_value=""
             ),
             DeclareLaunchArgument("path_tracking_backend", default_value=""),
             DeclareLaunchArgument("target_speed_mps", default_value=""),
