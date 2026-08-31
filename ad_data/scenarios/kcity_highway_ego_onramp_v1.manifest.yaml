@@ -1,0 +1,73 @@
+# Highway Merge Ego-on-Ramp Scenario v1 -- manifest
+#
+# VALIDATION-ONLY. Opt-in. Never a production default. Created because PR #24
+# (CASE B) proved the committed competition global path is route:0 (the
+# mainline) and the production ego never drives the acceleration lane, leaving
+# the Highway Merge Gap Risk -> Response -> Response Integration -> Mission
+# Primitive chain and its source-grounded commit / completion semantics with no
+# ego-on-ramp scenario to exercise them.
+#
+# This manifest does not own geometry. Every station / pose is derived from the
+# checksum-verified ad_data/map/route_corridor.json and the shipped
+# ad_planner/config/highway_merge.json.
+
+scenario_id: kcity-highway-ego-onramp-v1
+
+ego:
+  source_corridor: "route:0:left:1"          # real K-City acceleration lane, source link A2256W000409
+  start_link: A2256W000409
+  start_link_ratio: 0
+  # route:0:left:1 point 0, verbatim from route_corridor.json
+  start_pose:
+    x_m: 66.0109296059
+    y_m: 256.5335690919
+    z_m: 28.3102668207
+    yaw_rad: -1.568021          # lane tangent at the start (= -89.8410 deg)
+  # route:0 station the start pose projects to (project_to_frenet onto route:0)
+  start_route_s_m: 1118.74      # ~= merge zone entry: route:0:left:1 does not
+                                # extend upstream of the zone entry on this map
+  start_lateral_offset_to_route_0_m: 3.94
+
+target_corridor: "route:0"                    # mainline through lane / merge target
+
+merge_zone:
+  id: kcity_highway_onramp
+  route_s_zone_entry_m: 1118.7417511691015
+  route_s_merge_complete_m: 1286.1546454384027
+
+mission:
+  # derived by ad_planner (derive_highway_merge_commit_station):
+  # first route:0:left:1 station whose |lateral separation| to route:0 falls
+  # below commit_lateral_separation_m (3.5 m).
+  commit_route_s_m: 1213.28
+  commit_lateral_separation_m: 3.4957
+  # completion: ego passes route_s_merge_complete_m; ramp lateral offset ~ 0 there
+  complete_route_s_m: 1286.1546454384027
+  complete_lateral_separation_m: 0.0
+
+route_fixture:
+  path: ad_data/path/test_highway_merge_ego_ramp_path.txt
+  source_section: "route:0:left:1, all 336 points (route_s 1118.7418..1286.1546 m)"
+  target_section: "route:0, points with route_s in (1286.1546, ~1486.15] m (400 points)"
+  join: "route:0:left:1 last point == route:0 point at route_s 1286.1546 m exactly; no teleport"
+  production_route_unchanged: true
+
+traffic:
+  # deterministic mainline NPCs on route:0 (see kcity_highway_ego_onramp_v1.json)
+  - id: 101
+    role: front mainline vehicle
+    corridor: "route:0"
+    route_s_m: 1200
+    velocity_mps: 25.0
+  - id: 102
+    role: rear mainline vehicle
+    corridor: "route:0"
+    route_s_m: 1080
+    velocity_mps: 25.0
+  # note: the stock 'kcity-highway' actor preset (heven-highway-npc) spawns an
+  # NPC on route:0:left:1 -- the ego's lane here -- so it is deliberately NOT
+  # reused by this scenario.
+
+validation:
+  real_morai_run: false        # no MORAI simulator / grpc in this environment
+  method: "deterministic ROS pipeline replay + pure geometry tests"
