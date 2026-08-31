@@ -283,6 +283,13 @@ float32 arrival_delta_s
 bool temporal_gap_valid
 float32 temporal_gap_s
 bool occupancy_overlap
+uint16 predicted_conflict_interval_count
+bool later_reentry_detected
+bool any_occupancy_overlap
+bool minimum_temporal_gap_valid
+float32 minimum_temporal_gap_s
+float32 prediction_horizon_s
+bool prediction_covers_ego_exit
 bool ttc_valid
 float32 ttc_s
 bool cpa_valid
@@ -322,6 +329,14 @@ def test_roundabout_gap_risk_interface_is_stable_and_policy_free():
     assert message.relevant_to_conflict is False
     assert message.occupancy_overlap is False
     assert message.temporal_gap_s == 0.0
+    # All-interval summary defaults are the conservative "nothing proven" state.
+    assert message.predicted_conflict_interval_count == 0
+    assert message.later_reentry_detected is False
+    assert message.any_occupancy_overlap is False
+    assert message.minimum_temporal_gap_valid is False
+    assert message.minimum_temporal_gap_s == 0.0
+    assert message.prediction_horizon_s == 0.0
+    assert message.prediction_covers_ego_exit is False
     assert RoundaboutGapRiskArray().objects == []
     forbidden = {
         "go",
@@ -329,6 +344,7 @@ def test_roundabout_gap_risk_interface_is_stable_and_policy_free():
         "yield",
         "yield_required",
         "hold",
+        "release",
         "brake",
         "safe_to_enter",
         "gap_accepted",

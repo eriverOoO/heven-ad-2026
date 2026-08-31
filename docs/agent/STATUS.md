@@ -1,5 +1,86 @@
 # STATUS
 
+## Roundabout Gap Risk multi-interval summary — COMPLETE
+
+Branch `fix/roundabout-gap-multi-interval-summary`, from merged PR #17 main
+`f25cce2ffbaa1bed4e11586a7506a64adb0f39a2`. Makes the policy-free
+`RoundaboutGapRisk` interface safe for a future gap-response consumer: the v1
+first-interval fields (`object_entry/exit_time_s`, `arrival_delta_s`,
+`temporal_gap_s`, `occupancy_overlap`) describe only the FIRST contiguous
+predicted occupancy interval, so an early first exit could hide a later
+re-entry that overlaps the ego window. **Additive fields only; every v1 field
+keeps its exact meaning.** Still facts-only: no GO / YIELD / RELEASE / HOLD /
+speed / brake / steering / BehaviorTree / CtrlCmd.
+
+Unsafe counterexample (locked by
+`test_roundabout_gap_risk.cpp::RoundaboutMultiInterval.FirstIntervalClearsButSecondOverlapsEgo`
+and the runtime replay's object 5): ego occupancy `[4, 6]`, object occupies
+`[1, 2]` then `[5, 7]`. v1 first-interval facts: `occupancy_overlap = false`,
+`temporal_gap_s = 2` ("clear"). All-interval summary: `any_occupancy_overlap =
+true`, `minimum_temporal_gap_s = 0`, `later_reentry_detected = true`,
+`predicted_conflict_interval_count = 2`.
+
+New `RoundaboutGapRisk` fields (after `occupancy_overlap`):
+`uint16 predicted_conflict_interval_count` (contiguous inside-runs over the
+discrete predicted centroids; a current-inside object contributes a run from
+0.0; 0 when never inside), `bool later_reentry_detected` (count > 1),
+`bool any_occupancy_overlap` (any predicted interval strictly overlaps ego
+`[E0,E1]`; same strict/touching convention; valid only when ego entry+exit
+valid, else false), `bool minimum_temporal_gap_valid` + `float32
+minimum_temporal_gap_s` (min non-negative separation ego↔any interval; 0.0 on
+overlap and touching; valid only when ego entry+exit valid and ≥1 interval),
+`float32 prediction_horizon_s` (last predicted-centroid time, 0.0 if none;
+always finite), `bool prediction_covers_ego_exit` (ego exit valid AND
+`prediction_horizon_s + 1e-3 >= ego_exit_time_s` — data-coverage flag ONLY,
+not safe-to-enter). Open final interval (still inside at horizon end) →
+`O1 = +inf` for the overlap/gap math. No NaN/Inf in the message.
+
+Core: new `extract_conflict_intervals()` (one polygon test per predicted
+sample, same as v1) feeds both the first-interval fields (`intervals[0]`,
+byte-identical contract) and the summary. Per-frame cost stays `O(N·M)`; no
+all-pairs logic. Node `serialize()` + diagnostics keys
+(`multi_interval_objects`, `later_reentry`, `any_occupancy_overlap`,
+`minimum_temporal_gap_valid`, `prediction_covers_ego_exit`) +
+`ROUNDABOUT_GAP_RISK_RUNTIME_SUMMARY` extended. `RoundaboutGapRiskArray`
+unchanged.
+
+Tests: `test_roundabout_gap_risk` **47/47** (30 v1 + 17 new
+`RoundaboutMultiInterval`; `OnlyFirstContiguousOccupancyIntervalIsReported`
+kept + now also asserts the summary sees the re-entry).
+`test_interface_contract.py` **9/9** (declaration + conservative defaults +
+`release` added to forbidden set). `test_roundabout_gap_risk_runtime.py` live
+replay now sweeps 5 stations × 5 objects (added a leaves-then-re-enters
+object and gave the non-conflicting object a short 4 s prediction so
+`prediction_covers_ego_exit` is exercised in both states): 5/5 msgs,
+25 objects, 20 relevant object-frames, 4 unique UUIDs, 5 multi-interval
+object-frames, 5 later-reentry, 13 any-occupancy-overlap,
+20 minimum-temporal-gap-valid, 21 prediction-covers-ego-exit (the short
+object covers only at `s=886`); representative frame (ego `s=870`,
+`[2.512, 5.500]`) re-entry object: first-interval `overlap=false gap=1.012`,
+summary `intervals=2 any_overlap=true min_gap=0.0 reentry=true
+covers_exit=true`; short object `covers_exit=false` (horizon 4.0 < exit 5.5);
+0 NaN/Inf. publish→receive latency (loopback
+DDS probe, NOT compute) ~2.3 ms median / ~3.0 ms max (5 samples; run-to-run
+~1.5–3.5 ms). Full `ad_planner` ctest **42/43** (pre-existing
+`test_mppi_nav2_launch`, nav2 absent). `test_dynamic_object_risk` 38/38.
+Isolated `colcon build` of `ad_interfaces` + `ad_planner` clean.
+
+Files: `ad_interfaces/msg/RoundaboutGapRisk.msg`,
+`ad_interfaces/test/test_interface_contract.py`; `ad_planner`
+`include/ad_planner/planning/roundabout_gap_risk.hpp`,
+`src/planning/roundabout_gap_risk.cpp`,
+`src/planning/roundabout_gap_risk_node.{hpp,cpp}`,
+`test/{test_roundabout_gap_risk.cpp,test_roundabout_gap_risk_runtime.py}`;
+`docs/planning/roundabout_gap_risk_v1.md`, this file.
+
+**Recommended next task:** Roundabout Gap Response v1 — consume the all-interval
+`RoundaboutGapRisk` summary and produce a planner-facing YIELD/HOLD vs RELEASE
+advisory using an explicit temporal-gap policy, requiring
+`prediction_covers_ego_exit` for every relevant object, without publishing
+`CtrlCmd` or steering.
+
+---
+
 ## Roundabout Gap Risk v1 — COMPLETE
 
 Branch `feat/roundabout-gap-risk-v1`, from merged PR #16 main

@@ -211,8 +211,9 @@ TEST(RoundaboutObjectTiming, ObjectNeverEntersConflict)
 
 TEST(RoundaboutObjectTiming, OnlyFirstContiguousOccupancyIntervalIsReported)
 {
-  // Inside now, leaves at t = 2, re-enters at t = 4. v1 reports only the first
-  // interval [0, 2]; the re-entry is not represented.
+  // Inside now, leaves at t = 2, re-enters at t = 4. The first-interval fields
+  // report only [0, 2]; the re-entry is represented only in the all-interval
+  // summary (later_reentry_detected / predicted_conflict_interval_count).
   const auto ego = origin_ego(90.0, 0.0);
   const auto object = map_object(1U, 20.0, 20.0, 0.0, {
     {{1.0, 22.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 46.0, 20.0}},
@@ -224,6 +225,275 @@ TEST(RoundaboutObjectTiming, OnlyFirstContiguousOccupancyIntervalIsReported)
   EXPECT_NEAR(risk.object_entry_time_s, 0.0, 1e-9);
   EXPECT_TRUE(risk.object_exit_valid);
   EXPECT_NEAR(risk.object_exit_time_s, 2.0, 1e-9);
+  // First-interval fields unchanged, but the summary still sees the re-entry.
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+}
+
+// ---- all-interval summary (multi-interval, policy-consumer contract) ----
+
+TEST(RoundaboutMultiInterval, SingleIntervalMatchesFirstIntervalFacts)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 60.0, 20.0}}, {{2.0, 20.0, 20.0}}, {{3.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(6.0, 7.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 1U);
+  EXPECT_FALSE(risk.later_reentry_detected);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_TRUE(risk.minimum_temporal_gap_valid);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, risk.temporal_gap_s, 1e-9);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 3.0, 1e-9);  // ego 6 - object exit 3
+}
+
+TEST(RoundaboutMultiInterval, FirstIntervalClearsButSecondOverlapsEgo)
+{
+  // The central counterexample. ego [4, 6]; object occupies [1, 2] then [5, 7].
+  // First-interval facts say "clear, gap 2" -- the summary must say "overlap".
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 46.0, 20.0}},
+    {{4.0, 47.0, 20.0}}, {{5.0, 20.0, 20.0}}, {{6.0, 21.0, 20.0}},
+    {{7.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 6.0), object, params());
+  // First-interval fields (legacy diagnostics): clear, gap 2, no overlap.
+  EXPECT_NEAR(risk.object_entry_time_s, 1.0, 1e-9);
+  EXPECT_NEAR(risk.object_exit_time_s, 2.0, 1e-9);
+  EXPECT_FALSE(risk.occupancy_overlap);
+  EXPECT_NEAR(risk.temporal_gap_s, 2.0, 1e-9);
+  // All-interval summary: the re-entry overlaps the ego window.
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+  EXPECT_TRUE(risk.any_occupancy_overlap);
+  EXPECT_TRUE(risk.minimum_temporal_gap_valid);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 0.0, 1e-9);
+  EXPECT_TRUE(risk.prediction_covers_ego_exit);
+}
+
+TEST(RoundaboutMultiInterval, TwoSeparatedIntervalsReportMinimumGap)
+{
+  // ego [4, 5]; object [1, 2] (gap 2) and [8, 9] (gap 3) -> minimum 2.
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 46.0, 20.0}},
+    {{7.0, 47.0, 20.0}}, {{8.0, 20.0, 20.0}}, {{9.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 5.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_TRUE(risk.minimum_temporal_gap_valid);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 2.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, IntervalsOnBothSidesOfEgoNeverOverlap)
+{
+  // ego [4, 5]; object [1, 2] before and [7, 8] after -> gaps 2 and 2, no
+  // overlap even though a later interval exists.
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{6.0, 46.0, 20.0}},
+    {{7.0, 20.0, 20.0}}, {{8.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 5.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 2.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, FirstIntervalOverlapsSecondIrrelevant)
+{
+  // ego [1, 3]; object [2, 4] (overlap) then [8, 9].
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{2.0, 20.0, 20.0}}, {{4.0, 45.0, 20.0}}, {{7.0, 46.0, 20.0}},
+    {{8.0, 20.0, 20.0}}, {{9.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(1.0, 3.0), object, params());
+  EXPECT_TRUE(risk.occupancy_overlap);
+  EXPECT_TRUE(risk.any_occupancy_overlap);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 0.0, 1e-9);
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+}
+
+TEST(RoundaboutMultiInterval, BothIntervalsBeforeEgo)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 20.0, 20.0}},
+    {{4.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(6.0, 7.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 2.0, 1e-9);  // 6 - 4
+}
+
+TEST(RoundaboutMultiInterval, BothIntervalsAfterEgo)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{4.0, 20.0, 20.0}}, {{5.0, 45.0, 20.0}}, {{7.0, 20.0, 20.0}},
+    {{8.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(1.0, 2.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 2.0, 1e-9);  // 4 - 2
+}
+
+TEST(RoundaboutMultiInterval, TouchingBoundaryIsNotOverlapInSummary)
+{
+  // object [1, 2], ego [2, 3]: touch at t = 2 -> not overlap, min gap 0.
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(2.0, 3.0), object, params());
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_TRUE(risk.minimum_temporal_gap_valid);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 0.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, CurrentInsideExitsThenReenters)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 20.0, 20.0, 0.0, {
+    {{1.0, 22.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 46.0, 20.0}},
+    {{4.0, 20.0, 20.0}}, {{5.0, 21.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(3.5, 6.0), object, params());
+  EXPECT_TRUE(risk.object_in_conflict_now);
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+  // First interval [0, 2] clears before ego (3.5); the re-entry [4, open]
+  // overlaps the ego window.
+  EXPECT_FALSE(risk.occupancy_overlap);
+  EXPECT_TRUE(risk.any_occupancy_overlap);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 0.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, OpenFinalIntervalAfterEgoUsesEntryGap)
+{
+  // Object enters at 3 and is still inside at the last sample (open interval).
+  // ego [1, 2] -> the open interval is entirely after ego, gap = 3 - 2 = 1.
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 60.0, 20.0}}, {{3.0, 20.0, 20.0}}, {{4.0, 21.0, 20.0}},
+    {{5.0, 22.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(1.0, 2.0), object, params());
+  EXPECT_FALSE(risk.object_exit_valid);
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 1U);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_TRUE(risk.minimum_temporal_gap_valid);
+  EXPECT_NEAR(risk.minimum_temporal_gap_s, 1.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, NoConflictIntervalHasNoSummary)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 100.0, 100.0, 0.0, {
+    {{1.0, 100.0, 100.0}}, {{2.0, 120.0, 100.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(1.0, 2.0), object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 0U);
+  EXPECT_FALSE(risk.later_reentry_detected);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_FALSE(risk.minimum_temporal_gap_valid);
+  EXPECT_DOUBLE_EQ(risk.minimum_temporal_gap_s, 0.0);
+}
+
+TEST(RoundaboutMultiInterval, PredictionHorizonShorterThanEgoExitIsNotCovered)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{4.0, 46.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 5.5), object, params());
+  EXPECT_NEAR(risk.prediction_horizon_s, 4.0, 1e-9);
+  EXPECT_FALSE(risk.prediction_covers_ego_exit);
+}
+
+TEST(RoundaboutMultiInterval, PredictionHorizonExactlyReachesEgoExitIsCovered)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{5.5, 46.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 5.5), object, params());
+  EXPECT_NEAR(risk.prediction_horizon_s, 5.5, 1e-9);
+  EXPECT_TRUE(risk.prediction_covers_ego_exit);
+}
+
+TEST(RoundaboutMultiInterval, PredictionHorizonExceedsEgoExitIsCovered)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{9.0, 46.0, 20.0}}});
+  const auto risk = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 5.5), object, params());
+  EXPECT_NEAR(risk.prediction_horizon_s, 9.0, 1e-9);
+  EXPECT_TRUE(risk.prediction_covers_ego_exit);
+}
+
+TEST(RoundaboutMultiInterval, StoppedEgoLeavesAggregatesInvalidButIntervalsCounted)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  RoundaboutEgoTiming no_ego;   // entry_valid / exit_valid false
+  const auto object = map_object(1U, 20.0, 20.0, 0.0, {
+    {{1.0, 22.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 20.0, 20.0}},
+    {{4.0, 45.0, 20.0}}});
+  const auto risk =
+    compute_roundabout_gap_risk(square_zone(), ego, no_ego, object, params());
+  EXPECT_EQ(risk.predicted_conflict_interval_count, 2U);
+  EXPECT_TRUE(risk.later_reentry_detected);
+  EXPECT_FALSE(risk.any_occupancy_overlap);
+  EXPECT_FALSE(risk.minimum_temporal_gap_valid);
+  EXPECT_FALSE(risk.prediction_covers_ego_exit);
+  EXPECT_NEAR(risk.prediction_horizon_s, 4.0, 1e-9);
+}
+
+TEST(RoundaboutMultiInterval, DeterministicSummaryOnRepeatedInput)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const auto object = map_object(1U, 60.0, 20.0, 0.0, {
+    {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{3.0, 46.0, 20.0}},
+    {{5.0, 20.0, 20.0}}, {{6.0, 21.0, 20.0}}, {{7.0, 45.0, 20.0}}});
+  const auto a = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 6.0), object, params());
+  const auto b = compute_roundabout_gap_risk(
+    square_zone(), ego, ego_interval(4.0, 6.0), object, params());
+  EXPECT_EQ(a.predicted_conflict_interval_count, b.predicted_conflict_interval_count);
+  EXPECT_EQ(a.any_occupancy_overlap, b.any_occupancy_overlap);
+  EXPECT_EQ(a.minimum_temporal_gap_s, b.minimum_temporal_gap_s);
+  EXPECT_EQ(a.prediction_horizon_s, b.prediction_horizon_s);
+  EXPECT_EQ(a.prediction_covers_ego_exit, b.prediction_covers_ego_exit);
+}
+
+TEST(RoundaboutMultiInterval, AllSummaryOutputsFinite)
+{
+  const auto ego = origin_ego(90.0, 0.0);
+  const std::vector<RoundaboutEgoTiming> egos = {
+    ego_interval(4.0, 6.0), RoundaboutEgoTiming{}};
+  const std::vector<RoundaboutObjectInput> objects = {
+    map_object(1U, 60.0, 20.0, 0.0, {
+      {{1.0, 20.0, 20.0}}, {{2.0, 45.0, 20.0}}, {{5.0, 20.0, 20.0}},
+      {{7.0, 45.0, 20.0}}}),
+    map_object(2U, 20.0, 20.0, 0.0, {{{1.0, 21.0, 20.0}}}),
+    map_object(3U, 100.0, 100.0, 0.0, {{{1.0, 100.0, 100.0}}})};
+  for (const auto & timing : egos) {
+    for (const auto & object : objects) {
+      const auto risk = compute_roundabout_gap_risk(
+        square_zone(), ego, timing, object, params());
+      EXPECT_TRUE(std::isfinite(risk.minimum_temporal_gap_s));
+      EXPECT_TRUE(std::isfinite(risk.prediction_horizon_s));
+      EXPECT_GE(risk.minimum_temporal_gap_s, 0.0);
+    }
+  }
 }
 
 TEST(RoundaboutObjectTiming, ObjectStillInsideAtHorizonEndHasNoExit)

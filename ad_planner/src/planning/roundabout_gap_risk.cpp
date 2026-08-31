@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace ad_planner
 {
@@ -12,6 +15,20 @@ namespace
 {
 
 constexpr double kEgoStationToleranceM = 1.0e-3;
+
+// Absorbs float round-trip when comparing the (discrete) prediction horizon
+// against the ego exit ETA; far below the predictor sample spacing.
+constexpr double kPredictionCoverageToleranceS = 1.0e-3;
+
+// One contiguous "inside the conflict region" run over the discrete predicted
+// centroids. end_valid = false means the object is still inside at the last
+// predicted sample (open through the horizon).
+struct ConflictInterval
+{
+  double start_s{0.0};
+  bool end_valid{false};
+  double end_s{0.0};
+};
 
 bool finite(const double value)
 {
@@ -65,6 +82,43 @@ void relative_to_map(
   const double s = std::sin(ego_pose.yaw_rad);
   x_m = ego_pose.x + c * x_rel_m - s * y_rel_m;
   y_m = ego_pose.y + s * x_rel_m + c * y_rel_m;
+}
+
+// Scans every discrete predicted centroid and returns every contiguous
+// inside-the-conflict-region run, in time order. A currently-inside object
+// contributes a run starting at 0.0. Discrete-sample semantics: an entry is the
+// first predicted centroid inside the polygon, an exit the first subsequent
+// centroid outside it -- no interpolation.
+std::vector<ConflictInterval> extract_conflict_intervals(
+  const RoundaboutConflictZone & conflict,
+  const RoundaboutEgoState & ego,
+  const RoundaboutObjectInput & object,
+  const bool object_in_conflict_now)
+{
+  std::vector<ConflictInterval> intervals;
+  bool inside_prev = object_in_conflict_now;
+  if (object_in_conflict_now) {
+    intervals.push_back(ConflictInterval{0.0, false, 0.0});
+  }
+  for (const auto & state : object.predicted_states) {
+    double xk = 0.0;
+    double yk = 0.0;
+    relative_to_map(
+      ego.pose,
+      ego.longitudinal_speed_mps * state.time_s + state.x_rel_m,
+      state.y_rel_m, xk, yk);
+    const bool inside = point_in_conflict_polygon(conflict.polygon_m, xk, yk);
+    if (inside && !inside_prev) {
+      intervals.push_back(ConflictInterval{state.time_s, false, 0.0});
+    } else if (!inside && inside_prev && !intervals.empty() &&
+      !intervals.back().end_valid)
+    {
+      intervals.back().end_valid = true;
+      intervals.back().end_s = state.time_s;
+    }
+    inside_prev = inside;
+  }
+  return intervals;
 }
 
 void validate_object(const RoundaboutObjectInput & object)
@@ -255,41 +309,36 @@ RoundaboutGapRiskResult compute_roundabout_gap_risk(
   result.object_map_distance_to_conflict_m = result.object_in_conflict_now ?
     0.0 : distance_to_conflict_polygon(conflict.polygon_m, x_now, y_now);
 
-  // Walk the discrete predicted centroids in time order to bracket the object
-  // conflict occupancy interval. Each state is relative to the constant-velocity
-  // ego rollout, so ego_speed * time is added back before the map transform.
-  bool entered = result.object_in_conflict_now;
-  std::size_t entry_index = object.predicted_states.size();
-  if (result.object_in_conflict_now) {
+  // Scan every discrete predicted centroid into contiguous conflict-occupancy
+  // intervals. Each state is relative to the constant-velocity ego rollout, so
+  // ego_speed * time is added back before the map transform (inside the helper).
+  const std::vector<ConflictInterval> intervals =
+    extract_conflict_intervals(
+    conflict, ego, object, result.object_in_conflict_now);
+
+  // First-interval fields (unchanged contract): they describe intervals[0] only.
+  if (!intervals.empty()) {
     result.object_entry_valid = true;
-    result.object_entry_time_s = 0.0;
-    entry_index = 0U;
-  }
-  for (std::size_t index = 0U; index < object.predicted_states.size(); ++index) {
-    const auto & state = object.predicted_states[index];
-    double xk = 0.0;
-    double yk = 0.0;
-    relative_to_map(
-      ego.pose,
-      ego.longitudinal_speed_mps * state.time_s + state.x_rel_m,
-      state.y_rel_m, xk, yk);
-    const bool inside = point_in_conflict_polygon(conflict.polygon_m, xk, yk);
-    if (!entered) {
-      if (inside) {
-        entered = true;
-        entry_index = index;
-        result.object_entry_valid = true;
-        result.object_entry_time_s = state.time_s;
-      }
-      continue;
-    }
-    if (!inside && !result.object_exit_valid && index >= entry_index) {
-      result.object_exit_valid = true;
-      result.object_exit_time_s = state.time_s;
-    }
+    result.object_entry_time_s = intervals.front().start_s;
+    result.object_exit_valid = intervals.front().end_valid;
+    result.object_exit_time_s =
+      intervals.front().end_valid ? intervals.front().end_s : 0.0;
   }
   result.relevant_to_conflict =
     result.object_in_conflict_now || result.object_entry_valid;
+
+  // All-interval summary. later_reentry_detected protects a future response
+  // consumer from reading an early first exit as permanent clearance.
+  result.predicted_conflict_interval_count = static_cast<std::uint16_t>(
+    std::min<std::size_t>(
+      intervals.size(), std::numeric_limits<std::uint16_t>::max()));
+  result.later_reentry_detected = intervals.size() > 1U;
+  result.prediction_horizon_s = object.predicted_states.empty() ?
+    0.0 : object.predicted_states.back().time_s;
+  result.prediction_covers_ego_exit = ego_timing.entry_valid &&
+    ego_timing.exit_valid &&
+    (result.prediction_horizon_s + kPredictionCoverageToleranceS >=
+    ego_timing.exit_time_s);
 
   // Arrival delta (Phase 6/20).
   result.arrival_delta_valid =
@@ -321,6 +370,32 @@ RoundaboutGapRiskResult compute_roundabout_gap_risk(
       result.occupancy_overlap = false;
       result.temporal_gap_s = std::max(0.0, o0 - e1);
     }
+  }
+
+  // All-interval overlap / minimum separation (conservative aggregate over
+  // every predicted occupancy interval, not just the first). An interval still
+  // open at the horizon end has an unbounded upper bound.
+  if (ego_timing.entry_valid && ego_timing.exit_valid && !intervals.empty()) {
+    const double e0 = ego_timing.entry_time_s;
+    const double e1 = ego_timing.exit_time_s;
+    bool any_overlap = false;
+    double min_gap = std::numeric_limits<double>::infinity();
+    for (const auto & interval : intervals) {
+      const double o0 = interval.start_s;
+      const double o1 = interval.end_valid ?
+        interval.end_s : std::numeric_limits<double>::infinity();
+      if ((o0 < e1) && (e0 < o1)) {
+        any_overlap = true;
+        min_gap = 0.0;
+        continue;
+      }
+      const double gap = (o1 <= e0) ? (e0 - o1) : (o0 - e1);
+      min_gap = std::min(min_gap, std::max(0.0, gap));
+    }
+    result.any_occupancy_overlap = any_overlap;
+    result.minimum_temporal_gap_valid = true;
+    result.minimum_temporal_gap_s =
+      std::isfinite(min_gap) ? std::max(0.0, min_gap) : 0.0;
   }
 
   result.ttc_valid = object.ttc_valid;

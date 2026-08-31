@@ -120,6 +120,16 @@ struct RoundaboutGapRiskResult
   double temporal_gap_s{0.0};
   bool occupancy_overlap{false};
 
+  // All-interval summary (see RoundaboutGapRisk.msg). Every predicted occupancy
+  // interval is scanned, not just the first contiguous one above.
+  std::uint16_t predicted_conflict_interval_count{0U};
+  bool later_reentry_detected{false};
+  bool any_occupancy_overlap{false};
+  bool minimum_temporal_gap_valid{false};
+  double minimum_temporal_gap_s{0.0};
+  double prediction_horizon_s{0.0};
+  bool prediction_covers_ego_exit{false};
+
   bool ttc_valid{false};
   double ttc_s{0.0};
   bool cpa_valid{false};
