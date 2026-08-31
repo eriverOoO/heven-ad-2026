@@ -66,7 +66,9 @@
 #include "ad_planner/local_planning/local_motion_factory.hpp"
 #include "ad_planner/planner/planner_node.hpp"
 #include "ad_planner/planning/cut_in_speed_constraint.hpp"
+#include "ad_planner/io/merge_geometry_loader.hpp"
 #include "ad_planner/planning/external_speed_limit.hpp"
+#include "ad_planner/planning/highway_merge_mission.hpp"
 #include "ad_planner/planning/highway_merge_speed_constraint.hpp"
 #include "ad_planner/planning/roundabout_speed_constraint.hpp"
 #include "ad_planner/visualization/path_tracking_markers.hpp"
@@ -429,6 +431,48 @@ public:
         "highway_merge_response_max_age_s");
     expected_highway_merge_zone_ = declare_parameter<std::string>(
         "expected_highway_merge_zone", "kcity_highway_onramp");
+
+    // Opt-in Highway Merge Mission Primitive. Default off: no merge geometry is
+    // loaded, the mission state stays INACTIVE, and there is no BT / behaviour
+    // change. It commands nothing - it only tracks approach / waiting /
+    // authorization / commitment / completion from source-grounded route
+    // geometry so authorization stays revocable before the commit boundary but
+    // a transient post-commit loss does not reverse a merge. Its only decision
+    // input is PlannerContext::highway_merge_authorized (from the response
+    // integration); the two feature flags are independent - with the mission
+    // enabled but the response integration off, authorization is always false
+    // and the mission never leaves APPROACH / WAITING.
+    highway_merge_mission_enabled_ =
+        declare_parameter<bool>("enable_highway_merge_mission", false);
+    highway_merge_mission_approach_window_m_ = positive_finite_parameter(
+        declare_parameter<double>("mission_approach_window_m", 400.0),
+        "mission_approach_window_m");
+    highway_merge_mission_commit_lateral_separation_m_ = positive_finite_parameter(
+        declare_parameter<double>("commit_lateral_separation_m", 3.5),
+        "commit_lateral_separation_m");
+    highway_merge_mission_exit_release_m_ = positive_finite_parameter(
+        declare_parameter<double>("mission_exit_release_m", 20.0),
+        "mission_exit_release_m");
+    highway_merge_mission_route_s_reset_jump_m_ = positive_finite_parameter(
+        declare_parameter<double>("mission_route_s_reset_jump_m", 3.5),
+        "mission_route_s_reset_jump_m");
+    highway_merge_mission_zone_id_ = declare_parameter<std::string>(
+        "highway_merge_mission_zone_id", "kcity_highway_onramp");
+    {
+      std::filesystem::path merge_geometry_file =
+          declare_parameter<std::string>("merge_geometry_file", "");
+      if (merge_geometry_file.empty()) {
+        merge_geometry_file =
+            std::filesystem::path(
+                ament_index_cpp::get_package_share_directory("ad_planner")) /
+            "config" / "highway_merge.json";
+      }
+      if (highway_merge_mission_enabled_) {
+        configure_highway_merge_mission(merge_geometry_file,
+                                        highway_merge_mission_zone_id_);
+      }
+    }
+
     // The path-tracking backend's own configured cruise target, used only as the
     // ceiling for the min() clamp so the constraint can never raise the target.
     // Re-read on every controller rebuild (see reset_controllers).
@@ -857,7 +901,8 @@ private:
                 local_motion_runtime_ != nullptr,
             cut_in_response_constraint_enabled_,
             roundabout_response_constraint_enabled_,
-            highway_merge_response_integration_enabled_},
+            highway_merge_response_integration_enabled_,
+            highway_merge_mission_enabled_},
         std::move(callbacks));
   }
 
@@ -1339,6 +1384,147 @@ private:
       return false;
     }
     return highway_merge_response_merge_authorized(*input);
+  }
+
+  // Derive the source-grounded mission geometry once at startup. Soft-fails to
+  // "mission unavailable" (geometry stays nullopt, the mission is permanently
+  // INACTIVE) on any inconsistency rather than throwing at construction.
+  void configure_highway_merge_mission(
+      const std::filesystem::path &merge_geometry_file,
+      const std::string &zone_id) {
+    try {
+      if (!route_corridor_.has_value()) {
+        throw std::runtime_error("route corridor is unavailable");
+      }
+      // APPROACH must begin no earlier than the upstream response can be active
+      // (ad_highway_merge_gap_risk's maximum_ego_approach_distance_m default,
+      // 400 m); a larger window would put the mission in APPROACH / WAITING for
+      // a stretch where highway_merge_authorized is structurally false.
+      constexpr double kMaxMissionApproachWindowM = 400.0;
+      if (highway_merge_mission_approach_window_m_ >
+          kMaxMissionApproachWindowM) {
+        throw std::runtime_error(
+            "mission_approach_window_m must be <= 400 m (the upstream "
+            "maximum_ego_approach_distance_m)");
+      }
+      const auto loaded = load_merge_geometry(merge_geometry_file, zone_id);
+      const auto &corridor = route_corridor_->corridor;
+      const auto find_lane =
+          [&corridor](const std::string &id) -> const ReferenceLane * {
+        for (const auto &lane : corridor.lanes) {
+          if (lane.lane_sequence_id == id) {
+            return &lane;
+          }
+        }
+        return nullptr;
+      };
+      const ReferenceLane *source = find_lane(loaded.zone.source_lane_id);
+      const ReferenceLane *target = find_lane(loaded.zone.target_lane_id);
+      if (source == nullptr || target == nullptr) {
+        throw std::runtime_error(
+            "merge source / target lane is not in the route corridor");
+      }
+      if (source->points.size() < 2U) {
+        throw std::runtime_error("merge source lane has too few points");
+      }
+      // Cross-check the declarative zone stations against the source lane, the
+      // same 2 m margin ad_highway_merge_gap_risk uses.
+      constexpr double kConsistencyMarginM = 2.0;
+      const double source_first_s = source->points.front().route_s_m;
+      const double source_last_s = source->points.back().route_s_m;
+      if (std::abs(source_first_s - loaded.zone.route_s_zone_entry_m) >
+              kConsistencyMarginM ||
+          std::abs(source_last_s - loaded.zone.route_s_merge_complete_m) >
+              kConsistencyMarginM) {
+        throw std::runtime_error(
+            "merge zone stations disagree with the source lane in the route "
+            "corridor");
+      }
+      const auto commit_station = derive_highway_merge_commit_station(
+          *source, *target,
+          highway_merge_mission_commit_lateral_separation_m_,
+          loaded.zone.route_s_zone_entry_m,
+          loaded.zone.route_s_merge_complete_m);
+      if (!commit_station) {
+        throw std::runtime_error(
+            "could not derive a commit boundary: the source lane never taper"
+            "s within commit_lateral_separation_m of the target lane inside "
+            "the merge zone");
+      }
+      HighwayMergeMissionGeometry geometry;
+      geometry.approach_entry_route_s_m =
+          loaded.zone.route_s_zone_entry_m -
+          highway_merge_mission_approach_window_m_;
+      geometry.zone_entry_route_s_m = loaded.zone.route_s_zone_entry_m;
+      geometry.commit_route_s_m = *commit_station;
+      geometry.merge_complete_route_s_m = loaded.zone.route_s_merge_complete_m;
+      geometry.exit_route_s_m = loaded.zone.route_s_merge_complete_m +
+                                highway_merge_mission_exit_release_m_;
+      highway_merge_mission_geometry_ = geometry.validated();
+      highway_merge_mission_source_lane_id_ = loaded.zone.source_lane_id;
+      highway_merge_mission_target_lane_id_ = loaded.zone.target_lane_id;
+      RCLCPP_INFO(
+          get_logger(),
+          "highway merge mission enabled: zone '%s' source '%s' -> target "
+          "'%s'; stations approach %.1f / zone_entry %.1f / commit %.1f / "
+          "merge_complete %.1f / exit %.1f m",
+          loaded.zone.id.c_str(), loaded.zone.source_lane_id.c_str(),
+          loaded.zone.target_lane_id.c_str(),
+          geometry.approach_entry_route_s_m, geometry.zone_entry_route_s_m,
+          geometry.commit_route_s_m, geometry.merge_complete_route_s_m,
+          geometry.exit_route_s_m);
+    } catch (const std::exception &error) {
+      highway_merge_mission_geometry_.reset();
+      RCLCPP_ERROR(get_logger(),
+                   "highway merge mission disabled (geometry unavailable): %s",
+                   error.what());
+    }
+  }
+
+  // Recompute the highway-merge mission state from this tick's ego route
+  // progress and the fresh authorization fact. Runs before the behavior tree.
+  // Never throws out of the tick: a route-projection failure holds the previous
+  // mission state.
+  void update_highway_merge_mission() {
+    if (!highway_merge_mission_enabled_ ||
+        !highway_merge_mission_geometry_.has_value()) {
+      context_.highway_merge_mission = HighwayMergeMissionContext{};
+      highway_merge_mission_prev_state_ = HighwayMergeMissionState::kInactive;
+      highway_merge_mission_prev_route_s_valid_ = false;
+      return;
+    }
+    HighwayMergeMissionInput input;
+    input.enabled = true;
+    input.merge_authorized = context_.highway_merge_authorized;
+    input.previous_state = highway_merge_mission_prev_state_;
+    input.route_s_reset_jump_m = highway_merge_mission_route_s_reset_jump_m_;
+    if (route_corridor_.has_value() && local_motion_pose_valid_) {
+      try {
+        const auto projection = project_primary_route(
+            route_corridor_->corridor, context_.inputs.status.value.pose);
+        if (std::isfinite(projection.route_s_m)) {
+          input.route_progress_valid = true;
+          input.ego_route_s_m = projection.route_s_m;
+        }
+      } catch (const std::exception &) {
+        // No fresh projection this tick: the mission holds its previous state.
+      }
+    }
+    if (highway_merge_mission_prev_route_s_valid_) {
+      input.has_previous_route_s = true;
+      input.previous_ego_route_s_m = highway_merge_mission_prev_route_s_m_;
+    }
+    const auto output =
+        step_highway_merge_mission(input, *highway_merge_mission_geometry_);
+    highway_merge_mission_prev_state_ = output.state;
+    if (input.route_progress_valid) {
+      highway_merge_mission_prev_route_s_m_ = input.ego_route_s_m;
+      highway_merge_mission_prev_route_s_valid_ = true;
+    }
+    context_.highway_merge_mission = HighwayMergeMissionContext{
+        static_cast<std::uint8_t>(output.state), output.active,
+        output.committed, output.merge_authorized_now};
+    last_highway_merge_mission_state_ = output.state;
   }
 
   ControllerResult remember(ControllerResult result, std::string frame) {
@@ -1829,6 +2015,9 @@ private:
     refresh_route_occupancy_observation();
     refresh_future_road_risk_observation();
     publish_route_relevance_visualization();
+    // Mission-state update runs after the ego pose is prepared and before the
+    // behavior tree, so a mission condition reads this tick's value.
+    update_highway_merge_mission();
     const bool local_motion_pose_preparation_failed = !local_motion_pose_valid_;
     if (tuning_hold_control_) {
       PlannerTickResult held;
@@ -1898,6 +2087,13 @@ private:
               : -1.0F);
       ros_interfaces_->publish_highway_merge_authorized(
           context_.highway_merge_authorized);
+    }
+    if (highway_merge_mission_enabled_) {
+      // Observability only: the mission state enum this tick. Only published
+      // when the mission is enabled, so the default launch graph is unchanged.
+      // This is a diagnostic, never a control or lane-change channel.
+      ros_interfaces_->publish_highway_merge_mission_state(
+          static_cast<std::uint8_t>(last_highway_merge_mission_state_));
     }
     if (last_controller_result_) {
       publish_visualization(*last_controller_result_, last_result_frame_);
@@ -2063,6 +2259,22 @@ private:
   std::string expected_highway_merge_zone_{"kcity_highway_onramp"};
   ad_interfaces::msg::HighwayMergeGapResponse highway_merge_response_message_;
   std::optional<double> last_highway_merge_constraint_limit_mps_;
+
+  bool highway_merge_mission_enabled_{false};
+  double highway_merge_mission_approach_window_m_{400.0};
+  double highway_merge_mission_commit_lateral_separation_m_{3.5};
+  double highway_merge_mission_exit_release_m_{20.0};
+  double highway_merge_mission_route_s_reset_jump_m_{3.5};
+  std::string highway_merge_mission_zone_id_{"kcity_highway_onramp"};
+  std::string highway_merge_mission_source_lane_id_;
+  std::string highway_merge_mission_target_lane_id_;
+  std::optional<HighwayMergeMissionGeometry> highway_merge_mission_geometry_;
+  HighwayMergeMissionState highway_merge_mission_prev_state_{
+      HighwayMergeMissionState::kInactive};
+  HighwayMergeMissionState last_highway_merge_mission_state_{
+      HighwayMergeMissionState::kInactive};
+  bool highway_merge_mission_prev_route_s_valid_{false};
+  double highway_merge_mission_prev_route_s_m_{0.0};
   visualization_msgs::msg::MarkerArray route_profile_markers_;
 
   std::unique_ptr<PlannerRosInterfaces> ros_interfaces_;

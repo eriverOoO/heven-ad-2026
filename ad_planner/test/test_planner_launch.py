@@ -396,6 +396,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "enable_cut_in_response_constraint",
         "enable_roundabout_response_constraint",
         "enable_highway_merge_response_integration",
+        "enable_highway_merge_mission",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
@@ -413,6 +414,10 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
     assert perform_substitutions(
         LaunchContext(),
         arguments["enable_highway_merge_response_integration"].default_value,
+    ) == ""
+    assert perform_substitutions(
+        LaunchContext(),
+        arguments["enable_highway_merge_mission"].default_value,
     ) == ""
     assert perform_substitutions(
         LaunchContext(), arguments["roundabout_gap_response"].default_value
@@ -631,6 +636,47 @@ def test_highway_merge_response_integration_is_opt_in_and_default_off(
             _launch_context(
                 data_dir=str(tmp_path),
                 enable_highway_merge_response_integration="maybe",
+            )
+        )
+
+
+def test_highway_merge_mission_is_opt_in_and_default_off(monkeypatch, tmp_path):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    # Default off: the planner node carries no override (config false stands),
+    # so no merge geometry is loaded and no mission-state publisher is created.
+    # It does NOT compose any extra node.
+    disabled = _launch_context(data_dir=str(tmp_path))
+    default_planner = module._create_planner_node(disabled)
+    assert "enable_highway_merge_mission" not in _parameter_overrides(
+        default_planner, disabled
+    )
+
+    # Opt-in via the launch arg sets the override; it does not force-start the
+    # risk / response nodes (the mission is independent of them).
+    enabled = _launch_context(
+        data_dir=str(tmp_path), enable_highway_merge_mission="true"
+    )
+    planner = module._create_planner_node(enabled)
+    assert (
+        _parameter_overrides(planner, enabled)["enable_highway_merge_mission"]
+        is True
+    )
+    assert module._create_highway_merge_gap_response_node(enabled) is None
+
+    with pytest.raises(
+        RuntimeError, match="enable_highway_merge_mission must be empty"
+    ):
+        module._create_planner_node(
+            _launch_context(
+                data_dir=str(tmp_path), enable_highway_merge_mission="maybe"
             )
         )
 

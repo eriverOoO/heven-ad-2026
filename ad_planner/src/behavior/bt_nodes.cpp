@@ -493,9 +493,9 @@ make_perception_forward_check(const PerceptionMissionConfig &config,
 }
 
 std::vector<std::string> ad_bt_node_ids() {
-  return {"CollisionRecovery", "FailSafeBrake",     "FollowGlobalPath",
-          "HighwayMergeReady", "InputsReady",       "PerceptionMission",
-          "TrafficStop"};
+  return {"CollisionRecovery",     "FailSafeBrake", "FollowGlobalPath",
+          "HighwayMergeCommitted", "HighwayMergeReady", "InputsReady",
+          "PerceptionMission",     "TrafficStop"};
 }
 
 void register_ad_bt_nodes(BT::BehaviorTreeFactory &factory,
@@ -513,6 +513,21 @@ void register_ad_bt_nodes(BT::BehaviorTreeFactory &factory,
   factory.registerSimpleCondition(
       "HighwayMergeReady", [environment](BT::TreeNode &) {
         return environment->context.highway_merge_authorized
+                   ? BT::NodeStatus::SUCCESS
+                   : BT::NodeStatus::FAILURE;
+      });
+  // Read-only mission-commit condition. SUCCESS once the Highway Merge Mission
+  // Primitive has crossed the source-grounded commit boundary (state COMMITTED
+  // or COMPLETE). Unlike HighwayMergeReady this stays SUCCESS through a
+  // transient post-commit authorization loss - a future lateral executor must
+  // not reverse a merge mid-maneuver. It publishes no control, changes no
+  // path/route/steering, and never itself latches (the monotonic commit lives
+  // in the pure state machine, cleared on a traversal reset). Registered for a
+  // future Highway Merge Mission Transition; the production tree does not
+  // reference it.
+  factory.registerSimpleCondition(
+      "HighwayMergeCommitted", [environment](BT::TreeNode &) {
+        return environment->context.highway_merge_mission.committed
                    ? BT::NodeStatus::SUCCESS
                    : BT::NodeStatus::FAILURE;
       });

@@ -154,6 +154,15 @@ PlannerRosInterfaces::PlannerRosInterfaces(rclcpp::Node &node,
             reliable_qos);
   }
 
+  if (config.highway_merge_mission_enabled) {
+    highway_merge_mission_state_publisher_ =
+        node.create_publisher<std_msgs::msg::UInt8>(
+            node.declare_parameter<std::string>(
+                "topics.highway_merge_mission_state",
+                "/ad/planner/highway_merge_mission_state"),
+            reliable_qos);
+  }
+
   tuning_hold_service_ = node.create_service<std_srvs::srv::SetBool>(
       "/ad/planner/hold_control",
       [this](const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -232,6 +241,16 @@ void PlannerRosInterfaces::publish_highway_merge_authorized(bool value) {
   std_msgs::msg::Bool message;
   message.data = value;
   highway_merge_authorized_publisher_->publish(message);
+}
+
+void PlannerRosInterfaces::publish_highway_merge_mission_state(
+    std::uint8_t value) {
+  if (!highway_merge_mission_state_publisher_) {
+    return;
+  }
+  std_msgs::msg::UInt8 message;
+  message.data = value;
+  highway_merge_mission_state_publisher_->publish(message);
 }
 
 } // namespace ad_planner
