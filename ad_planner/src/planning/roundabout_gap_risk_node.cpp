@@ -143,6 +143,16 @@ ad_interfaces::msg::RoundaboutGapRisk serialize(const RoundaboutGapRiskResult & 
   output.temporal_gap_s = static_cast<float>(
     source.temporal_gap_valid ? source.temporal_gap_s : 0.0);
   output.occupancy_overlap = source.occupancy_overlap;
+  output.predicted_conflict_interval_count =
+    source.predicted_conflict_interval_count;
+  output.later_reentry_detected = source.later_reentry_detected;
+  output.any_occupancy_overlap = source.any_occupancy_overlap;
+  output.minimum_temporal_gap_valid = source.minimum_temporal_gap_valid;
+  output.minimum_temporal_gap_s = static_cast<float>(
+    source.minimum_temporal_gap_valid ? source.minimum_temporal_gap_s : 0.0);
+  output.prediction_horizon_s =
+    static_cast<float>(source.prediction_horizon_s);
+  output.prediction_covers_ego_exit = source.prediction_covers_ego_exit;
   output.ttc_valid = source.ttc_valid;
   output.ttc_s = static_cast<float>(source.ttc_valid ? source.ttc_s : 0.0);
   output.cpa_valid = source.cpa_valid;
@@ -295,6 +305,14 @@ RoundaboutFrameResult build_roundabout_frame(
     result.object_exit_valid_count += risk.object_exit_valid ? 1U : 0U;
     result.temporal_gap_valid_count += risk.temporal_gap_valid ? 1U : 0U;
     result.occupancy_overlap_count += risk.occupancy_overlap ? 1U : 0U;
+    result.multi_interval_object_count +=
+      risk.predicted_conflict_interval_count > 1U ? 1U : 0U;
+    result.later_reentry_count += risk.later_reentry_detected ? 1U : 0U;
+    result.any_occupancy_overlap_count += risk.any_occupancy_overlap ? 1U : 0U;
+    result.minimum_temporal_gap_valid_count +=
+      risk.minimum_temporal_gap_valid ? 1U : 0U;
+    result.prediction_covers_ego_exit_count +=
+      risk.prediction_covers_ego_exit ? 1U : 0U;
     output.objects.push_back(serialize(risk));
   }
   result.objects_out = output.objects.size();
@@ -559,6 +577,18 @@ void RoundaboutGapRiskNode::publish_diagnostics(
   status.values.push_back(key_value(
     "occupancy_overlap", std::to_string(result.occupancy_overlap_count)));
   status.values.push_back(key_value(
+    "multi_interval_objects", std::to_string(result.multi_interval_object_count)));
+  status.values.push_back(key_value(
+    "later_reentry", std::to_string(result.later_reentry_count)));
+  status.values.push_back(key_value(
+    "any_occupancy_overlap", std::to_string(result.any_occupancy_overlap_count)));
+  status.values.push_back(key_value(
+    "minimum_temporal_gap_valid",
+    std::to_string(result.minimum_temporal_gap_valid_count)));
+  status.values.push_back(key_value(
+    "prediction_covers_ego_exit",
+    std::to_string(result.prediction_covers_ego_exit_count)));
+  status.values.push_back(key_value(
     "rejected_malformed_objects", std::to_string(result.rejected_malformed_objects)));
   status.values.push_back(key_value(
     "rejected_over_budget", std::to_string(result.rejected_over_budget)));
@@ -577,6 +607,11 @@ void RoundaboutGapRiskNode::record_runtime(
     object_entry_valid_total_ += result.object_entry_valid_count;
     temporal_gap_valid_total_ += result.temporal_gap_valid_count;
     occupancy_overlap_total_ += result.occupancy_overlap_count;
+    multi_interval_object_total_ += result.multi_interval_object_count;
+    later_reentry_total_ += result.later_reentry_count;
+    any_occupancy_overlap_total_ += result.any_occupancy_overlap_count;
+    minimum_temporal_gap_valid_total_ += result.minimum_temporal_gap_valid_count;
+    prediction_covers_ego_exit_total_ += result.prediction_covers_ego_exit_count;
     ego_entry_valid_frames_ += result.ego_entry_valid ? 1U : 0U;
     for (const auto & risk : result.output.objects) {
       if (!risk.relevant_to_conflict) {
@@ -589,11 +624,16 @@ void RoundaboutGapRiskNode::record_runtime(
         get_logger(),
         "ROUNDABOUT_GAP uuid=%s in_now=%d obj_entry=%.3f obj_exit_valid=%d "
         "obj_exit=%.3f arrival_delta_valid=%d arrival_delta=%.3f gap_valid=%d "
-        "gap=%.3f overlap=%d",
+        "gap=%.3f overlap=%d intervals=%u reentry=%d any_overlap=%d "
+        "min_gap_valid=%d min_gap=%.3f horizon=%.3f covers_exit=%d",
         uuid_text(uuid).c_str(), risk.object_in_conflict_now,
         risk.object_entry_time_s, risk.object_exit_valid, risk.object_exit_time_s,
         risk.arrival_delta_valid, risk.arrival_delta_s, risk.temporal_gap_valid,
-        risk.temporal_gap_s, risk.occupancy_overlap);
+        risk.temporal_gap_s, risk.occupancy_overlap,
+        static_cast<unsigned>(risk.predicted_conflict_interval_count),
+        risk.later_reentry_detected, risk.any_occupancy_overlap,
+        risk.minimum_temporal_gap_valid, risk.minimum_temporal_gap_s,
+        risk.prediction_horizon_s, risk.prediction_covers_ego_exit);
     }
   } else {
     ++rejected_frames_;
@@ -616,12 +656,16 @@ void RoundaboutGapRiskNode::record_runtime(
     "ROUNDABOUT_GAP_RISK_RUNTIME_SUMMARY risk_messages=%zu published=%zu "
     "rejected=%zu risk_objects=%zu relevant_object_frames=%zu "
     "unique_relevant_uuids=%zu object_entry_valid=%zu temporal_gap_valid=%zu "
-    "occupancy_overlap=%zu ego_entry_valid_frames=%zu latency_ms_median=%.4f "
-    "latency_ms_p95=%.4f latency_ms_max=%.4f",
+    "occupancy_overlap=%zu multi_interval_objects=%zu later_reentry=%zu "
+    "any_occupancy_overlap=%zu minimum_temporal_gap_valid=%zu "
+    "prediction_covers_ego_exit=%zu ego_entry_valid_frames=%zu "
+    "latency_ms_median=%.4f latency_ms_p95=%.4f latency_ms_max=%.4f",
     risk_messages_received_, gap_messages_published_, rejected_frames_,
     total_risk_objects_, relevant_object_frames_, relevant_uuids_.size(),
     object_entry_valid_total_, temporal_gap_valid_total_,
-    occupancy_overlap_total_, ego_entry_valid_frames_, quantile(0.5),
+    occupancy_overlap_total_, multi_interval_object_total_, later_reentry_total_,
+    any_occupancy_overlap_total_, minimum_temporal_gap_valid_total_,
+    prediction_covers_ego_exit_total_, ego_entry_valid_frames_, quantile(0.5),
     quantile(0.95), ordered.back());
 }
 

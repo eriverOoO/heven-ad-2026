@@ -53,6 +53,11 @@ struct RoundaboutFrameResult
   std::size_t object_exit_valid_count{0U};
   std::size_t temporal_gap_valid_count{0U};
   std::size_t occupancy_overlap_count{0U};
+  std::size_t multi_interval_object_count{0U};
+  std::size_t later_reentry_count{0U};
+  std::size_t any_occupancy_overlap_count{0U};
+  std::size_t minimum_temporal_gap_valid_count{0U};
+  std::size_t prediction_covers_ego_exit_count{0U};
   std::size_t rejected_malformed_objects{0U};
   std::size_t rejected_over_budget{0U};
   bool ego_entry_valid{false};
@@ -111,6 +116,11 @@ private:
   std::size_t object_entry_valid_total_{0U};
   std::size_t temporal_gap_valid_total_{0U};
   std::size_t occupancy_overlap_total_{0U};
+  std::size_t multi_interval_object_total_{0U};
+  std::size_t later_reentry_total_{0U};
+  std::size_t any_occupancy_overlap_total_{0U};
+  std::size_t minimum_temporal_gap_valid_total_{0U};
+  std::size_t prediction_covers_ego_exit_total_{0U};
   std::size_t ego_entry_valid_frames_{0U};
   std::set<std::array<std::uint8_t, 16U>> relevant_uuids_;
   std::vector<double> latency_ms_;

@@ -109,11 +109,13 @@ tested against the polygon, in increasing time order:
 - `object_exit_time_s` is the first sample **outside** at or after entry;
 - `object_exit_valid = false` when the object is still inside at the last
   predicted sample (occupies the region through the horizon);
-- only the **first contiguous** occupancy interval is reported: if a predicted
-  path leaves the polygon and re-enters it later in the horizon, the re-entry is
-  not represented in v1 and a consumer must not treat `object_exit_time_s` as
-  "clear for all time" (locked by
-  `test_roundabout_gap_risk.cpp::OnlyFirstContiguousOccupancyIntervalIsReported`);
+- only the **first contiguous** occupancy interval is reported *in these
+  fields*: if a predicted path leaves the polygon and re-enters it later in the
+  horizon, the re-entry is not in `object_entry_time_s` / `object_exit_time_s` /
+  `temporal_gap_s` / `occupancy_overlap` (locked by
+  `test_roundabout_gap_risk.cpp::OnlyFirstContiguousOccupancyIntervalIsReported`).
+  The **all-interval summary** below scans every predicted occupancy interval; a
+  RELEASE / YIELD consumer must use it, never the first-interval fields alone;
 - `relevant_to_conflict = object_in_conflict_now || object_entry_valid`. An
   object whose predicted centroids never enter the polygon is
   `relevant_to_conflict = false` regardless of how close it is; Euclidean
@@ -149,6 +151,49 @@ else (E1 <= O0):                  temporal_gap_s = O0 − E1   # ego clears firs
 overlap**: `O1 == E0` gives `occupancy_overlap = false`, `temporal_gap_s = 0`;
 `E1 == O0` likewise. `temporal_gap_valid` requires both entries valid (ego exit
 is always valid when ego entry is). No "safe gap" threshold is applied anywhere.
+
+## Multi-interval summary / policy-consumer contract
+
+The first-interval fields (`object_entry_*`, `object_exit_*`, `arrival_delta_*`,
+`temporal_gap_*`, `occupancy_overlap`) describe **only the first contiguous
+predicted occupancy interval**. That is unsafe as the sole input to a
+gap-response policy: a predicted path can leave the region and re-enter it
+while the ego is still inside, so an early first exit does **not** mean the
+conflict is clear.
+
+**Unsafe first-interval counterexample.** Ego occupancy `[4, 6]` s; the object
+is predicted to occupy the conflict region over `[1, 2]` s and again over
+`[5, 7]` s. The first-interval fields report `object_exit_time_s = 2`,
+`occupancy_overlap = false`, `temporal_gap_s = 2` — "clear". But the second
+predicted interval `[5, 7]` overlaps the ego window. A response node reading
+only the first-interval fields would incorrectly RELEASE.
+
+The node therefore scans **every** discrete predicted centroid into contiguous
+"inside the conflict region" runs (a currently-inside object contributes a run
+starting at `0.0`; a run still inside at the last predicted sample is *open*
+through the horizon) and adds these additive facts:
+
+| field | meaning |
+| --- | --- |
+| `predicted_conflict_interval_count` | number of contiguous occupancy runs (`0` when the object never occupies the region) |
+| `later_reentry_detected` | `predicted_conflict_interval_count > 1` — the object leaves and re-enters within the horizon |
+| `any_occupancy_overlap` | **any** predicted occupancy interval strictly overlaps the ego occupancy interval (same strict / touching convention as `occupancy_overlap`). Valid only when ego entry+exit are valid; `false` otherwise |
+| `minimum_temporal_gap_valid` / `minimum_temporal_gap_s` | minimum non-negative separation between the ego interval and **any** predicted occupancy interval. `0.0` when `any_occupancy_overlap` (and on a touching boundary). Valid only when ego entry+exit are valid and ≥ 1 predicted occupancy interval exists |
+| `prediction_horizon_s` | latest discrete predicted-centroid time for this object (`0.0` when it carries none). Always finite |
+| `prediction_covers_ego_exit` | `true` only when ego exit is valid **and** `prediction_horizon_s ≥ ego_exit_time_s` (within `1e-3 s`). When `false` the prediction does not span the whole ego conflict window, so the absence of a later overlap is unproven. **Data-coverage flag only — NOT a safe-to-enter decision** |
+
+For the counterexample above: `predicted_conflict_interval_count = 2`,
+`later_reentry_detected = true`, `any_occupancy_overlap = true`,
+`minimum_temporal_gap_s = 0`.
+
+**A future Roundabout Gap Response must** decide RELEASE / YIELD from
+`any_occupancy_overlap`, `minimum_temporal_gap_s` and `later_reentry_detected`
+(never the first-interval fields alone), and must require
+`prediction_covers_ego_exit == true` for every relevant object before it can
+justify a RELEASE — otherwise a late re-entry could be hidden by a
+coverage-limited prediction. The `arrival_delta_s` / `temporal_gap_s` /
+`occupancy_overlap` first-interval fields remain for diagnostics and backward
+compatibility and are **not** redefined.
 
 ## Relevance definition
 
@@ -214,73 +259,106 @@ real checksum-verified route corridor and the shipped conflict geometry, with
 synthetic circulating-object trajectories.
 
 `test_roundabout_gap_risk_runtime.py` sweeps the ego along the approach over 5
-primary-route stations (`s = 850 … 886`, 8 m/s) with four circulating objects
-each frame:
+primary-route stations (`s = 850 … 886`, 8 m/s) with **five** circulating
+objects each frame (clears before ego / occupancy overlap / arrives after ego /
+nearby non-conflicting **with a deliberately short 4 s prediction** /
+**leaves-then-re-enters the ego window**):
 
 | # | counts |
 | --- | --- |
 | input risk messages / output gap messages | 5 / 5 |
-| input objects | 20 |
-| conflict-relevant object-frames | 15 |
-| unique relevant UUIDs | 3 |
+| input objects | 25 |
+| conflict-relevant object-frames | 20 |
+| unique relevant UUIDs | 4 |
 | valid ego-entry frames | 5 |
-| valid object-entry / valid temporal-gap object-frames | 15 / 15 |
-| occupancy-overlap object-frames | 8 |
+| valid object-entry / valid temporal-gap object-frames | 20 / 20 |
+| first-interval occupancy-overlap object-frames | 10 |
+| multi-interval object-frames / later-reentry object-frames | 5 / 5 |
+| any-occupancy-overlap object-frames | 13 |
+| minimum-temporal-gap-valid object-frames | 20 |
+| prediction-covers-ego-exit object-frames | 21 |
+
+`prediction_covers_ego_exit` is exercised in both states: the four
+full-horizon objects (8 s) always cover; the short-prediction object (4 s)
+covers only at the last station (`s = 886`, ego exit ETA 3.5 s) and is
+`false` at the four earlier stations where the ego exit ETA is 4.25–8.0 s.
 
 Distributions (median / p10 / min / max):
 
 | quantity | median | p10 | min | max |
 | --- | --- | --- | --- | --- |
 | ego entry ETA (s) | 2.512 | 0.500 | 0.500 | 4.999 |
-| object entry ETA (s) | 2.500 | 0.500 | 0.500 | 7.000 |
-| arrival delta (s) | 0.000 | -3.262 | -4.499 | 6.500 |
+| object entry ETA (s) | 1.500 | 0.500 | 0.500 | 7.000 |
+| arrival delta (s) | -0.387 | -4.499 | -4.499 | 6.500 |
 | non-overlap temporal gap (s) | 2.262 | 0.250 | 0.250 | — |
-| publish→receive latency (ms), 5 samples | ≈1.2 | p95 ≈1.3 | — | ≈1.5 |
+| publish→receive latency (ms), 5 samples | ≈2.3 | p95 ≈2.5 | — | ≈3.0 |
 
 Representative frame (ego at `s = 870`, ≈ 20 m before the conflict entry):
 ego occupancy `[2.512 s, 5.500 s]`.
 
-| object | object interval | overlap | temporal gap | arrival delta |
-| --- | --- | --- | --- | --- |
-| clears before ego | `[0.5, 1.5] s` | false | `1.012 s` | `-2.012 s` |
-| occupancy overlap | `[2.5, 5.0] s` | true | `0.0 s` | `-0.012 s` |
-| arrives after ego | `[7.0, ∞) s` | false | `1.500 s` | `4.488 s` |
-| nearby non-conflicting (centre island) | — | — | — | `relevant_to_conflict = false` |
+| object | first interval | first overlap | first gap | arrival delta | interval count | any_occupancy_overlap | min gap | covers ego exit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| clears before ego | `[0.5, 1.5] s` | false | `1.012 s` | `-2.012 s` | 1 | false | `1.012 s` | true |
+| occupancy overlap | `[2.5, 5.0] s` | true | `0.0 s` | `-0.012 s` | 1 | true | `0.0 s` | true |
+| arrives after ego | `[7.0, ∞) s` | false | `1.500 s` | `4.488 s` | 1 | false | `1.500 s` | true |
+| nearby non-conflicting (short 4 s prediction) | — | — | — | — | 0 | false | invalid | **false** (horizon 4.0 s < ego exit 5.5 s) |
+| **leaves then re-enters** | `[0.5, 1.5] s` | **false** | **`1.012 s`** | `-2.012 s` | **2** | **true** | **`0.0 s`** | true |
+
+The last row is the point of this revision: the first-interval fields alone
+say "clear, gap 1.012 s", but the all-interval summary shows the re-entry
+overlaps the ego window (`any_occupancy_overlap = true`,
+`minimum_temporal_gap_s = 0`, `later_reentry_detected = true`). The
+short-prediction object shows the opposite guard: its prediction stops at
+4.0 s, before the ego exit ETA of 5.5 s, so `prediction_covers_ego_exit =
+false` and a response consumer cannot RELEASE relative to it.
 
 0 NaN / Inf / exceptions across all frames and fields. End-to-end
 publish→receive latency (probe-measured, publish-to-receive proxy over the
 loopback DDS transport — **not** the node's internal compute cost, 5 samples)
-was ≈1.2 ms median, ≈1.5 ms max (run-to-run ≈1.2–1.6 ms). The node's own internal
+was ≈2.3 ms median, ≈3.0 ms max (run-to-run ≈1.5–3.5 ms; more objects than v1's
+4). The node's own internal
 processing latency was not separately instrumented in this replay
 (`runtime_summary_interval_frames` was set to 0); it is exposed per frame as the
 `latency_ms` key of the `/ad/planning/roundabout_gap_risks/diagnostics` status
 and aggregated (median / p95 / max) into `ROUNDABOUT_GAP_RISK_RUNTIME_SUMMARY`
-every `runtime_summary_interval_frames` when enabled. `build_roundabout
-_frame` is one polygon test per predicted sample plus a single `project_to
-_frenet`; cost scales linearly with object and predicted-sample count under the
-`maximum_objects` bound.
+every `runtime_summary_interval_frames` when enabled. `build_roundabout_frame`
+is still one polygon test per predicted sample plus a single `project_to_frenet`
+per frame; the all-interval scan adds only an `O(intervals)` pass
+(`intervals ≤ predicted samples`), so per-frame cost stays `O(N · M)` for `N`
+objects and `M` predicted samples each, under the `maximum_objects` bound. No
+all-pairs interval logic.
 
 ## Tests
 
-- `test_roundabout_gap_risk.cpp` — 30 pure-core cases: point-in-polygon /
+- `test_roundabout_gap_risk.cpp` — **47** pure-core cases: point-in-polygon /
   distance, ego ETA (approaching / stopped / inside / past-exit / far),
   object entry-in-future / already-inside / never-enters / still-inside-at-
-  horizon / first-contiguous-interval-only, the Phase 19 interval cases A/B/C
+  horizon / first-contiguous-interval-only, the interval cases A/B/C
   plus touching-boundary and unbounded-object-exit, arrival-delta sign
   (before / after / simultaneous / invalid), multi-object one-record-each,
   zero objects, malformed-skipped, budget, degenerate polygon,
-  non-increasing span, determinism, curved trajectory uses discrete prediction.
+  non-increasing span, determinism, curved trajectory uses discrete prediction,
+  plus **17 `RoundaboutMultiInterval` cases**: single-interval matches
+  first-interval, first-clears-but-second-overlaps (the counterexample),
+  two-separated-intervals minimum gap, intervals-on-both-sides-of-ego,
+  first-overlaps-second-irrelevant, both-before / both-after ego, touching
+  boundary, current-inside-exits-then-re-enters, open final interval,
+  no-interval-no-summary, prediction horizon shorter / exactly / longer than
+  ego exit, stopped-ego aggregates invalid, determinism, all outputs finite.
 - `test_roundabout_gap_risk_launch.py` — config is geometric (no policy
   tokens), conflict geometry well-formed / map frame, standalone launch starts
   only the node, opt-in default off in `planner.launch.py`.
-- `test_roundabout_gap_risk_runtime.py` — the live deterministic replay above.
+- `test_roundabout_gap_risk_runtime.py` — the live deterministic replay above,
+  now with a leaves-then-re-enters object and a short-prediction object that
+  exercises `prediction_covers_ego_exit == false`.
 - `test_interface_contract.py` — `RoundaboutGapRisk` / `RoundaboutGapRiskArray`
-  declarations stable, no GO / YIELD / STOP / gap-accepted / safe-to-enter /
-  risk-score field.
+  declarations stable (all-interval fields locked), all-interval defaults are
+  the conservative "nothing proven" state, no GO / YIELD / RELEASE / STOP /
+  gap-accepted / safe-to-enter / risk-score field.
 - Full `ad_planner` ctest **42 / 43** (only pre-existing `test_mppi_nav2_launch`
   fails — host lacks `nav2_common` / `nav2_controller`).
-- `test_dynamic_object_risk` (upstream, `ad_lidar_perception`) unchanged and
-  passing.
+- `test_dynamic_object_risk` (upstream, `ad_lidar_perception`) **38 / 38**,
+  unchanged (the `ad_interfaces` change is purely additive).
 
 ## Known limitations
 
@@ -291,7 +369,10 @@ _frenet`; cost scales linearly with object and predicted-sample count under the
   (`5 m`) and angular span are documented engineering choices, not surveyed
   geometry.
 - Object entry / exit resolution is bounded by the predictor sample spacing
-  (no between-sample interpolation).
+  (no between-sample interpolation) — this applies to the all-interval scan
+  too: an entry / exit / re-entry between two discrete centroids is not seen.
+- `prediction_covers_ego_exit` is a coverage flag, not proof of clearance: it
+  says the prediction spans the ego window, not that the object stays out.
 - The ego arrival estimate is constant-current-speed, not a planner
   trajectory; it is a fact, not a plan.
 - Runtime validation is a deterministic canonical ROS replay with synthetic

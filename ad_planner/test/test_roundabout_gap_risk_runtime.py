@@ -135,11 +135,17 @@ def _object(uuid_byte, current_xy, sample_positions, ego_pose):
 
 
 def _window_track(inside_xy, outside_xy, window):
-    lo, hi = window
+    return _multi_window_track(inside_xy, outside_xy, [window])
+
+
+def _multi_window_track(inside_xy, outside_xy, windows):
+    def _inside(t):
+        return any(lo - 1e-6 <= t <= hi + 1e-6 for lo, hi in windows)
+
     out = []
     t = DT_S
     while t <= HORIZON_S + 1e-6:
-        out.append((t, *(inside_xy if lo - 1e-6 <= t <= hi + 1e-6 else outside_xy)))
+        out.append((t, *(inside_xy if _inside(t) else outside_xy)))
         t += DT_S
     return out
 
@@ -233,8 +239,13 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         zone_b = (-88.0, 334.0)   # inside
         zone_c = (-85.0, 337.0)   # inside
         far = (-101.5, 343.6)     # roundabout centre island, outside the annulus
+        # Object 4 carries a deliberately short prediction (reaches only 4.0 s),
+        # so prediction_covers_ego_exit is false whenever the ego exit ETA
+        # exceeds ~4.0 s -- i.e. for the earlier approach stations.
+        SHORT_HORIZON_S = 4.0
         never_samples = [
-            (DT_S * k, *far) for k in range(1, int(HORIZON_S / DT_S) + 1)
+            (DT_S * k, *far)
+            for k in range(1, int(SHORT_HORIZON_S / DT_S) + 1)
         ]
 
         input_frames = 0
@@ -245,6 +256,11 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         object_entry_valid = 0
         temporal_gap_valid = 0
         overlap_frames = 0
+        multi_interval_object_frames = 0
+        later_reentry_frames = 0
+        any_overlap_frames = 0
+        minimum_gap_valid_frames = 0
+        prediction_covers_ego_exit_frames = 0
         ego_entry_eta = []
         object_entry_eta = []
         arrival_delta = []
@@ -258,6 +274,13 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
                 _object(2, far, _window_track(zone_b, far, (2.5, 4.5)), pose),
                 _object(3, far, _window_track(zone_c, far, (7.0, HORIZON_S)), pose),
                 _object(4, far, never_samples, pose),
+                # Leaves the conflict region and re-enters it during the ego
+                # window: the first-interval facts alone look "clear".
+                _object(
+                    5, far,
+                    _multi_window_track(zone_b, far, [(0.5, 1.0), (3.0, 4.5)]),
+                    pose,
+                ),
             ]
             frame = self._publish(pose, objects)
             input_frames += 1
@@ -271,8 +294,20 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
                 for name in (
                     "object_entry_time_s", "object_exit_time_s", "arrival_delta_s",
                     "temporal_gap_s", "object_map_distance_to_conflict_m",
+                    "minimum_temporal_gap_s", "prediction_horizon_s",
                 ):
                     self.assertTrue(math.isfinite(getattr(obj, name)))
+                self.assertGreaterEqual(obj.minimum_temporal_gap_s, 0.0)
+                if obj.predicted_conflict_interval_count > 1:
+                    multi_interval_object_frames += 1
+                if obj.later_reentry_detected:
+                    later_reentry_frames += 1
+                if obj.any_occupancy_overlap:
+                    any_overlap_frames += 1
+                if obj.minimum_temporal_gap_valid:
+                    minimum_gap_valid_frames += 1
+                if obj.prediction_covers_ego_exit:
+                    prediction_covers_ego_exit_frames += 1
                 if obj.relevant_to_conflict:
                     relevant_object_frames += 1
                     relevant_uuids.add(obj.object_id.uuid[0])
@@ -293,7 +328,7 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         # Representative frame (ego ~20 m before the conflict entry).
         self.assertIsNotNone(representative)
         by_uuid = {o.object_id.uuid[0]: o for o in representative.objects}
-        self.assertEqual(len(by_uuid), 4)
+        self.assertEqual(len(by_uuid), 5)
         self.assertTrue(representative.ego_entry_valid)
         self.assertAlmostEqual(
             representative.ego_entry_time_s, (S_ENTER - 870.0) / EGO_SPEED, delta=0.7
@@ -306,11 +341,19 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         self.assertTrue(a.temporal_gap_valid)
         self.assertGreater(a.temporal_gap_s, 0.0)
         self.assertLess(a.arrival_delta_s, 0.0)
+        # Single interval: the all-interval summary matches the first-interval.
+        self.assertEqual(a.predicted_conflict_interval_count, 1)
+        self.assertFalse(a.later_reentry_detected)
+        self.assertFalse(a.any_occupancy_overlap)
+        self.assertAlmostEqual(a.minimum_temporal_gap_s, a.temporal_gap_s, places=4)
+        self.assertTrue(a.prediction_covers_ego_exit)
 
         b = by_uuid[2]
         self.assertTrue(b.relevant_to_conflict)
         self.assertTrue(b.occupancy_overlap)
         self.assertAlmostEqual(b.temporal_gap_s, 0.0, places=5)
+        self.assertTrue(b.any_occupancy_overlap)
+        self.assertAlmostEqual(b.minimum_temporal_gap_s, 0.0, places=5)
 
         c = by_uuid[3]
         self.assertTrue(c.relevant_to_conflict)
@@ -322,7 +365,33 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
         self.assertFalse(d.relevant_to_conflict)
         self.assertFalse(d.object_entry_valid)
         self.assertFalse(d.temporal_gap_valid)
-        self.assertEqual(representative.relevant_object_count, 3)
+        self.assertEqual(d.predicted_conflict_interval_count, 0)
+        self.assertFalse(d.minimum_temporal_gap_valid)
+        # Short prediction: at s=870 the ego exit ETA (5.5 s) is past object 4's
+        # 4.0 s horizon, so coverage is (correctly) not asserted.
+        self.assertAlmostEqual(d.prediction_horizon_s, 4.0, places=3)
+        self.assertFalse(d.prediction_covers_ego_exit)
+
+        # Both branches of prediction_covers_ego_exit are exercised in the sweep:
+        # objects 1/2/3/5 (8 s horizon) always cover; object 4 (4 s) does not for
+        # the earlier stations.
+        self.assertGreater(prediction_covers_ego_exit_frames, 0)
+        self.assertLess(prediction_covers_ego_exit_frames, input_objects)
+
+        # Central case: first interval clears before the ego, second re-enters
+        # the ego window. First-interval facts alone would say "clear".
+        e = by_uuid[5]
+        self.assertTrue(e.relevant_to_conflict)
+        self.assertEqual(e.predicted_conflict_interval_count, 2)
+        self.assertTrue(e.later_reentry_detected)
+        self.assertFalse(e.occupancy_overlap)            # first interval only
+        self.assertGreater(e.temporal_gap_s, 0.0)        # first interval only
+        self.assertLess(e.arrival_delta_s, 0.0)          # first entry before ego
+        self.assertTrue(e.any_occupancy_overlap)         # re-entry overlaps ego
+        self.assertAlmostEqual(e.minimum_temporal_gap_s, 0.0, places=5)
+        self.assertTrue(e.prediction_covers_ego_exit)
+
+        self.assertEqual(representative.relevant_object_count, 4)
 
         result = {
             "input_risk_messages": input_frames,
@@ -334,6 +403,13 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
             "object_entry_valid": object_entry_valid,
             "temporal_gap_valid": temporal_gap_valid,
             "overlap_object_frames": overlap_frames,
+            "multi_interval_object_frames": multi_interval_object_frames,
+            "later_reentry_object_frames": later_reentry_frames,
+            "any_occupancy_overlap_object_frames": any_overlap_frames,
+            "minimum_temporal_gap_valid_object_frames": minimum_gap_valid_frames,
+            "prediction_covers_ego_exit_object_frames": (
+                prediction_covers_ego_exit_frames
+            ),
             "ego_entry_eta": {
                 "median": round(statistics.median(ego_entry_eta), 3),
                 "p10": round(_pctile(ego_entry_eta, 0.10), 3),
@@ -384,6 +460,16 @@ class TestRoundaboutGapRiskRuntime(unittest.TestCase):
                 "after_ego_object_exit_valid": c.object_exit_valid,
                 "after_ego_gap_s": round(c.temporal_gap_s, 3),
                 "after_ego_arrival_delta_s": round(c.arrival_delta_s, 3),
+                "reentry_first_interval_gap_s": round(e.temporal_gap_s, 3),
+                "reentry_first_interval_overlap": e.occupancy_overlap,
+                "reentry_interval_count": e.predicted_conflict_interval_count,
+                "reentry_later_reentry_detected": e.later_reentry_detected,
+                "reentry_any_occupancy_overlap": e.any_occupancy_overlap,
+                "reentry_minimum_temporal_gap_s": round(
+                    e.minimum_temporal_gap_s, 3
+                ),
+                "reentry_prediction_horizon_s": round(e.prediction_horizon_s, 3),
+                "reentry_prediction_covers_ego_exit": e.prediction_covers_ego_exit,
             },
         }
         Path("/tmp/heven_roundabout_gap_risk_result.json").write_text(
