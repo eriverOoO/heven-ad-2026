@@ -2,6 +2,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <ad_interfaces/msg/cut_in_response.hpp>
+#include <ad_interfaces/msg/highway_merge_gap_response.hpp>
 #include <ad_interfaces/msg/planner_status.hpp>
 #include <ad_interfaces/msg/predicted_object.hpp>
 #include <ad_interfaces/msg/predicted_object_array.hpp>
@@ -66,6 +67,7 @@
 #include "ad_planner/planner/planner_node.hpp"
 #include "ad_planner/planning/cut_in_speed_constraint.hpp"
 #include "ad_planner/planning/external_speed_limit.hpp"
+#include "ad_planner/planning/highway_merge_speed_constraint.hpp"
 #include "ad_planner/planning/roundabout_speed_constraint.hpp"
 #include "ad_planner/visualization/path_tracking_markers.hpp"
 #include "ad_planner/visualization/planner_visualization.hpp"
@@ -411,6 +413,22 @@ public:
     roundabout_response_max_age_s_ = positive_finite_parameter(
         declare_parameter<double>("roundabout_response_max_age_s", 0.5),
         "roundabout_response_max_age_s");
+
+    // Opt-in highway merge gap response integration. Default off with the same
+    // guarantee: no subscription, nothing read, no merge authorization, planner
+    // behaviour identical to a build without this feature. MERGE_READY exposes a
+    // revocable merge-authorization fact and imposes no longitudinal cap; WAIT
+    // caps the path-tracking target at the response's own comfortable-stop
+    // envelope; HOLD caps it at 0.0. A response for a different merge zone is
+    // ignored wholesale (no authorization, no cap). An empty
+    // expected_highway_merge_zone accepts any zone.
+    highway_merge_response_integration_enabled_ = declare_parameter<bool>(
+        "enable_highway_merge_response_integration", false);
+    highway_merge_response_max_age_s_ = positive_finite_parameter(
+        declare_parameter<double>("highway_merge_response_max_age_s", 0.5),
+        "highway_merge_response_max_age_s");
+    expected_highway_merge_zone_ = declare_parameter<std::string>(
+        "expected_highway_merge_zone", "kcity_highway_onramp");
     // The path-tracking backend's own configured cruise target, used only as the
     // ceiling for the min() clamp so the constraint can never raise the target.
     // Re-read on every controller rebuild (see reset_controllers).
@@ -803,6 +821,9 @@ private:
     callbacks.roundabout_response = [this](const auto &message) {
       on_roundabout_response(message);
     };
+    callbacks.highway_merge_response = [this](const auto &message) {
+      on_highway_merge_response(message);
+    };
     callbacks.tuning_lease = [this]() {
       tuning_lease_received_ = true;
       tuning_lease_receipt_s_ = steady_now();
@@ -835,7 +856,8 @@ private:
             local_motion_backend_kind_ == LocalMotionBackendKind::kMppiNav2 &&
                 local_motion_runtime_ != nullptr,
             cut_in_response_constraint_enabled_,
-            roundabout_response_constraint_enabled_},
+            roundabout_response_constraint_enabled_,
+            highway_merge_response_integration_enabled_},
         std::move(callbacks));
   }
 
@@ -1174,6 +1196,13 @@ private:
     roundabout_response_receipt_steady_s_ = steady_now();
   }
 
+  void on_highway_merge_response(
+      const ad_interfaces::msg::HighwayMergeGapResponse &message) {
+    highway_merge_response_message_ = message;
+    highway_merge_response_received_ = true;
+    highway_merge_response_receipt_steady_s_ = steady_now();
+  }
+
   // The external upper speed limit the cut-in response asks the longitudinal
   // path to honour this tick, already clamped so it can only ever lower the
   // path-tracking target. std::nullopt means "no constraint" and is applied as a
@@ -1245,6 +1274,73 @@ private:
     return capped;
   }
 
+  // One HighwayMergeResponseConstraintInput built from the freshest response,
+  // shared by the longitudinal-cap and merge-authorization consumers so both
+  // read identical freshness / zone / action semantics. std::nullopt when the
+  // integration is disabled or no response has been received.
+  std::optional<HighwayMergeResponseConstraintInput>
+  highway_merge_response_constraint_input() const {
+    if (!highway_merge_response_integration_enabled_ ||
+        !highway_merge_response_received_) {
+      return std::nullopt;
+    }
+    HighwayMergeResponseConstraintInput input;
+    input.received = true;
+    input.fresh = context_.steady_time_s -
+                      highway_merge_response_receipt_steady_s_ <=
+                  highway_merge_response_max_age_s_;
+    input.active = highway_merge_response_message_.active;
+    input.zone_matches =
+        expected_highway_merge_zone_.empty() ||
+        highway_merge_response_message_.merge_zone_id ==
+            expected_highway_merge_zone_;
+    input.action = static_cast<int>(highway_merge_response_message_.action);
+    input.ego_speed_mps =
+        static_cast<double>(highway_merge_response_message_.ego_speed_mps);
+    input.available_distance_m = static_cast<double>(
+        highway_merge_response_message_.available_distance_m);
+    input.comfortable_stop_distance_m = static_cast<double>(
+        highway_merge_response_message_.comfortable_stop_distance_m);
+    return input;
+  }
+
+  // The external upper speed limit the highway merge gap response asks the
+  // longitudinal path to honour this tick, already clamped so it can only ever
+  // lower the path-tracking target. std::nullopt means "no highway-merge
+  // constraint" (MERGE_READY, inactive, wrong zone, missing, stale, or
+  // malformed) and is a byte-identical no-op. HOLD returns 0.0; WAIT returns the
+  // response's own comfortable-stop speed envelope. Freshness is measured from
+  // the steady receipt time only, so a future, backward, or duplicate header
+  // stamp can neither extend freshness nor latch any state.
+  std::optional<double> highway_merge_response_target_speed_override() const {
+    const auto input = highway_merge_response_constraint_input();
+    if (!input) {
+      return std::nullopt;
+    }
+    const auto limit = highway_merge_response_speed_limit(*input);
+    if (!limit) {
+      return std::nullopt;
+    }
+    const double capped =
+        std::min(path_tracking_nominal_target_speed_mps_, *limit);
+    if (capped >= path_tracking_nominal_target_speed_mps_) {
+      return std::nullopt;
+    }
+    return capped;
+  }
+
+  // The fresh, revocable merge-authorization fact for the mission layer this
+  // tick. Recomputed every tick from the freshest response and never latched:
+  // false unless the integration is enabled and a fresh, active, matching-zone
+  // MERGE_READY advisory is in hand.
+  bool compute_highway_merge_authorized() const {
+    const auto input = highway_merge_response_constraint_input();
+    if (!input) {
+      return false;
+    }
+    return highway_merge_response_merge_authorized(*input);
+  }
+
   ControllerResult remember(ControllerResult result, std::string frame) {
     last_controller_result_ = result;
     last_result_frame_ = std::move(frame);
@@ -1255,13 +1351,17 @@ private:
     const auto cut_in_target_override = cut_in_response_target_speed_override();
     const auto roundabout_target_override =
         roundabout_response_target_speed_override();
+    const auto highway_merge_target_override =
+        highway_merge_response_target_speed_override();
     last_cut_in_constraint_limit_mps_ = cut_in_target_override;
     last_roundabout_constraint_limit_mps_ = roundabout_target_override;
-    // The two external longitudinal constraints are independent upper bounds:
+    last_highway_merge_constraint_limit_mps_ = highway_merge_target_override;
+    // The three external longitudinal constraints are independent upper bounds:
     // the most restrictive active one wins and the order they are combined in
-    // never matters (combine_speed_limits is symmetric).
-    const auto combined_target_override = combine_speed_limits(
-        cut_in_target_override, roundabout_target_override);
+    // never matters (combine_speed_limits is symmetric, min is associative).
+    const auto combined_target_override =
+        combine_speed_limits({cut_in_target_override, roundabout_target_override,
+                              highway_merge_target_override});
     return remember(
         path_tracking_->update(context_.inputs.status.value.pose,
                                context_.inputs.status.value.speed_mps,
@@ -1714,6 +1814,12 @@ private:
     last_controller_result_.reset();
     last_cut_in_constraint_limit_mps_.reset();
     last_roundabout_constraint_limit_mps_.reset();
+    last_highway_merge_constraint_limit_mps_.reset();
+    // Recompute the merge-authorization fact before the behavior tree runs so a
+    // future mission condition reads this tick's value. Never latched: a WAIT /
+    // HOLD / stale / missing / inactive / wrong-zone frame immediately revokes
+    // it, and it is unconditionally false when the integration is disabled.
+    context_.highway_merge_authorized = compute_highway_merge_authorized();
     // A tuning hold suppresses actuation but must not suppress read-only TF
     // and pose preparation. The tuner waits for inputs_ready before resetting
     // and releasing control, so skipping this work while held creates a
@@ -1778,6 +1884,20 @@ private:
           last_roundabout_constraint_limit_mps_
               ? static_cast<float>(*last_roundabout_constraint_limit_mps_)
               : -1.0F);
+    }
+    if (highway_merge_response_integration_enabled_) {
+      // Observability only: the active highway-merge cap this tick (or -1.0 when
+      // the constraint did not lower the target) and the revocable
+      // merge-authorization fact. Both only published when the feature is
+      // enabled, so the default launch graph is unchanged. The Bool is a
+      // diagnostic mirror of context.highway_merge_authorized, not a
+      // lane-change command.
+      ros_interfaces_->publish_highway_merge_speed_limit(
+          last_highway_merge_constraint_limit_mps_
+              ? static_cast<float>(*last_highway_merge_constraint_limit_mps_)
+              : -1.0F);
+      ros_interfaces_->publish_highway_merge_authorized(
+          context_.highway_merge_authorized);
     }
     if (last_controller_result_) {
       publish_visualization(*last_controller_result_, last_result_frame_);
@@ -1935,6 +2055,14 @@ private:
   double roundabout_response_receipt_steady_s_{0.0};
   ad_interfaces::msg::RoundaboutGapResponse roundabout_response_message_;
   std::optional<double> last_roundabout_constraint_limit_mps_;
+
+  bool highway_merge_response_integration_enabled_{false};
+  bool highway_merge_response_received_{false};
+  double highway_merge_response_max_age_s_{0.5};
+  double highway_merge_response_receipt_steady_s_{0.0};
+  std::string expected_highway_merge_zone_{"kcity_highway_onramp"};
+  ad_interfaces::msg::HighwayMergeGapResponse highway_merge_response_message_;
+  std::optional<double> last_highway_merge_constraint_limit_mps_;
   visualization_msgs::msg::MarkerArray route_profile_markers_;
 
   std::unique_ptr<PlannerRosInterfaces> ros_interfaces_;

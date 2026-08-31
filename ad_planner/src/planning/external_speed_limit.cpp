@@ -22,4 +22,13 @@ std::optional<double> combine_speed_limits(std::optional<double> a,
   return std::nullopt;
 }
 
+std::optional<double>
+combine_speed_limits(std::initializer_list<std::optional<double>> limits) {
+  std::optional<double> combined;
+  for (const auto &limit : limits) {
+    combined = combine_speed_limits(combined, limit);
+  }
+  return combined;
+}
+
 } // namespace ad_planner

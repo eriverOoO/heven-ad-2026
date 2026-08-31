@@ -221,6 +221,18 @@ def _create_planner_node(context):
         overrides["enable_roundabout_response_constraint"] = (
             roundabout_response_constraint_override == "true"
         )
+    highway_merge_response_integration_override = LaunchConfiguration(
+        "enable_highway_merge_response_integration", default=""
+    ).perform(context).strip().lower()
+    if highway_merge_response_integration_override:
+        if highway_merge_response_integration_override not in {"true", "false"}:
+            raise RuntimeError(
+                "enable_highway_merge_response_integration must be empty, "
+                "true, or false"
+            )
+        overrides["enable_highway_merge_response_integration"] = (
+            highway_merge_response_integration_override == "true"
+        )
     overrides["route_corridor.expected_global_path_sha256"] = (
         _global_path_sha256(data_dir, selected_path)
     )
@@ -449,13 +461,30 @@ def _create_highway_merge_gap_risk_node(context, force=False):
     )
 
 
+def _highway_merge_response_integration_requested(context):
+    value = LaunchConfiguration(
+        "enable_highway_merge_response_integration", default=""
+    ).perform(context).strip().lower()
+    if value not in {"", "true", "false"}:
+        raise RuntimeError(
+            "enable_highway_merge_response_integration must be empty, true, "
+            "or false"
+        )
+    return value == "true"
+
+
 def _highway_merge_response_requested(context):
     enabled = LaunchConfiguration(
         "highway_merge_gap_response", default="false"
     ).perform(context).strip().lower()
     if enabled not in {"true", "false"}:
         raise RuntimeError("highway_merge_gap_response must be true or false")
-    return enabled == "true"
+    # Enabling the planner-side integration is useless without the response it
+    # consumes, so it also starts the response (and, via the forced-risk path in
+    # _create_planner_actions, the risk) node.
+    return enabled == "true" or _highway_merge_response_integration_requested(
+        context
+    )
 
 
 def _create_highway_merge_gap_response_node(context):
@@ -617,6 +646,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "enable_roundabout_response_constraint", default_value=""
+            ),
+            DeclareLaunchArgument(
+                "enable_highway_merge_response_integration", default_value=""
             ),
             DeclareLaunchArgument("path_tracking_backend", default_value=""),
             DeclareLaunchArgument("target_speed_mps", default_value=""),

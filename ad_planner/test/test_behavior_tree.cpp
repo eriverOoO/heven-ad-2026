@@ -218,7 +218,33 @@ TEST(BehaviorTree, HasExpectedPriorityAndCruises) {
   const auto result = supervisor->tick();
   EXPECT_EQ(result.active_behavior, "follow_global_path");
   EXPECT_DOUBLE_EQ(result.command.motion.accel, 0.2);
-  EXPECT_EQ(supervisor->registered_node_ids().size(), 6U);
+  EXPECT_EQ(supervisor->registered_node_ids().size(), 7U);
+}
+
+// HighwayMergeReady is registered but the production tree above does not
+// reference it (the exact-XML assertion in HasExpectedPriorityAndCruises is the
+// standing proof). It is a read-only mirror of context.highway_merge_authorized
+// for a future Highway Merge Mission Transition: SUCCESS iff the fact is set,
+// FAILURE otherwise, no side effects, no latch.
+TEST(BehaviorTree, HighwayMergeReadyConditionMirrorsAuthorizationFact) {
+  const std::string tree =
+      "<root main_tree_to_execute=\"Probe\">\n"
+      "  <BehaviorTree ID=\"Probe\">\n"
+      "    <HighwayMergeReady/>\n"
+      "  </BehaviorTree>\n"
+      "</root>\n";
+  auto context = nominal_context();
+  PlannerSupervisor supervisor(context, test_config(), tree);
+
+  context.highway_merge_authorized = false;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kFailure);
+
+  context.highway_merge_authorized = true;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kSuccess);
+
+  // Revocation is immediate - the condition never latches SUCCESS.
+  context.highway_merge_authorized = false;
+  EXPECT_EQ(supervisor.tick().status, SupervisorStatus::kFailure);
 }
 
 TEST(BehaviorTree, WaitsForDriveAcknowledgementBeforeRunningPathTracker) {

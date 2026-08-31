@@ -207,6 +207,15 @@ public:
   PlannerInputs inputs;
   PlannerCallbacks callbacks;
 
+  // Fresh, revocable highway-merge authorization fact for a future mission
+  // layer. Recomputed by AdPlannerNode at the top of every tick from the
+  // freshest HighwayMergeGapResponse (before the behavior tree runs) and never
+  // latched: unconditionally false unless the opt-in highway-merge response
+  // integration is enabled and a fresh, active, matching-zone MERGE_READY
+  // advisory is in hand. A read-only BT condition (HighwayMergeReady) exposes
+  // it; no production tree transition consumes it yet.
+  bool highway_merge_authorized{false};
+
   void begin_tick() {
     staged_command_ = full_brake_command();
     claim_count_ = 0;

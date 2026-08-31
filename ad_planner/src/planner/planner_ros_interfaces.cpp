@@ -129,6 +129,31 @@ PlannerRosInterfaces::PlannerRosInterfaces(rclcpp::Node &node,
             reliable_qos);
   }
 
+  if (config.highway_merge_response_integration_enabled) {
+    highway_merge_response_subscription_ =
+        node.create_subscription<ad_interfaces::msg::HighwayMergeGapResponse>(
+            node.declare_parameter<std::string>(
+                "topics.highway_merge_gap_response",
+                "/ad/planning/highway_merge_gap_response"),
+            rclcpp::QoS(1).reliable(),
+            [this](ad_interfaces::msg::HighwayMergeGapResponse::ConstSharedPtr
+                       message) {
+              callbacks_.highway_merge_response(*message);
+            });
+    highway_merge_speed_limit_publisher_ =
+        node.create_publisher<std_msgs::msg::Float32>(
+            node.declare_parameter<std::string>(
+                "topics.highway_merge_speed_limit",
+                "/ad/planner/highway_merge_speed_limit"),
+            reliable_qos);
+    highway_merge_authorized_publisher_ =
+        node.create_publisher<std_msgs::msg::Bool>(
+            node.declare_parameter<std::string>(
+                "topics.highway_merge_authorized",
+                "/ad/planner/highway_merge_authorized"),
+            reliable_qos);
+  }
+
   tuning_hold_service_ = node.create_service<std_srvs::srv::SetBool>(
       "/ad/planner/hold_control",
       [this](const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -189,6 +214,24 @@ void PlannerRosInterfaces::publish_roundabout_speed_limit(float value) {
   std_msgs::msg::Float32 message;
   message.data = value;
   roundabout_speed_limit_publisher_->publish(message);
+}
+
+void PlannerRosInterfaces::publish_highway_merge_speed_limit(float value) {
+  if (!highway_merge_speed_limit_publisher_) {
+    return;
+  }
+  std_msgs::msg::Float32 message;
+  message.data = value;
+  highway_merge_speed_limit_publisher_->publish(message);
+}
+
+void PlannerRosInterfaces::publish_highway_merge_authorized(bool value) {
+  if (!highway_merge_authorized_publisher_) {
+    return;
+  }
+  std_msgs::msg::Bool message;
+  message.data = value;
+  highway_merge_authorized_publisher_->publish(message);
 }
 
 } // namespace ad_planner
