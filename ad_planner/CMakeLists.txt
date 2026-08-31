@@ -568,6 +568,9 @@ if(BUILD_TESTING)
     test_highway_merge_mission_geometry
     test/test_highway_merge_mission_geometry.py)
   ament_add_pytest_test(
+    test_highway_merge_ego_ramp_scenario
+    test/test_highway_merge_ego_ramp_scenario.py)
+  ament_add_pytest_test(
     test_cut_in_risk_launch test/test_cut_in_risk_launch.py)
   ament_add_pytest_test(
     test_cut_in_response_launch test/test_cut_in_response_launch.py)
@@ -624,6 +627,20 @@ if(BUILD_TESTING)
       "ROS_LOCALHOST_ONLY=1")
   add_launch_test(
     test/test_planner_highway_merge_mission.py
+    TIMEOUT 300
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_planner_highway_merge_ego_ramp.py
+    TIMEOUT 300
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_highway_merge_ego_ramp_pipeline.py
     TIMEOUT 300
     ENV
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"

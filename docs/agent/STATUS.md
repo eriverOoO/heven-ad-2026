@@ -1,5 +1,146 @@
 # STATUS
 
+## Highway Merge Ego-on-Ramp Scenario v1 — COMPLETE
+
+Branch `feat/highway-merge-ego-ramp-scenario-v1`, from merged PR #24 main
+`27c028e7359dc85d942829d344e94f869e25042a` (`feat(planning): add highway merge
+mission primitive (#24)`). Scenario / route-fixture infrastructure only:
+**opt-in, no production default changed, no C++ change, no lateral path
+generator, no steering / CtrlCmd / brake / throttle / DWA / Frenet / MPPI
+change.**
+
+**Why:** PR #24 proved CASE B — the committed competition global path IS
+`route:0` (the mainline) and the production ego never drives the acceleration
+lane `route:0:left:1` — so `HighwayMergeMissionState` / `HighwayMergeReady` /
+`HighwayMergeCommitted` existed with no ego-on-ramp scenario to exercise them.
+The recommended-next Lateral Path Primitive has no consumer scenario until one
+exists. This task builds it.
+
+**Existing mechanisms reused (Phase 1, no new framework):** (a) ego spawn —
+`ad_morai_bridge_dev.scenarios.reset.load_reset_plan` +
+`reset_scenario`/`LoadMoraiScenario` gRPC, driven by a MORAI scenario JSON
+(`egoVehicle.initPosition.pos/rot` + `initLink`/`initLinkRatio`, `vehicleList`);
+(b) route override — the planner's `path_file` / `route_corridor_file` params
+(already per-launch overridable; `route_corridor.expected_global_path_sha256`
+auto-derived by `planner.launch.py`). No second scenario framework invented.
+
+**Source geometry (Phase 2-4):** source `route:0:left:1` (link `A2256W000409`,
+336 corridor pts, `route_s` 1118.7418..1286.1546, lateral offset to `route:0`
+tapers 3.94->0.00 m), target `route:0`. **The acceleration lane does not extend
+upstream of the merge zone entry on the K-City map** — its first point ==
+`route_s_zone_entry_m`. So the ego start is `route:0:left:1` point 0 verbatim
+`(66.0109296059, 256.5335690919, 28.3102668207)` yaw `-1.568021` rad
+(`-89.8410` deg), link `A2256W000409` ratio 0, = route:0 station ~1118.74,
+~3.94 m off `route:0`. INACTIVE(far)/APPROACH are represented with the ego on
+`route:0` (the mainline approach); every WAITING..COMPLETE pose is a genuine
+`route:0:left:1` sample (a documented CASE B consequence).
+
+**Route fixture (Phase 5-8):** `ad_data/path/test_highway_merge_ego_ramp_path.txt`
+(validation-only, never a production default) — 736 pts: `route:0:left:1` all
+336 pts (source section, the lane centerline itself does the lateral shift) +
+`route:0` 400 pts for `route_s (1286.1546, ~1486.15]` (target section). Join:
+`route:0:left:1` last pt == `route:0` pt at `route_s` 1286.1546 **exactly**
+(0.00 m sep); target section starts at the next `route:0` pt (0.50 m spacing,
+0.0015 rad heading change). No teleport, no invented Cartesian waypoint;
+regenerated + byte-compared by the geometry test.
+
+**Primary-route projection (Phase 12-13, CRITICAL — no fix needed):** with the
+ego on `route:0:left:1` (up to ~3.9 m displaced), `project_primary_route(route:0,
+ego)` (pi/2 heading gate; used by the mission primitive) and
+`project_to_frenet(route:0, ego)` (used by `ad_highway_merge_gap_risk`) are
+**both fully monotonic over all 336 ramp points** with `projected_s - source_s`
+in `[-0.10, +0.11] m`. `s_dot` (Frenet `1/(1-kappa*d)`, d~3.9) stays
+`[7.66, 8.47]` m/s for a true 8 m/s ego (<6% ETA effect, well inside
+tolerances). **No mission-progress / gap-risk architecture change.**
+
+**Gap risk / response / integration (Phase 14-17):** Gap Risk already projects
+ego onto `route:0` (full target lane), not a ramp centerline — live pipeline
+test records `ego_route_s_m` monotonic, matching source station within 0.4 m,
+`ego_merge_timing_valid` true throughout. No risk/response threshold
+(`1.5/2.0/3.0` s headways, `6.0` m route gap) retuned. Integration WAIT/HOLD ->
+target-speed cap, MERGE_READY -> revocable `highway_merge_authorized`, unchanged.
+
+**Commit / completion physical meaning (Phase 18-19):** derived commit station
+~1213.28 m; live planner test confirms the ego pose there is `3.496 m` off
+`route:0` (just under the 3.5 m `commit_lateral_separation_m` — genuinely inside
+the taper), ~72.9 m committed span before merge completion. At
+`route_s_merge_complete_m` 1286.1546 the accel-lane last point coincides with
+`route:0` (`0.000 m` sep) and the mission goes COMMITTED -> COMPLETE there.
+
+**Traffic (Phase 10, 23):** deterministic mainline NPCs on `route:0`
+(`ad_data/scenarios/kcity_highway_ego_onramp_v1.json` id 101 front `route_s`
+~1200 @ 25 m/s, id 102 rear ~1080 @ 25 m/s; t=0 separations 82 m / 39 m; none on
+the ego's lane). The stock `kcity-highway` preset NPC (on `route:0:left:1`) is
+deliberately NOT reused. Live pipeline cases at ramp station ~1170: no traffic
+-> **MERGE_READY** (deterministic); clear gap (front +80 @26, rear -90 @24) ->
+WAIT (mainline at 3x ego speed overtakes the slow ramp ego — physically
+correct); fast rear (-12 @33) -> not MERGE_READY; 2 s-horizon object -> not
+MERGE_READY.
+
+**Deterministic mission state sequence (Phase 28, live, real ramp poses):**
+`route:0` s400 -> INACTIVE; `route:0` s1000 WAIT -> APPROACH; ramp s1120 none ->
+WAITING; ramp s1150 MERGE_READY -> AUTHORIZED; ramp s1160 WAIT -> WAITING (no
+latch); ramp s1180 MERGE_READY -> AUTHORIZED; ramp s1220 MERGE_READY ->
+COMMITTED (crossed ~1213, ego 3.50 m off route:0); ramp s1250 WAIT -> COMMITTED
+(post-commit revocation NOT honored, `highway_merge_authorized` False); `route:0`
+s1295 WAIT -> COMPLETE (ego 0.00 m off route:0); `route:0` s1330 -> INACTIVE.
+Steering is pure Stanley path-tracking (ramp poses sit up to ~3.9 m off the
+tracked production route by construction); it does not increase across
+AUTHORIZED -> COMMITTED and stays far inside the lock (< 0.5 rad). One
+`/ad/control/command` publisher throughout; clean shutdown.
+
+**Validation type (Phase 11, 26):** **NOT a live MORAI run** (no simulator /
+grpc in this environment). Deterministic geometry/data tests + ROS pipeline
+replay. The MORAI scenario JSON is authored to the existing `load_reset_plan`
+contract for a future real run.
+
+**Opt-in launch (Phase 21):** `highway_merge_ego_ramp_scenario.launch.py`
+(`data_dir:=<abs ad_data>`) starts gap risk + gap response + planner (response
+integration + mission on) on the fixture route; generates a fixture corridor at
+launch time (byte copy of `route_corridor.json` with only
+`source_sha256.global_path` rewritten to the fixture digest — lane geometry
+identical). Never included by `planner.launch.py`.
+
+**Production route regression (Phase 22):** `2026_molit_comp_global_path.txt`
+byte-unchanged (SHA-256 `50658991…cc05`, == `route_corridor.json`
+`source_sha256.global_path`); `planner.yaml` still defaults to it;
+`test_highway_merge_ego_ramp_scenario.py` locks all three.
+
+**Tests:** `test_highway_merge_ego_ramp_scenario` **15 pure-data** (fixture
+provenance / regeneration / continuity, ego-start on source lane, both
+projection monotonicity checks, commit-taper & completion correspondence,
+production-path-unchanged, opt-in, manifest/actor consistency).
+`test_highway_merge_ego_ramp_pipeline.py` live synthetic DynamicObjectRisk ->
+`ad_highway_merge_gap_risk` -> `ad_highway_merge_gap_response`, ramp ego,
+`ego_route_s_m` monotonic `[1120.26, 1140.24, 1170.24, 1210.30, 1250.36]`,
+4 traffic cases. `test_planner_highway_merge_ego_ramp.py` live `ad_planner`
+(mission + integration), full state sequence above, commit/completion physical
+checks, one command publisher, clean shutdown. **Full `ad_planner` suite 57/57**
+(minus the 4 documented pre-existing host-flaky: `test_mppi_nav2_launch`,
+`test_cut_in_response_runtime`, `test_cut_in_risk_runtime`,
+`test_frenet_runtime_contract`); cut-in / roundabout / highway-merge constraint
++ risk + response + mission regressions all pass. Isolated `colcon build
+--packages-select ad_interfaces ad_planner --symlink-install` clean.
+
+**Files:** `ad_data/path/test_highway_merge_ego_ramp_path.txt`,
+`ad_data/scenarios/kcity_highway_ego_onramp_v1.json`,
+`ad_data/scenarios/kcity_highway_ego_onramp_v1.manifest.yaml`,
+`ad_planner/launch/highway_merge_ego_ramp_scenario.launch.py`,
+`ad_planner/test/{test_highway_merge_ego_ramp_scenario.py,
+test_highway_merge_ego_ramp_pipeline.py,test_planner_highway_merge_ego_ramp.py}`,
+`ad_planner/CMakeLists.txt`,
+`docs/planning/highway_merge_ego_ramp_scenario_v1.md`, this file. No `ad_planner`
+C++ / `planner.yaml` / production route / BehaviorTree / `ad_interfaces` change.
+
+**Recommended next task:** Highway Merge Lateral Path Primitive v1 — use this
+validated ego-on-ramp scenario and the source-grounded `route:0:left:1` ->
+`route:0` corridor geometry to generate a merge reference path for the existing
+lateral controller, gated by the committed highway-merge mission state
+(`HighwayMergeCommitted`), without publishing steering directly or creating a
+second `CtrlCmd` publisher.
+
+---
+
 ## Highway Merge Mission Primitive v1 — COMPLETE (CASE B)
 
 Branch `feat/highway-merge-mission-primitive-v1`, from merged PR #23 main

@@ -1,0 +1,67 @@
+{
+  "_comment": "VALIDATION-ONLY MORAI scenario for the Highway Merge Ego-on-Ramp Scenario v1. NOT a production scenario and NOT a default. Loaded only via an explicit `ad_morai_scenario_reset scenario_file:=...` / `ad_morai_scenario_setup` invocation or the opt-in ad_planner highway_merge_ego_ramp_scenario.launch.py. Consumed by ad_morai_bridge_dev.scenarios.reset.load_reset_plan (egoVehicle.initPosition + vehicleList only). Poses are verbatim from ad_data/map/route_corridor.json; the ego starts at route:0:left:1 point 0 (source link A2256W000409, the real K-City acceleration lane) and the two NPCs are mainline vehicles on route:0. The production competition route ad_data/path/2026_molit_comp_global_path.txt is unchanged.",
+  "scenario_id": "kcity-highway-ego-onramp-v1",
+  "version": 1,
+  "egoVehicle": {
+    "UNIQUEID": -1,
+    "initPosition": {
+      "initPositionMode": "Absolute",
+      "initLink": "A2256W000409",
+      "initLinkRatio": 0,
+      "pos": {
+        "x": 66.0109296059,
+        "y": 256.5335690919,
+        "z": 28.3102668207
+      },
+      "rot": {
+        "roll": "0.0",
+        "pitch": "0.0",
+        "yaw": "-89.8410"
+      }
+    }
+  },
+  "vehicleList": [
+    {
+      "UNIQUEID": 101,
+      "_role": "front mainline vehicle on route:0 (route_s ~ 1200 m)",
+      "initPosition": {
+        "initPositionMode": "Absolute",
+        "initLink": "",
+        "initLinkRatio": 0,
+        "pos": {
+          "x": 62.6567,
+          "y": 174.9985,
+          "z": 28.2587
+        },
+        "rot": {
+          "roll": "0.0",
+          "pitch": "0.0",
+          "yaw": "-89.0423"
+        }
+      },
+      "currentVelocity": 25.0
+    },
+    {
+      "UNIQUEID": 102,
+      "_role": "rear mainline vehicle on route:0 (route_s ~ 1080 m)",
+      "initPosition": {
+        "initPositionMode": "Absolute",
+        "initLink": "",
+        "initLinkRatio": 0,
+        "pos": {
+          "x": 58.0945,
+          "y": 294.7138,
+          "z": 28.2801
+        },
+        "rot": {
+          "roll": "0.0",
+          "pitch": "0.0",
+          "yaw": "-76.5820"
+        }
+      },
+      "currentVelocity": 25.0
+    }
+  ],
+  "pedestrianList": [],
+  "objectList": []
+}
