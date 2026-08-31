@@ -1,0 +1,36 @@
+ad_highway_merge_gap_risk:
+  ros__parameters:
+    data_dir: ""
+    route_corridor_file: "map/route_corridor.json"
+    route_corridor.expected_global_path_sha256: ""
+
+    # Empty -> ad_planner/config/highway_merge.json from the package share.
+    merge_geometry_file: ""
+    merge_zone_id: "kcity_highway_onramp"
+
+    topics.dynamic_object_risks: "/ad/planning/dynamic_object_risks"
+    topics.odometry: "/ad/localization/odometry"
+    topics.output: "/ad/planning/highway_merge_gap_risks"
+    topics.diagnostics: "/ad/planning/highway_merge_gap_risks/diagnostics"
+
+    risk_frame_id: "base_link"
+    maximum_input_age_s: 0.5
+    maximum_odometry_skew_s: 0.5
+    maximum_future_skew_s: 0.1
+    transform_timeout_s: 0.05
+    maximum_objects: 256
+
+    # Merge-zone stations come from merge_geometry_file and are cross-checked at
+    # startup against the source acceleration lane in the checksum-verified route
+    # corridor. These parameters are geometric only: there is no accepted-gap,
+    # safe-gap, merge, or yield threshold here.
+    ego_speed_epsilon_mps: 0.5
+    maximum_ego_approach_distance_m: 400.0
+    merge_geometry_consistency_margin_m: 2.0
+    relevant_rear_window_m: 150.0
+    relevant_front_window_m: 120.0
+    alongside_longitudinal_band_m: 5.0
+    target_corridor_lateral_margin_m: 0.5
+    closing_speed_epsilon_mps: 0.1
+
+    runtime_summary_interval_frames: 200

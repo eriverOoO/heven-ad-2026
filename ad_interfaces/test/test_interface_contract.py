@@ -14,6 +14,8 @@ from ad_interfaces.msg import (
     RoundaboutGapRisk,
     RoundaboutGapRiskArray,
     RoundaboutGapResponse,
+    HighwayMergeGapRisk,
+    HighwayMergeGapRiskArray,
     DynamicObstacleStatus,
     PlannerStatus,
     PredictedObject,
@@ -412,6 +414,129 @@ def test_roundabout_gap_response_is_an_advisory_not_a_command():
         for name in RoundaboutGapResponse.get_fields_and_field_types()
     }
     assert fields.isdisjoint(forbidden)
+
+
+EXPECTED_HIGHWAY_MERGE_GAP_RISK_DECLARATION = """\
+unique_identifier_msgs/UUID object_id
+uint8 classification
+float32 classification_probability
+float32 existence_probability
+bool relevant_to_merge
+float32 object_route_s_m
+float32 object_lateral_offset_m
+bool object_in_target_corridor_now
+bool predicted_to_enter_target_corridor
+bool predicted_corridor_entry_valid
+float32 predicted_corridor_entry_time_s
+float32 delta_s_now_m
+float32 object_longitudinal_speed_mps
+float32 relative_longitudinal_speed_mps
+bool delta_s_at_merge_valid
+float32 delta_s_at_merge_m
+bool is_ahead_at_merge
+bool is_behind_at_merge
+bool is_alongside_at_merge
+bool longitudinal_gap_closing
+float32 longitudinal_closing_speed_mps
+bool time_to_route_coincidence_valid
+float32 time_to_route_coincidence_s
+bool predicted_min_route_gap_valid
+float32 predicted_min_route_gap_m
+float32 predicted_min_route_gap_time_s
+float32 prediction_horizon_s
+bool prediction_covers_merge_time
+bool ttc_valid
+float32 ttc_s
+bool cpa_valid
+float32 cpa_time_s
+float32 cpa_distance_m
+bool predicted_min_separation_valid
+float32 predicted_min_separation_m
+float32 predicted_min_separation_time_s
+"""
+
+EXPECTED_HIGHWAY_MERGE_GAP_RISK_ARRAY_DECLARATION = """\
+std_msgs/Header header
+string merge_zone_id
+string target_lane_sequence_id
+string source_lane_sequence_id
+float32 merge_zone_entry_route_s_m
+float32 merge_reference_route_s_m
+float32 ego_route_s_m
+float32 ego_longitudinal_speed_mps
+float32 ego_route_distance_to_zone_entry_m
+float32 ego_route_distance_to_merge_m
+bool ego_in_merge_zone_now
+bool ego_merge_timing_valid
+float32 ego_merge_time_s
+uint16 relevant_object_count
+bool nearest_leading_valid
+unique_identifier_msgs/UUID nearest_leading_object_id
+float32 nearest_leading_delta_s_at_merge_m
+bool nearest_trailing_valid
+unique_identifier_msgs/UUID nearest_trailing_object_id
+float32 nearest_trailing_delta_s_at_merge_m
+bool merge_gap_valid
+float32 merge_gap_m
+HighwayMergeGapRisk[] objects
+"""
+
+
+def test_highway_merge_gap_risk_interface_is_stable_and_policy_free():
+    """Highway merge gap risk exposes route-relative conflict-geometry facts
+    only -- never MERGE / WAIT / lane-change / accepted-gap / safe-to-merge."""
+    assert _declarations(
+        PACKAGE_ROOT / "msg" / "HighwayMergeGapRisk.msg"
+    ) == EXPECTED_HIGHWAY_MERGE_GAP_RISK_DECLARATION.strip()
+    assert _declarations(
+        PACKAGE_ROOT / "msg" / "HighwayMergeGapRiskArray.msg"
+    ) == EXPECTED_HIGHWAY_MERGE_GAP_RISK_ARRAY_DECLARATION.strip()
+    message = HighwayMergeGapRisk()
+    assert message.relevant_to_merge is False
+    assert message.delta_s_at_merge_valid is False
+    assert message.is_ahead_at_merge is False
+    assert message.is_behind_at_merge is False
+    assert message.is_alongside_at_merge is False
+    assert message.longitudinal_gap_closing is False
+    assert message.prediction_covers_merge_time is False
+    assert message.predicted_min_route_gap_m == 0.0
+    array = HighwayMergeGapRiskArray()
+    assert array.objects == []
+    assert array.merge_gap_valid is False
+    assert array.nearest_leading_valid is False
+    forbidden = {
+        "merge_allowed",
+        "merge_safe",
+        "merge_ready",
+        "safe_to_merge",
+        "go",
+        "wait",
+        "yield",
+        "yield_required",
+        "hold",
+        "release",
+        "lane_change",
+        "change_lane",
+        "accelerate",
+        "decelerate",
+        "accepted_gap",
+        "gap_accepted",
+        "safe_gap",
+        "safe_gap_s",
+        "requested_speed",
+        "target_speed",
+        "brake",
+        "throttle",
+        "steering",
+        "risk_score",
+        "decision",
+    }
+    for message_type in (HighwayMergeGapRisk, HighwayMergeGapRiskArray):
+        fields = {
+            name.lower()
+            for name in message_type.get_fields_and_field_types()
+        }
+        assert fields.isdisjoint(forbidden)
 
 
 def test_traffic_light_status_preserves_composite_aspects():
