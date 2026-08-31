@@ -1,0 +1,35 @@
+{
+  "_comment": "HEVEN dataset-factory starter scenario. Poses are grounded on the kcity-highway actor preset and MUST be validated against a live K-City map before a production capture. Vehicle-class only.",
+  "egoVehicle": {
+    "initPosition": {
+      "pos": {
+        "x": 66.0109296059,
+        "y": 256.5335690919,
+        "z": 28.3102668207
+      },
+      "rot": {
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -1.568021
+      }
+    }
+  },
+  "vehicleList": [
+    {
+      "UNIQUEID": 101,
+      "initPosition": {
+        "pos": {
+          "x": 69.5498,
+          "y": 242.5433,
+          "z": 28.3102668207
+        },
+        "rot": {
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": -1.568021
+        }
+      },
+      "currentVelocity": 7.5
+    }
+  ]
+}

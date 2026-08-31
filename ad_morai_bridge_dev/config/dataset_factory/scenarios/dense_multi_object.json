@@ -1,0 +1,83 @@
+{
+  "_comment": "HEVEN dataset-factory starter scenario. Poses are grounded on the kcity-highway actor preset and MUST be validated against a live K-City map before a production capture. Vehicle-class only.",
+  "egoVehicle": {
+    "initPosition": {
+      "pos": {
+        "x": 66.0109296059,
+        "y": 256.5335690919,
+        "z": 28.3102668207
+      },
+      "rot": {
+        "roll": 0.0,
+        "pitch": 0.0,
+        "yaw": -1.568021
+      }
+    }
+  },
+  "vehicleList": [
+    {
+      "UNIQUEID": 101,
+      "initPosition": {
+        "pos": {
+          "x": 66.0498,
+          "y": 242.5336,
+          "z": 28.3102668207
+        },
+        "rot": {
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": -1.568021
+        }
+      },
+      "currentVelocity": 7.0
+    },
+    {
+      "UNIQUEID": 102,
+      "initPosition": {
+        "pos": {
+          "x": 69.5831,
+          "y": 230.5434,
+          "z": 28.3102668207
+        },
+        "rot": {
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": -1.568021
+        }
+      },
+      "currentVelocity": 9.0
+    },
+    {
+      "UNIQUEID": 103,
+      "initPosition": {
+        "pos": {
+          "x": 66.1247,
+          "y": 215.5337,
+          "z": 28.3102668207
+        },
+        "rot": {
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": -1.568021
+        }
+      },
+      "currentVelocity": 6.0
+    },
+    {
+      "UNIQUEID": 104,
+      "initPosition": {
+        "pos": {
+          "x": 62.6802,
+          "y": 195.5241,
+          "z": 28.3102668207
+        },
+        "rot": {
+          "roll": 0.0,
+          "pitch": 0.0,
+          "yaw": -1.568021
+        }
+      },
+      "currentVelocity": 10.0
+    }
+  ]
+}
