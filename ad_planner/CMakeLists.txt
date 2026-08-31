@@ -58,8 +58,10 @@ add_library(ad_planner_core
   src/planning/cut_in_risk.cpp
   src/planning/cut_in_response.cpp
   src/planning/cut_in_speed_constraint.cpp
+  src/planning/external_speed_limit.cpp
   src/planning/roundabout_gap_risk.cpp
   src/planning/roundabout_gap_response.cpp
+  src/planning/roundabout_speed_constraint.cpp
   src/visualization/path_tracking_markers.cpp
   src/visualization/planner_visualization.cpp
   src/visualization/route_markers.cpp)
@@ -380,6 +382,16 @@ if(BUILD_TESTING)
   target_link_libraries(test_cut_in_speed_constraint ad_planner_core)
 
   ament_add_gtest(
+    test_roundabout_speed_constraint test/test_roundabout_speed_constraint.cpp)
+  target_include_directories(test_roundabout_speed_constraint PRIVATE include)
+  target_link_libraries(test_roundabout_speed_constraint ad_planner_core)
+
+  ament_add_gtest(
+    test_external_speed_limit test/test_external_speed_limit.cpp)
+  target_include_directories(test_external_speed_limit PRIVATE include)
+  target_link_libraries(test_external_speed_limit ad_planner_core)
+
+  ament_add_gtest(
     test_roundabout_gap_risk
     test/test_roundabout_gap_risk.cpp
     src/planning/roundabout_gap_risk_node.cpp)
@@ -494,6 +506,13 @@ if(BUILD_TESTING)
       "ROS_LOCALHOST_ONLY=1")
   add_launch_test(
     test/test_planner_cut_in_constraint.py
+    TIMEOUT 240
+    ENV
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_planner_roundabout_constraint.py
     TIMEOUT 240
     ENV
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"

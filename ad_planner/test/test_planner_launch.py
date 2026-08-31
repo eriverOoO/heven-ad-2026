@@ -390,7 +390,9 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "cut_in_risk",
         "cut_in_response",
         "roundabout_gap_risk",
+        "roundabout_gap_response",
         "enable_cut_in_response_constraint",
+        "enable_roundabout_response_constraint",
         "path_tracking_backend",
         "target_speed_mps",
         "local_motion_prediction_mode",
@@ -401,6 +403,13 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         LaunchContext(),
         arguments["enable_cut_in_response_constraint"].default_value,
     ) == ""
+    assert perform_substitutions(
+        LaunchContext(),
+        arguments["enable_roundabout_response_constraint"].default_value,
+    ) == ""
+    assert perform_substitutions(
+        LaunchContext(), arguments["roundabout_gap_response"].default_value
+    ) == "false"
     assert perform_substitutions(
         LaunchContext(), arguments["cut_in_response"].default_value
     ) == "false"
@@ -473,6 +482,69 @@ def test_cut_in_risk_is_opt_in_and_uses_active_corridor(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="cut_in_risk must be true or false"):
         module._create_cut_in_risk_node(
             _launch_context(data_dir=str(tmp_path), cut_in_risk="sometimes")
+        )
+
+
+def test_roundabout_gap_response_node_is_opt_in_and_follows_the_constraint(
+    monkeypatch, tmp_path
+):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    # Default: neither the standalone flag nor the planner-side constraint is
+    # requested -> no response node and no forced risk node.
+    disabled = _launch_context(data_dir=str(tmp_path))
+    assert module._create_roundabout_gap_response_node(disabled) is None
+    assert module._create_roundabout_gap_risk_node(disabled) is None
+
+    # Standalone opt-in.
+    standalone = _launch_context(
+        data_dir=str(tmp_path), roundabout_gap_response="true"
+    )
+    node = module._create_roundabout_gap_response_node(standalone)
+    assert isinstance(node, Node)
+    assert node._Node__node_executable == "ad_roundabout_gap_response_node"
+
+    # The planner-side constraint alone also starts the response node and forces
+    # the roundabout gap risk node it ultimately consumes.
+    constrained = _launch_context(
+        data_dir=str(tmp_path),
+        enable_roundabout_response_constraint="true",
+    )
+    assert isinstance(
+        module._create_roundabout_gap_response_node(constrained), Node
+    )
+    forced_risk = module._create_roundabout_gap_risk_node(
+        constrained, force=True
+    )
+    assert isinstance(forced_risk, Node)
+    assert forced_risk._Node__node_executable == "ad_roundabout_gap_risk_node"
+
+    planner = module._create_planner_node(constrained)
+    overrides = _parameter_overrides(planner, constrained)
+    assert overrides["enable_roundabout_response_constraint"] is True
+
+    # Default-off: with neither flag set the planner node carries no override,
+    # so the config value (false) stands and no roundabout subscription or
+    # observability publisher is created.
+    default_planner = module._create_planner_node(disabled)
+    assert "enable_roundabout_response_constraint" not in _parameter_overrides(
+        default_planner, disabled
+    )
+
+    with pytest.raises(
+        RuntimeError, match="roundabout_gap_response must be true or false"
+    ):
+        module._create_roundabout_gap_response_node(
+            _launch_context(
+                data_dir=str(tmp_path), roundabout_gap_response="maybe"
+            )
         )
 
 

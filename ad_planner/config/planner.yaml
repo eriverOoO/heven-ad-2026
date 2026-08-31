@@ -39,6 +39,20 @@ ad_planner:
     enable_cut_in_response_constraint: false
     cut_in_response_max_age_s: 0.5
 
+    # Opt-in: apply the roundabout gap response as an upper bound on the
+    # path-tracking longitudinal target (final target = min(existing target,
+    # cut-in limit, roundabout limit) - the most restrictive active source wins,
+    # order-independent). Default off -> no subscription, no behaviour change.
+    # RELEASE removes only the roundabout cap; YIELD caps at the response's own
+    # published comfortable-stop envelope; HOLD caps at 0.0. The comfortable
+    # deceleration and every roundabout policy threshold stay owned by
+    # Roundabout Gap Response and are not repeated here.
+    # roundabout_response_max_age_s is the consumer-side freshness timeout
+    # (mirrors the response node's own maximum_input_age_s); absent or stale ->
+    # no constraint.
+    enable_roundabout_response_constraint: false
+    roundabout_response_max_age_s: 0.5
+
     # Current Stanley baseline: dynamic steering preview + curvature speed cap.
     stanley.target_speed_mps: 16.25
     stanley.cross_track_gain: 0.91
@@ -209,6 +223,10 @@ ad_planner:
     # Only subscribed / published when enable_cut_in_response_constraint is true.
     topics.cut_in_response: "/ad/planning/cut_in_response"
     topics.cut_in_speed_limit: "/ad/planner/cut_in_speed_limit"
+    # Only subscribed / published when enable_roundabout_response_constraint is
+    # true.
+    topics.roundabout_gap_response: "/ad/planning/roundabout_gap_response"
+    topics.roundabout_speed_limit: "/ad/planner/roundabout_speed_limit"
     topics.command: "/ad/control/command"
     topics.planner_status: "/ad/planner/status"
     topics.path: "/ad/planner/path"

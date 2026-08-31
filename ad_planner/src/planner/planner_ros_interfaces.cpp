@@ -111,6 +111,24 @@ PlannerRosInterfaces::PlannerRosInterfaces(rclcpp::Node &node,
             reliable_qos);
   }
 
+  if (config.roundabout_response_constraint_enabled) {
+    roundabout_response_subscription_ =
+        node.create_subscription<ad_interfaces::msg::RoundaboutGapResponse>(
+            node.declare_parameter<std::string>(
+                "topics.roundabout_gap_response",
+                "/ad/planning/roundabout_gap_response"),
+            rclcpp::QoS(1).reliable(),
+            [this](
+                ad_interfaces::msg::RoundaboutGapResponse::ConstSharedPtr
+                    message) { callbacks_.roundabout_response(*message); });
+    roundabout_speed_limit_publisher_ =
+        node.create_publisher<std_msgs::msg::Float32>(
+            node.declare_parameter<std::string>(
+                "topics.roundabout_speed_limit",
+                "/ad/planner/roundabout_speed_limit"),
+            reliable_qos);
+  }
+
   tuning_hold_service_ = node.create_service<std_srvs::srv::SetBool>(
       "/ad/planner/hold_control",
       [this](const std_srvs::srv::SetBool::Request::SharedPtr request,
@@ -162,6 +180,15 @@ void PlannerRosInterfaces::publish_cut_in_speed_limit(float value) {
   std_msgs::msg::Float32 message;
   message.data = value;
   cut_in_speed_limit_publisher_->publish(message);
+}
+
+void PlannerRosInterfaces::publish_roundabout_speed_limit(float value) {
+  if (!roundabout_speed_limit_publisher_) {
+    return;
+  }
+  std_msgs::msg::Float32 message;
+  message.data = value;
+  roundabout_speed_limit_publisher_->publish(message);
 }
 
 } // namespace ad_planner
