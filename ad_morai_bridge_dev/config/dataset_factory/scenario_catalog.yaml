@@ -1,0 +1,51 @@
+# MORAI Tracking Dataset Factory - starter scenario catalog (schema v1).
+#
+# Each entry references a standard MORAI scenario JSON (the egoVehicle /
+# vehicleList format that ad_morai_bridge_dev.scenarios.reset.load_reset_plan
+# parses). Poses are grounded on the kcity-highway actor preset and are
+# TEMPLATES: they must be validated against a live K-City map before a
+# production capture. Vehicle-class only - MORAI actor-GT class evidence for
+# pedestrians/obstacles has only ever been confirmed against one recorded
+# scenario, so the starter set does not claim them.
+schema_version: 1
+catalog_id: morai_tracking_starter_v1
+
+scenarios:
+  - scenario_id: lead_constant
+    purpose: persistent single lead at constant speed; baseline ID continuity
+    range_regime: mid
+    scenario_file: scenarios/lead_constant.json
+    notes: one NPC ~30 m ahead, same lane, 8 m/s
+
+  - scenario_id: lead_brake
+    purpose: closing range / large velocity change on a single tracked actor
+    range_regime: near
+    scenario_file: scenarios/lead_brake.json
+    notes: one slow NPC ~22 m ahead at 2 m/s; ego overtakes / closes
+
+  - scenario_id: cut_in
+    purpose: lateral trajectory into the ego lane; association under motion
+    range_regime: near
+    scenario_file: scenarios/cut_in.json
+    notes: one NPC ~14 m ahead, +3.5 m lateral, 7.5 m/s
+
+  - scenario_id: crossing
+    purpose: perpendicular crossing trajectory; birth/death at frame edges
+    range_regime: mid
+    scenario_file: scenarios/crossing.json
+    notes: one NPC ~42 m ahead heading +x at 6 m/s
+
+  - scenario_id: occlusion_reappear
+    purpose: a trailing actor is geometrically occluded by a lead then reappears
+    range_regime: mid
+    scenario_file: scenarios/occlusion_reappear.json
+    notes: >
+      two same-lane NPCs at ~18 m and ~34 m. "occlusion" is a scenario
+      intent only; the GT record always reports "actor exists in simulator",
+      never a visual-occlusion flag, unless MORAI exposes one.
+
+  - scenario_id: dense_multi_object
+    purpose: several nearby actors across lanes and speeds; crowded association
+    range_regime: mixed
+    scenario_file: scenarios/dense_multi_object.json
+    notes: four NPCs at ~14/26/41/61 m, mixed lanes and 6-10 m/s

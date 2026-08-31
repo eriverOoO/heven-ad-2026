@@ -1,5 +1,118 @@
 # STATUS
 
+## MORAI Tracking Dataset Factory v1 — COMPLETE (data infrastructure only)
+
+Branch `feat/morai-tracking-dataset-factory-v1`, from merged PR #27 main
+`50b1874c9905eb439a41bb0a3f3bd8f66c7e6ddf` (`test(planning): validate highway
+merge end to end (#27)`). **Data infrastructure only. No model trained, no
+production detector/tracker/planner default changed, no frozen T2–T15 /
+KalmanNet / CenterPoint claim touched, no planner behaviour altered.**
+
+**What it is:** a deterministic scenario / reset / capture pipeline that records
+one common raw + ground-truth source for later tracking evaluation, CenterPoint
+data export and KalmanNet trajectory extraction. New module tree
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/` (next to `scenarios/`,
+reusing `scenarios.reset` / `scenarios.setup` / `simulator_grpc.client` — no
+second reset framework). Entry points: `ad_morai_dataset_capture`,
+`ad_morai_dataset_batch`, `ad_morai_dataset_validate`, `ad_morai_dataset_summary`.
+
+**Sample anchor:** each accepted raw `/ad/sensors/lidar/points` frame =
+one sample, keyed by its `header.stamp` (never receipt time). Ego GT
+(`/ad/dev/vehicle/ego_status`, `EgoVehicleStatus` dev, simulator-native),
+actor GT (`/ad/dev/objects`, `ObjectStatusArray` dev) and dynamic TF
+(`odom→base_link`) are each matched by **nearest source `header.stamp`, no
+interpolation**, with an explicit max skew (default 30 ms each). Out-of-skew /
+absent → `skew_exceeded` / `missing` recorded, never substituted. Non-positive /
+duplicate / backward LiDAR stamps rejected + counted.
+
+**GT identity:** native `ObjectStatus.unique_id` (never index / nearest / order).
+**3D box:** dims from `ObjectStatus.size`; centre policy is a **direct port of
+the audited offline exporter** (`_transform_box`: vehicle rear-axle-ground →
+box-centre forward+up shift with the `Σ(overhang,wheelbase,rear_overhang)` length
+check; pedestrian/obstacle ground-centre → up only), locked by a parity test.
+No arbitrary z offset. A bad per-actor geometry flags that actor and clears its
+`valid_for_detection_gt`; the frame is still written (Phase 23).
+**Frames:** canonical GT in `map`; derived `lidar_link` box when the full
+`map→odom→base_link→rear_axle_link→lidar_link` chain is valid (`map→odom`
+derived per frame; `odom==map` never assumed).
+**Class map:** `{0:pedestrian,1:vehicle,2:obstacle}` version
+`checkpoint14_evidence_v1` — evidence inherited from one recorded scenario;
+`raw_object_type` always kept, unmapped → `CLASS_UNKNOWN` (never dropped), each
+`gt/*.json` records the justifying scenario file + SHA-256. Starter scenarios
+are vehicle-only.
+
+**Point storage:** `lidar/NNNNNN.npz`, one named array per `PointField`, dtype
+preserved (x/y/z/intensity/time `f4`, MORAI `ring` `u2`). Content-lossless, not
+byte-deterministic (zip container). ≈ 0.64 MB/frame → 0.64 GB/1000 frames →
+~23 GB/hour @ 10 Hz.
+
+**Validity:** `valid_for_tracking_gt` (matched in-skew actor GT + ≥1 actor with
+id/pose/orientation/velocity); `valid_for_detection_gt` (+ ego + TF matched +
+every box a finite positive mapped-class `lidar_frame` geometry). The dataset is
+not "CenterPoint-ready" just because clouds exist.
+
+**Determinism:** MORAI seed guarantee unknown → `simulator_determinism_guaranteed:
+false` in every run manifest; `scenario_seed` still deterministically derives
+bounded placement/velocity jitter (±4 m / ±1 m / ±1.5 m/s) so `(scenario, seed)`
+is reproducible factory-side.
+
+**Layout:** `<root>/{dataset_manifest.json, schema.json,
+runs/<scenario_id>/<run_id>/{run_manifest.json, frames.jsonl, lidar/, gt/, ego/,
+tf/}}`. `run_id = <scenario_id>__seed_<seed>__run_<NNN>`, refuses existing unless
+`--overwrite`. Atomic `.tmp`→rename per artifact; `frames.jsonl` row appended +
+fsynced only after all artifacts land. Interrupt → run status
+`aborted`/`error` + real `termination_reason`, never `complete`.
+
+**Starter catalog** (`config/dataset_factory/scenario_catalog.yaml`, 6, MORAI
+`egoVehicle`/`vehicleList` JSON parsed by the existing `load_reset_plan`):
+`lead_constant` (mid), `lead_brake` (near), `cut_in` (near), `crossing` (mid),
+`occlusion_reappear` (mid), `dense_multi_object` (mixed) — exercise persistent
+ID, velocity change, birth/death, crossing, crowding, near/mid/far. **Poses are
+map-unvalidated templates** grounded on the `kcity-highway` actor preset;
+`occlusion_reappear` is an intent name, not a per-actor occlusion label.
+
+**Real MORAI capture: NO** (`import grpc` fails; simulator absent; GT producer
+OOMs this host). Validated by 26 unit/dry-run tests
+(`ad_morai_bridge_dev/test/test_dataset_factory.py`: schema, lossless point
+round-trip, box centre-policy parity vs the exporter, 10 timestamp/skew cases,
+writer + atomic partial-frame, run-collision refusal, interrupted-run status,
+full capture-session→validator→summary on synthetic messages, catalog load +
+seed reproducibility + jitter bounds) + `--dry-run` / `--list-scenarios` /
+batch `--dry-run` / validator / summary CLIs end-to-end. Regression:
+`tools/morai_dataset_exporter/test_exporter_core.py` 9/9 (untouched),
+`test_perception_bag.py` 20/20, `test_raw_streams.py`, `test_actor_presets.py`
+pass. Pre-existing env-blocked (`google.protobuf` / `ad_morai_interfaces_dev`
+not installed here): `test_scenario_reset`, `test_scenario_setup`,
+`test_dev_timestamp_contract` — unchanged by this work. `colcon build
+--packages-select ad_morai_bridge_dev` cannot complete in this repo's
+`install/` tree (deps `ad_morai_interfaces_dev`/`fast_lio`/`ad_localization`/
+`ad_morai_bridge` not built here — pre-existing, unrelated to this change).
+Verified instead: `find_packages` resolves `ad_morai_bridge_dev.dataset`, all
+15 modules `py_compile` clean, the 4 entry-point targets import (incl.
+`capture_node` with ROS sourced), and every scenario/plan config parses.
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/` (`__init__`,
+`schema`, `geometry` [verbatim copy of the exporter's], `pointcloud`, `boxes`,
+`sync`, `transforms`, `frame_builder`, `writer`, `capture`, `capture_node`,
+`capture_cli`, `batch`, `validate`, `summary`);
+`ad_morai_bridge_dev/config/dataset_factory/` (`scenario_catalog.yaml`,
+`dataset_plan.example.yaml`, `scenarios/*.json` ×6);
+`ad_morai_bridge_dev/test/test_dataset_factory.py`;
+`ad_morai_bridge_dev/setup.py` (+4 entry points, numpy dep, config data_files),
+`ad_morai_bridge_dev/package.xml` (+`python3-numpy`, +`tf2_msgs`);
+`docs/perception/morai_tracking_dataset_factory_v1.md`, this file. `.gitignore`
+unchanged — `datasets/` is already ignored; test fixtures are synthesised
+in-test, no LiDAR frame committed. README not edited (CRLF-dirty; quick-start
+is in the doc + `--help`).
+
+**Recommended next task:** CenterPoint MORAI Data Adapter v1 — consume the
+validated dataset factory schema and export deterministic
+CenterPoint/OpenPCDet-style LiDAR samples, class labels, 3D boxes and
+train/validation manifests without training the detector yet; explicitly
+preserve simulator-to-real domain-gap caveats.
+
+---
+
 ## Highway Merge End-to-End Execution Validation v1 — COMPLETE (planning-side milestone closed)
 
 Branch `test/highway-merge-end-to-end-v1`, from merged PR #26 main

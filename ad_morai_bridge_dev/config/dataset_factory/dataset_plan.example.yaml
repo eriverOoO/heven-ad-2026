@@ -1,0 +1,15 @@
+# Example batch plan for ad_morai_dataset_batch.
+#   ros2 run ad_morai_bridge_dev ad_morai_dataset_batch \
+#       ad_morai_bridge_dev/config/dataset_factory/dataset_plan.example.yaml \
+#       --output ~/datasets/morai_tracking_v1
+dataset_id: morai_tracking_v1
+frames: 200
+settle_sec: 1.0
+
+runs:
+  - scenario: lead_constant
+    seeds: [0, 1]
+  - scenario: cut_in
+    seeds: [0, 1]
+  - scenario: dense_multi_object
+    seeds: [0]
