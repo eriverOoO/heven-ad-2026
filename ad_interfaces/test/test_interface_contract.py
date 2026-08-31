@@ -16,6 +16,7 @@ from ad_interfaces.msg import (
     RoundaboutGapResponse,
     HighwayMergeGapRisk,
     HighwayMergeGapRiskArray,
+    HighwayMergeGapResponse,
     DynamicObstacleStatus,
     PlannerStatus,
     PredictedObject,
@@ -537,6 +538,102 @@ def test_highway_merge_gap_risk_interface_is_stable_and_policy_free():
             for name in message_type.get_fields_and_field_types()
         }
         assert fields.isdisjoint(forbidden)
+
+
+EXPECTED_HIGHWAY_MERGE_GAP_RESPONSE_DECLARATION = """\
+uint8 ACTION_MERGE_READY=0
+uint8 ACTION_WAIT=1
+uint8 ACTION_HOLD=2
+uint8 REASON_NONE=0
+uint8 REASON_CLEAR_GAP=1
+uint8 REASON_FRONT_GAP=2
+uint8 REASON_REAR_GAP=3
+uint8 REASON_REAR_CLOSING=4
+uint8 REASON_ALONGSIDE=5
+uint8 REASON_PREDICTED_ROUTE_CONFLICT=6
+uint8 REASON_INSUFFICIENT_PREDICTION=7
+uint8 REASON_INVALID_EGO_STATE=8
+std_msgs/Header header
+uint8 action
+bool active
+uint8 reason
+string merge_zone_id
+bool source_object_valid
+unique_identifier_msgs/UUID source_object_id
+uint16 relevant_object_count
+float32 ego_speed_mps
+float32 ego_route_distance_to_merge_m
+bool ego_merge_timing_valid
+float32 ego_merge_time_s
+float32 available_distance_m
+float32 comfortable_stop_distance_m
+bool complete_prediction_coverage
+bool front_object_valid
+unique_identifier_msgs/UUID front_object_id
+float32 front_gap_m
+bool front_time_headway_valid
+float32 front_time_headway_s
+bool rear_object_valid
+unique_identifier_msgs/UUID rear_object_id
+float32 rear_gap_m
+bool rear_time_headway_valid
+float32 rear_time_headway_s
+bool rear_closing_object_valid
+unique_identifier_msgs/UUID rear_closing_object_id
+bool rear_closing_time_valid
+float32 rear_closing_time_s
+bool predicted_route_clearance_valid
+float32 minimum_predicted_route_gap_m
+"""
+
+
+def test_highway_merge_gap_response_is_an_advisory_not_a_command():
+    """MERGE_READY / WAIT / HOLD are advisory policy states; the message
+    carries no actuator, steering, speed, lane-change, or CtrlCmd field."""
+    assert _declarations(
+        PACKAGE_ROOT / "msg" / "HighwayMergeGapResponse.msg"
+    ) == EXPECTED_HIGHWAY_MERGE_GAP_RESPONSE_DECLARATION.strip()
+    message = HighwayMergeGapResponse()
+    assert message.action == HighwayMergeGapResponse.ACTION_MERGE_READY
+    assert message.active is False
+    assert message.reason == HighwayMergeGapResponse.REASON_NONE
+    assert message.source_object_valid is False
+    assert message.complete_prediction_coverage is False
+    assert message.front_object_valid is False
+    assert message.rear_object_valid is False
+    assert message.rear_closing_object_valid is False
+    assert message.predicted_route_clearance_valid is False
+    forbidden = {
+        "brake",
+        "brake_percentage",
+        "throttle",
+        "throttle_percentage",
+        "steering",
+        "steering_angle",
+        "steer_left",
+        "steer_right",
+        "cmd_vel",
+        "ctrl_cmd",
+        "gear",
+        "actuation",
+        "requested_speed",
+        "requested_max_speed_mps",
+        "target_speed",
+        "acceleration_command",
+        "deceleration_command",
+        "lane_change",
+        "lane_change_command",
+        "change_lane_now",
+        "merge_now",
+        "path",
+        "trajectory",
+        "risk_score",
+    }
+    fields = {
+        name.lower()
+        for name in HighwayMergeGapResponse.get_fields_and_field_types()
+    }
+    assert fields.isdisjoint(forbidden)
 
 
 def test_traffic_light_status_preserves_composite_aspects():

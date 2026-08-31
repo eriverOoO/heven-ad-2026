@@ -25,6 +25,7 @@ from ad_interfaces.msg import (
     DynamicObjectRiskArray,
     DynamicObjectRiskState,
     HighwayMergeGapRiskArray,
+    HighwayMergeGapResponse,
 )
 from builtin_interfaces.msg import Duration
 from launch import LaunchDescription
@@ -49,6 +50,10 @@ CONFIG = REPO / "ad_planner" / "config" / "highway_merge_gap_risk.yaml"
 RISK_TOPIC = "/ad/planning/dynamic_object_risks"
 ODOM_TOPIC = "/ad/localization/odometry"
 OUTPUT_TOPIC = "/ad/planning/highway_merge_gap_risks"
+RESPONSE_TOPIC = "/ad/planning/highway_merge_gap_response"
+RESPONSE_CONFIG = (
+    REPO / "ad_planner" / "config" / "highway_merge_gap_response.yaml"
+)
 
 # Primary-route centreline samples on the highway approach (station -> pose),
 # taken verbatim from ad_data/map/route_corridor.json (route:0).
@@ -110,6 +115,19 @@ def generate_test_description():
                         "data_dir": str(DATA_DIR),
                         "route_corridor_file": "map/route_corridor.json",
                         "route_corridor.expected_global_path_sha256": digest,
+                        "maximum_input_age_s": 5.0,
+                        "runtime_summary_interval_frames": 5,
+                    },
+                ],
+            ),
+            LaunchNode(
+                package="ad_planner",
+                executable="ad_highway_merge_gap_response_node",
+                name="ad_highway_merge_gap_response",
+                output="screen",
+                parameters=[
+                    str(RESPONSE_CONFIG),
+                    {
                         "maximum_input_age_s": 5.0,
                         "runtime_summary_interval_frames": 5,
                     },
@@ -208,11 +226,18 @@ class TestHighwayMergeGapRiskRuntime(unittest.TestCase):
         rclpy.init()
         cls.node = Node("highway_merge_gap_risk_probe")
         cls.frames = []
+        cls.responses = []
         cls.latency_ms = []
         cls.node.create_subscription(
             HighwayMergeGapRiskArray,
             OUTPUT_TOPIC,
             lambda m: cls.frames.append(m),
+            _QOS_1,
+        )
+        cls.node.create_subscription(
+            HighwayMergeGapResponse,
+            RESPONSE_TOPIC,
+            lambda m: cls.responses.append(m),
             _QOS_1,
         )
         cls.risk_pub = cls.node.create_publisher(
@@ -266,13 +291,16 @@ class TestHighwayMergeGapRiskRuntime(unittest.TestCase):
             "highway merge risk pipeline did not publish",
         )
         self.latency_ms.append((time.monotonic() - started) * 1e3)
+        want_response = len(self.responses) + 1
+        self._spin_until(lambda: len(self.responses) >= want_response, 2.0)
         return self.frames[-1]
 
     def test_highway_merge_gap_facts(self):
         self.assertTrue(
             self._spin_until(
                 lambda: self.node.count_publishers(OUTPUT_TOPIC) >= 1
-                and self.node.count_subscribers(RISK_TOPIC) == 1,
+                and self.node.count_subscribers(RISK_TOPIC) == 1
+                and self.node.count_publishers(RESPONSE_TOPIC) >= 1,
                 10.0,
             ),
             "highway merge node not discovered",
@@ -383,6 +411,42 @@ class TestHighwayMergeGapRiskRuntime(unittest.TestCase):
         self.assertEqual(far_frame.relevant_object_count, 0)
         self.assertTrue(math.isfinite(far_frame.ego_route_distance_to_merge_m))
 
+        # HighwayMergeGapRisk -> HighwayMergeGapResponse chain (Phase 38/39).
+        # One response per accepted risk frame; the canonical replay carries
+        # prediction-uncovered relevant objects, so it never earns MERGE_READY,
+        # and the coverage policy is not weakened to force one.
+        self.assertGreaterEqual(len(self.responses), frame_count)
+        response_actions = {"MERGE_READY": 0, "WAIT": 0, "HOLD": 0, "INACTIVE": 0}
+        response_reasons = {}
+        for message in self.responses:
+            for name in (
+                "available_distance_m",
+                "comfortable_stop_distance_m",
+                "front_gap_m",
+                "rear_gap_m",
+                "rear_closing_time_s",
+                "minimum_predicted_route_gap_m",
+                "front_time_headway_s",
+                "rear_time_headway_s",
+                "ego_merge_time_s",
+            ):
+                value = getattr(message, name)
+                self.assertEqual(value, value)
+                self.assertTrue(math.isfinite(value))
+            if not message.active:
+                response_actions["INACTIVE"] += 1
+            elif message.action == HighwayMergeGapResponse.ACTION_MERGE_READY:
+                response_actions["MERGE_READY"] += 1
+                self.assertTrue(message.complete_prediction_coverage)
+            elif message.action == HighwayMergeGapResponse.ACTION_WAIT:
+                response_actions["WAIT"] += 1
+            else:
+                response_actions["HOLD"] += 1
+            response_reasons[int(message.reason)] = (
+                response_reasons.get(int(message.reason), 0) + 1
+            )
+        self.assertEqual(response_actions["MERGE_READY"], 0)
+
         self.assertIsNotNone(representative)
         rep = {o.object_id.uuid[0]: o for o in representative.objects}
         self.assertTrue(rep[1].relevant_to_merge)
@@ -417,6 +481,11 @@ class TestHighwayMergeGapRiskRuntime(unittest.TestCase):
                 "p95": round(_pctile(self.latency_ms, 0.95), 3),
                 "max": round(max(self.latency_ms), 3),
                 "samples": len(self.latency_ms),
+            },
+            "response_messages": len(self.responses),
+            "response_action_counts": response_actions,
+            "response_reason_counts": {
+                str(k): v for k, v in sorted(response_reasons.items())
             },
             "representative_1130m": {
                 "ego_merge_time_s": round(representative.ego_merge_time_s, 3),

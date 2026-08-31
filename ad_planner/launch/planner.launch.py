@@ -449,6 +449,35 @@ def _create_highway_merge_gap_risk_node(context, force=False):
     )
 
 
+def _highway_merge_response_requested(context):
+    enabled = LaunchConfiguration(
+        "highway_merge_gap_response", default="false"
+    ).perform(context).strip().lower()
+    if enabled not in {"true", "false"}:
+        raise RuntimeError("highway_merge_gap_response must be true or false")
+    return enabled == "true"
+
+
+def _create_highway_merge_gap_response_node(context):
+    # The response node consumes /ad/planning/highway_merge_gap_risks, so
+    # enabling it also starts the risk node (see _create_planner_actions). It has
+    # no production planner consumer.
+    if not _highway_merge_response_requested(context):
+        return None
+    package_share = get_package_share_directory("ad_planner")
+    return Node(
+        package="ad_planner",
+        executable="ad_highway_merge_gap_response_node",
+        name="ad_highway_merge_gap_response",
+        output="screen",
+        parameters=[
+            os.path.join(
+                package_share, "config", "highway_merge_gap_response.yaml"
+            ),
+        ],
+    )
+
+
 def _cut_in_response_constraint_requested(context):
     value = LaunchConfiguration(
         "enable_cut_in_response_constraint", default=""
@@ -508,6 +537,19 @@ def _create_planner_actions(context):
         )
     roundabout_gap_response_node = _create_roundabout_gap_response_node(context)
     highway_merge_gap_risk_node = _create_highway_merge_gap_risk_node(context)
+    # The response node consumes /ad/planning/highway_merge_gap_risks, so
+    # enabling it also starts the highway merge gap risk node when it is not
+    # already requested.
+    if (
+        _highway_merge_response_requested(context)
+        and highway_merge_gap_risk_node is None
+    ):
+        highway_merge_gap_risk_node = _create_highway_merge_gap_risk_node(
+            context, force=True
+        )
+    highway_merge_gap_response_node = _create_highway_merge_gap_response_node(
+        context
+    )
     planning_nodes = [planner_node, road_corridor_mask_node]
     if cut_in_risk_node is not None:
         planning_nodes.append(cut_in_risk_node)
@@ -519,6 +561,8 @@ def _create_planner_actions(context):
         planning_nodes.append(roundabout_gap_response_node)
     if highway_merge_gap_risk_node is not None:
         planning_nodes.append(highway_merge_gap_risk_node)
+    if highway_merge_gap_response_node is not None:
+        planning_nodes.append(highway_merge_gap_response_node)
     config_file = LaunchConfiguration("config_file").perform(context)
     backend = _load_parameter_file(config_file).get("local_motion.backend")
     if backend != "mppi_nav2":
@@ -564,6 +608,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "highway_merge_gap_risk", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "highway_merge_gap_response", default_value="false"
             ),
             DeclareLaunchArgument(
                 "enable_cut_in_response_constraint", default_value=""

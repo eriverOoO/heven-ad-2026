@@ -1,0 +1,56 @@
+ad_highway_merge_gap_response:
+  ros__parameters:
+    topics.highway_merge_gap_risks: "/ad/planning/highway_merge_gap_risks"
+    topics.output: "/ad/planning/highway_merge_gap_response"
+    topics.diagnostics: "/ad/planning/highway_merge_gap_response/diagnostics"
+    expected_frame_id: "map"
+    merge_zone_id: "kcity_highway_onramp"
+
+    maximum_input_age_s: 0.5
+
+    # Applicability bound. Must stay <= the risk node's
+    # maximum_ego_approach_distance_m (400) so a far ego is never reported
+    # active here before the risk node stops evaluating merge timing.
+    maximum_approach_distance_m: 400.0
+
+    # --- Competition-v1 merge-acceptance policy. Not a universal safety
+    # guarantee. No existing planner following-headway parameter exists to
+    # reuse; provenance is documented per value below and in
+    # docs/planning/highway_merge_gap_response_v1.md. ---
+
+    # Minimum time headway to the nearest object ahead at the ego merge time,
+    # front_gap_m / max(ego_speed_mps, speed_epsilon_mps). 1.5 s is a standard
+    # lower-bound highway following headway; at the audited 8 m/s highway-entry
+    # approach it is ~12 m of clearance ahead at the merge instant.
+    minimum_front_time_headway_s: 1.5
+    # Minimum time headway to the nearest object behind at the ego merge time,
+    # rear_gap_m / max(object longitudinal speed, speed_epsilon_mps). Larger
+    # than the front value because the mainline rear vehicle has right of way
+    # and may not decelerate for the merge.
+    minimum_rear_time_headway_s: 2.0
+    # Minimum route-coincidence time for any relevant object currently behind
+    # the ego that is closing on the ego route station. A rapidly closing rear
+    # vehicle blocks MERGE_READY even with an acceptable instantaneous gap.
+    minimum_rear_closing_time_s: 3.0
+    # Minimum predicted minimum route-station separation between any relevant
+    # object's discrete prediction and a constant-speed ego rollout, over the
+    # shared horizon. ~one IONIQ 5 length (4.635 m) plus margin; also mirrors
+    # merge_standoff_m. Catches a front/rear object that is separated exactly at
+    # the merge instant but comes much closer slightly before/after it.
+    minimum_predicted_route_gap_m: 6.0
+
+    # Places the WAIT/HOLD decision boundary this far before the merge
+    # reference station (where the acceleration lane ends). Mirrors the cut-in
+    # response longitudinal_standoff_m / roundabout response entry_standoff_m
+    # (vehicle front extent plus margin); keeps the boundary before, not past,
+    # merge completion.
+    merge_standoff_m: 6.0
+    # Canonical planner/perception comfortable braking value
+    # (perception.braking_deceleration_mps2 in config/planner.yaml).
+    comfortable_deceleration_mps2: 1.8
+    # Mirrors the upstream Highway Merge Gap Risk ego-speed epsilon.
+    stopped_speed_threshold_mps: 0.5
+    speed_epsilon_mps: 0.5
+
+    maximum_relevant_objects: 256
+    runtime_summary_interval_frames: 200

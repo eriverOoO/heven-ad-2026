@@ -392,6 +392,7 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
         "roundabout_gap_risk",
         "roundabout_gap_response",
         "highway_merge_gap_risk",
+        "highway_merge_gap_response",
         "enable_cut_in_response_constraint",
         "enable_roundabout_response_constraint",
         "path_tracking_backend",
@@ -410,6 +411,9 @@ def test_planner_launch_exposes_only_generic_arguments(monkeypatch):
     ) == ""
     assert perform_substitutions(
         LaunchContext(), arguments["roundabout_gap_response"].default_value
+    ) == "false"
+    assert perform_substitutions(
+        LaunchContext(), arguments["highway_merge_gap_response"].default_value
     ) == "false"
     assert perform_substitutions(
         LaunchContext(), arguments["cut_in_response"].default_value
@@ -526,6 +530,47 @@ def test_highway_merge_gap_risk_node_is_opt_in_and_uses_active_corridor(
         module._create_highway_merge_gap_risk_node(
             _launch_context(
                 data_dir=str(tmp_path), highway_merge_gap_risk="maybe"
+            )
+        )
+
+
+def test_highway_merge_gap_response_node_is_opt_in_and_forces_the_risk_node(
+    monkeypatch, tmp_path
+):
+    module = _load_planner_launch_module()
+    monkeypatch.setattr(
+        module,
+        "get_package_share_directory",
+        lambda package: str(PACKAGE.parent / package),
+    )
+    path = tmp_path / "path_space.txt"
+    path.write_bytes(b"active route\n")
+
+    # Default off: no response node, no forced risk node.
+    disabled = _launch_context(data_dir=str(tmp_path))
+    assert module._create_highway_merge_gap_response_node(disabled) is None
+    assert module._create_highway_merge_gap_risk_node(disabled) is None
+
+    # Standalone opt-in starts the advisory node and force-starts the risk node
+    # it consumes.
+    enabled = _launch_context(
+        data_dir=str(tmp_path), highway_merge_gap_response="true"
+    )
+    node = module._create_highway_merge_gap_response_node(enabled)
+    assert isinstance(node, Node)
+    assert node._Node__node_executable == "ad_highway_merge_gap_response_node"
+    forced_risk = module._create_highway_merge_gap_risk_node(enabled, force=True)
+    assert isinstance(forced_risk, Node)
+    assert (
+        forced_risk._Node__node_executable == "ad_highway_merge_gap_risk_node"
+    )
+
+    with pytest.raises(
+        RuntimeError, match="highway_merge_gap_response must be true or false"
+    ):
+        module._create_highway_merge_gap_response_node(
+            _launch_context(
+                data_dir=str(tmp_path), highway_merge_gap_response="maybe"
             )
         )
 
