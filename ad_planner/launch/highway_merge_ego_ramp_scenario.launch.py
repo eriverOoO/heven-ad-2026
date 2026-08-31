@@ -98,6 +98,7 @@ def _prepare(context):
                 {
                     "enable_highway_merge_response_integration": True,
                     "enable_highway_merge_mission": True,
+                    "enable_highway_merge_reference_path": True,
                 },
             ],
         ),

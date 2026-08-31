@@ -1,5 +1,137 @@
 # STATUS
 
+## Highway Merge Lateral Reference Path Primitive v1 — COMPLETE
+
+Branch `feat/highway-merge-reference-path-v1`, from merged PR #25 main
+`d94b4a16436f50bdfdc65b4863f52b2be34a5286` (`feat(planning): add highway merge
+ego ramp scenario (#25)`). **Opt-in, default off**
+(`enable_highway_merge_reference_path: false`; also requires
+`enable_highway_merge_mission`). Selects the lateral REFERENCE PATH consumed by
+the existing `FollowGlobalPath` controller; publishes no steering, adds no
+second lateral controller, adds no second `/ad/control/command` publisher,
+changes no controller math / gains.
+
+**Design correction honored:** the merge reference is active while a genuine
+ramp ego is **WAITING / AUTHORIZED / COMMITTED** — NOT `COMMITTED`-only. Before
+commit the production global path is `route:0`, so without this Stanley already
+pulls the ramp ego (~3.9 m off `route:0`) toward the mainline. Longitudinal
+`WAIT`/`HOLD` (response integration) keeps owning merge permission; this only
+selects the lateral centerline. Clean separation: reference path = where the
+road centerline is; longitudinal response = whether the ego may progress;
+mission = authorization / commitment / completion semantics.
+
+**No synthetic curve:** `route:0:left:1` already tapers 3.94 -> 0.00 m and its
+last point coincides with a `route:0` point (0.00 m). The builder is the real
+source lane + real `route:0` past merge-complete; no quintic / spline / sigmoid.
+
+**Pure builder** `HighwayMergeReferencePathBuilder`
+(`highway_merge_reference_path.{hpp,cpp}` in `ad_planner_core`, no ROS):
+`build_highway_merge_reference_path(source_lane, target_lane,
+merge_complete_route_s_m, config)` -> `{ad_control::Route (map frame, x/y,
+z=0 -- ReferencePoint has no z), source_point_count, target_point_count,
+splice_route_s_m, splice_join_gap_m, splice_join_heading_delta_rad}`. SOURCE
+section: all 336 `route:0:left:1` points verbatim. TARGET section: `route:0`
+points with `route_s` strictly `> merge_complete`, up to `+
+target_continuation_m` (200 m -> 400 pts); the coincident merge-complete point
+contributed once by the source. Throws on any inconsistency (too few points,
+non-finite, station regression, station mismatch > 2 m, discontinuous join >
+1 m / 0.20 rad, < 2 target points) -> feature inert. `test_highway_merge_
+reference_path` 10 gtests; `test_highway_merge_reference_path.py` 6 golden
+tests: the online builder output equals the committed
+`test_highway_merge_ego_ramp_path.txt` oracle x/y **point-for-point**, target
+section a subsequence of `route:0`, splice == merge-complete not commit.
+
+**Second controller (planner-owned, no ad_control change):**
+`configure_highway_merge_reference_path()` (after the mission config) builds the
+merge `Route` once and a SECOND `PathTrackingController` via
+`make_path_tracking_controller(path_tracking_backend_, merge_route,
+RosControllerParameterProvider(*this))` -- **same backend / gains / speed
+profile / PID** as production. Soft-fails (feature inert) on build failure.
+`run_path_tracking()` now: computes the same combined longitudinal override;
+**always** updates the production controller (keeps its route progress / PID /
+launch-ramp state warm so the COMPLETE handoff never re-triggers the launch
+ramp -- deliberate, not a no-op); if the merge reference is selected and its
+controller returns a valid result, `remember()`s that, else `remember()`s the
+production result. Runtime merge-controller-invalid -> fall back to the warm
+production controller for that tick (throttled WARN); build always spans well
+past COMPLETE so this is a narrow guard.
+
+**Activation** `select_highway_merge_reference()` (per tick, deterministic
+2-state latch): feature off / build failed / no mission geometry -> production,
+clear latch. Mission INACTIVE / APPROACH / COMPLETE -> production, clear latch.
+Latched -> merge reference while state in {WAITING, AUTHORIZED, COMMITTED}. Not
+latched: `on_ramp && state in {WAITING, AUTHORIZED, COMMITTED}` -> latch + merge
+reference. **Source-ramp proximity guard**: `on_ramp` =
+`|project_to_frenet(route:0:left:1, ego).d_m| <= reference_path_proximity_m`
+(default **1.75 m** = the source lane's own `left_width_m`/`right_width_m` in
+the corridor; a `route:0` ego near zone entry is ~3.9 m off -> excluded) AND
+source-lane station in `[zone_entry - 1, merge_complete + 1]`. The latch (a
+lateral-continuity latch, NOT an authorization latch) releases at COMPLETE /
+INACTIVE / APPROACH / traversal reset.
+
+**Commit vs splice (kept distinct):** commit ~1213.28 m = mission
+irreversibility only; the reference still follows `route:0:left:1` there
+(sep ~3.50 m). Geometric source->target splice = merge-complete **1286.15 m**
+(sep 0.00 m). COMPLETE handoff back to the warm production controller is
+seamless because the merge-reference tail past merge-complete IS `route:0`
+(same corridor points) -- live test records mean |steering| 0.003 rad at the
+COMPLETE pose.
+
+**Observability:** `/ad/planner/highway_merge_reference_active`
+(`std_msgs/Bool`), published only when enabled. Config:
+`enable_highway_merge_reference_path false`, `reference_path_proximity_m 1.75`,
+`reference_path_target_continuation_m 200.0`. `planner.launch.py
+enable_highway_merge_reference_path:=true` sets the param;
+`highway_merge_ego_ramp_scenario.launch.py` enables it (with mission + response
+integration).
+
+**Live validation (Phase 36 honored -- base path is PRODUCTION
+`2026_molit_comp_global_path.txt`, the online override supplies the ramp
+reference):** `test_planner_highway_merge_reference_path.py` -- ego teleported
+through real `route:0:left:1` samples. `reference_active`: INACTIVE false /
+APPROACH false / WAITING **true** / AUTHORIZED **true** / revoked-pre-commit
+WAITING **true** / COMMITTED **true** / post-commit WAIT **true** / COMPLETE
+**false** / INACTIVE false. Ego is **3.919 m** off production `route:0` at the
+zone-entry ramp pose; feature-ON mean |steering| **0.004 rad** (tracks the
+ramp) vs PR #25's feature-OFF ~0.32-0.45 rad at the same poses (Stanley pulling
+toward `route:0`). WAITING vs AUTHORIZED at the identical pose: 0.0038 vs
+0.0038 rad -- **authorization does not change the lateral command**. One
+`/ad/control/command` publisher; 0 non-finite steering; clean shutdown.
+
+**Regression:** `test_highway_merge_reference_path` 10 + `_golden` 6;
+`test_planner_launch` +arg +opt-in/default-off (29/29); full `ad_planner`
+suite (minus the 4 documented pre-existing host-flaky) all pass incl.
+`test_stanley` (controller math untouched -- Phase 43), `test_behavior_tree`
+(no BT change -- Phase 51, still `registered_node_ids().size() == 8`), cut-in /
+roundabout / highway-merge constraint + risk + response + mission + ego-ramp
+scenario. Isolated `colcon build --packages-select ad_planner --symlink-install`
+clean.
+
+**Production lock:** `2026_molit_comp_global_path.txt` byte-unchanged (SHA-256
+`50658991...cc05`); `planner.yaml` default `path_file` unchanged; no
+Stanley / Profile-Stanley / PID gain / steering-saturation / wheelbase change;
+no production BehaviorTree change; no `ad_interfaces` change.
+
+**Files:** `ad_planner`
+`include/ad_planner/planning/highway_merge_reference_path.hpp`,
+`src/planning/highway_merge_reference_path.cpp`,
+`src/planner/planner_node.cpp`, `src/planner/planner_ros_interfaces.{hpp,cpp}`,
+`config/planner.yaml`, `launch/planner.launch.py`,
+`launch/highway_merge_ego_ramp_scenario.launch.py`, `CMakeLists.txt`,
+`test/{test_highway_merge_reference_path.cpp,test_highway_merge_reference_path.py,
+test_planner_highway_merge_reference_path.py,test_planner_launch.py}`;
+`docs/planning/highway_merge_reference_path_v1.md`, this file.
+
+**Recommended next task:** Highway Merge End-to-End Execution Validation v1 --
+run the full Dynamic Object Risk -> Merge Gap Risk -> Merge Gap Response ->
+longitudinal integration -> merge mission -> online merge reference -> existing
+`FollowGlobalPath` controller chain in the ego-on-ramp scenario, validating
+`WAIT -> AUTHORIZED -> COMMITTED -> COMPLETE` with deterministic traffic,
+preferably in MORAI when available, before any further highway-merge planning
+feature.
+
+---
+
 ## Highway Merge Ego-on-Ramp Scenario v1 — COMPLETE
 
 Branch `feat/highway-merge-ego-ramp-scenario-v1`, from merged PR #24 main

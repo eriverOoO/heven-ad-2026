@@ -37,6 +37,7 @@ struct PlannerRosInterfaceConfig {
   bool roundabout_response_constraint_enabled{false};
   bool highway_merge_response_integration_enabled{false};
   bool highway_merge_mission_enabled{false};
+  bool highway_merge_reference_path_enabled{false};
 };
 
 struct PlannerRosCallbacks {
@@ -91,6 +92,11 @@ public:
   // mirror of the mission-state enum, never a control or lane-change channel.
   void publish_highway_merge_mission_state(std::uint8_t value);
 
+  // No-op unless the highway merge reference path is enabled. Diagnostic
+  // mirror of whether FollowGlobalPath's lateral reference this tick is the
+  // online merge reference; carries no control semantics.
+  void publish_highway_merge_reference_active(bool value);
+
 private:
   PlannerRosCallbacks callbacks_;
 
@@ -130,6 +136,8 @@ private:
       highway_merge_authorized_publisher_;
   rclcpp::Publisher<std_msgs::msg::UInt8>::SharedPtr
       highway_merge_mission_state_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr
+      highway_merge_reference_active_publisher_;
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr
       tuning_lease_subscription_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr tuning_hold_service_;

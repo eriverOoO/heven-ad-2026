@@ -244,6 +244,17 @@ def _create_planner_node(context):
         overrides["enable_highway_merge_mission"] = (
             highway_merge_mission_override == "true"
         )
+    highway_merge_reference_path_override = LaunchConfiguration(
+        "enable_highway_merge_reference_path", default=""
+    ).perform(context).strip().lower()
+    if highway_merge_reference_path_override:
+        if highway_merge_reference_path_override not in {"true", "false"}:
+            raise RuntimeError(
+                "enable_highway_merge_reference_path must be empty, true, or false"
+            )
+        overrides["enable_highway_merge_reference_path"] = (
+            highway_merge_reference_path_override == "true"
+        )
     overrides["route_corridor.expected_global_path_sha256"] = (
         _global_path_sha256(data_dir, selected_path)
     )
@@ -663,6 +674,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "enable_highway_merge_mission", default_value=""
+            ),
+            DeclareLaunchArgument(
+                "enable_highway_merge_reference_path", default_value=""
             ),
             DeclareLaunchArgument("path_tracking_backend", default_value=""),
             DeclareLaunchArgument("target_speed_mps", default_value=""),
