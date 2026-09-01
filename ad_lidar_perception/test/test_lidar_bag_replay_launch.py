@@ -389,6 +389,8 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
         "finite_filter_enabled": "true",
         "densifier_enabled": "false",
         "point_layout_adapter_enabled": "false",
+        "start_visualization": "false",
+        "start_rviz": "false",
         "start_ground_segmentation": "true",
     }
 

@@ -1,5 +1,50 @@
 # STATUS
 
+## Training-Free RViz Runtime Validation v1 — PARTIAL (real replay; TF-limited)
+
+Starting `main` was merged PR #34 commit `9217603`.  A real 360.170 s MCAP
+(`morai_cam4_20260813_163222`) was replayed with its 2,982 LiDAR and 7,038
+front-camera messages from the same recording.  ROS Humble RViz2, MCAP storage,
+and compressed image transport were available; system `xacro` was missing and
+was staged from the official Humble Debian under `/tmp` because sudo was not
+available.  Existing local `filterpy==1.4.5` was added to `PYTHONPATH`; no
+checkpoint, torch, CUDA, OpenPCDet, CenterPoint, or KalmanNet process was used.
+
+The fixed runtime ran for approximately 572 seconds at bag `rate:=0.5` with one
+RViz.  Live parameters proved Euclidean association, 3.0 m gate, Hungarian,
+Linear KF, and unobserved yaw.  Raw/cropped/detected topics each produced about
+4.1 Hz (102/103/105-message terminal rate windows); the camera produced about
+8.37 Hz in a capped 200-message window.  Offline header audit found native
+median rates 8.419 Hz LiDAR and 19.888 Hz camera, 1280x720 JPEG camera frames,
+and nearest camera-to-LiDAR absolute timestamp offsets median 19.989 ms, p95
+39.139 ms, max 49.693 ms.
+
+The recording has one `/tf_static` message but zero `/tf`, no localization
+odometry, and no recorded `/clock`.  Replay publishes `/clock`, while
+`ad_description` supplies all requested static vehicle/camera edges; however,
+`odom -> base_link` is absent.  Consequently AB3DMOT correctly rejects detected
+objects for missing target-frame TF, and tracked, predicted, and dynamic OGM
+rates are zero.  RViz fixed-frame 3D displays therefore cannot be visually
+validated from this bag.  The camera compressed transport subscription was
+created and camera messages were live, but WSL X screenshot capture failed, so
+no screenshot or human visual confirmation was recorded.  No spontaneous
+crash, exception, NaN, or Inf occurred; shutdown exit `-2` entries were caused
+by the intentional Ctrl-C.
+
+One demonstrated launch bug was fixed on
+`fix/training-free-rviz-runtime-v1`: `lidar_bag_replay.launch.py` now explicitly
+passes `start_visualization:=false` and `start_rviz:=false` into its perception
+include.  Without those arguments, the outer demo's `start_rviz:=true` leaked
+into the nested include and launched two RViz processes plus duplicate
+visualizers.  Regression assertions were added to
+`test_lidar_bag_replay_launch.py`; targeted pytest is 52/52 and the two affected
+CTest entries pass.  No algorithm code changed.
+
+**Remaining validation requirement:** replay a real camera+LiDAR bag that also
+contains `/ad/localization/odometry` and valid `odom -> base_link` dynamic TF,
+then visually confirm boxes, IDs, velocity/history, prediction, OGM, and marker
+lifecycle in RViz.
+
 ## Training-Free Perception + Camera RViz Demo v1 — COMPLETE (launch + visualization + docs only)
 
 Branch `feat/training-free-rviz-demo-v1`, from merged PR #33 main `49d02f3`

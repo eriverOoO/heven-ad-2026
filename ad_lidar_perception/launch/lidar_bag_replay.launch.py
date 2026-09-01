@@ -296,6 +296,11 @@ def _launch_setup(context):
             "finite_filter_enabled": "true",
             "densifier_enabled": "false",
             "point_layout_adapter_enabled": "false",
+            # Keep replay input ownership separate from visualization.  These
+            # must be explicit because an enclosing launch can otherwise leak
+            # identically named start_* configurations into this include.
+            "start_visualization": "false",
+            "start_rviz": "false",
             # CenterPoint's validated contract is cropped-only; the classical
             # Euclidean detector consumes the post-ground stream.
             "start_ground_segmentation": (
