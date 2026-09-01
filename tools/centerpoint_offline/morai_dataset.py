@@ -195,9 +195,65 @@ def make_openpcdet_dataset(DatasetTemplate: type) -> type:
             )
 
         def evaluation(self, det_annos: Any, class_names: Any, **kwargs: Any) -> Any:
-            raise NotImplementedError(
-                "STEP 05-A does not define or run a performance metric"
+            """LiDAR-only detector evaluation (see tools/.../morai_evaluator.py).
+
+            Returns OpenPCDet's ``(result_str, result_dict)`` contract. The
+            ``eval_metric`` / ``output_path`` kwargs OpenPCDet passes are
+            accepted and ignored - this evaluator has one fixed protocol,
+            versioned by ``MORAI_EVALUATOR_SCHEMA_VERSION``.
+            """
+            from morai_evaluator import (
+                SUPPORTED_CLASSES,
+                MoraiEvaluatorError,
+                evaluate_detections,
+                sample_gt_from_label,
+                sample_pred_from_arrays,
             )
+
+            eval_classes = [c for c in class_names if c in SUPPORTED_CLASSES]
+            if not eval_classes:
+                raise MoraiEvaluatorError(
+                    f"evaluator v1 supports {SUPPORTED_CLASSES}; got class_names "
+                    f"{list(class_names)}"
+                )
+
+            gt_by_sample = {
+                sample_id: sample_gt_from_label(self.morai_core._load_label(sample_id))
+                for sample_id in self.morai_core.sample_ids
+            }
+
+            pred_by_sample: dict[str, Any] = {}
+            for anno in det_annos:
+                frame_id = str(anno["frame_id"])
+                if frame_id in pred_by_sample:
+                    raise MoraiEvaluatorError(
+                        f"duplicate prediction annotation for sample {frame_id}"
+                    )
+                if frame_id not in gt_by_sample:
+                    raise MoraiEvaluatorError(
+                        f"prediction sample {frame_id!r} is not in split "
+                        f"{self.morai_core.split!r}"
+                    )
+                pred_by_sample[frame_id] = sample_pred_from_arrays(
+                    [str(n) for n in np.asarray(anno["name"]).reshape(-1)],
+                    np.asarray(anno["score"], dtype=np.float64).reshape(-1),
+                    np.asarray(anno["boxes_lidar"], dtype=np.float64).reshape(-1, 7)
+                    if np.asarray(anno["boxes_lidar"]).size
+                    else np.zeros((0, 7)),
+                )
+
+            result = evaluate_detections(
+                gt_by_sample,
+                pred_by_sample,
+                class_name=eval_classes[0],
+                provenance={
+                    "dataset_version": self.morai_core.dataset_version,
+                    "split": self.morai_core.split,
+                    "split_sample_count": len(self.morai_core),
+                    "prediction_sample_count": len(pred_by_sample),
+                },
+            )
+            return result.result_string(), result.result_dict()
 
     MoraiHevenDataset.__name__ = OPENPCDET_DATASET_NAME
     return MoraiHevenDataset

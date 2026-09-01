@@ -529,6 +529,48 @@ def audit_environment(openpcdet_root: Path | None) -> dict[str, Any]:
     return result
 
 
+EXPECTED_EVALUATOR_SCHEMA_VERSION = "morai_centerpoint_eval_v1"
+
+
+def audit_evaluator(model_cfg: dict[str, Any], experiment: dict[str, Any]) -> dict[str, Any]:
+    """Detect whether a real MORAI detection evaluator is wired in."""
+    result: dict[str, Any] = {"expected_schema": EXPECTED_EVALUATOR_SCHEMA_VERSION}
+    try:
+        from morai_evaluator import (  # noqa: WPS433
+            MORAI_EVALUATOR_SCHEMA_VERSION,
+            PRIMARY_VALIDATION_METRIC,
+        )
+
+        result["evaluator_module_importable"] = True
+        result["evaluator_schema_version"] = MORAI_EVALUATOR_SCHEMA_VERSION
+        result["evaluator_primary_metric"] = PRIMARY_VALIDATION_METRIC
+    except ImportError as error:
+        result["evaluator_module_importable"] = False
+        result["error"] = f"{type(error).__name__}: {error}"
+        result["evaluation_metric_implemented"] = False
+        return result
+
+    eval_metric = (
+        model_cfg.get("MODEL", {}).get("POST_PROCESSING", {}).get("EVAL_METRIC")
+    )
+    result["model_config_eval_metric"] = eval_metric
+    result["experiment_primary_metric"] = experiment.get("primary_validation_metric")
+
+    schema_ok = (
+        result["evaluator_schema_version"] == EXPECTED_EVALUATOR_SCHEMA_VERSION
+    )
+    config_ok = eval_metric == EXPECTED_EVALUATOR_SCHEMA_VERSION
+    result["schema_matches_expected"] = schema_ok
+    result["model_config_selects_evaluator"] = config_ok
+    result["evaluation_metric_implemented"] = bool(schema_ok and config_ok)
+    if not config_ok:
+        result["note"] = (
+            f"MODEL.POST_PROCESSING.EVAL_METRIC is {eval_metric!r}; set it to "
+            f"{EXPECTED_EVALUATOR_SCHEMA_VERSION!r} to use the MORAI evaluator"
+        )
+    return result
+
+
 def audit_checkpoint(
     checkpoint_path: Path | None, model_classes: list[str], torch_available: bool
 ) -> dict[str, Any]:
@@ -825,7 +867,8 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         }
     )
 
-    evaluation_metric_implemented = False  # MoraiHevenDataset.evaluation() raises
+    evaluator = audit_evaluator(model_cfg, experiment)
+    evaluation_metric_implemented = evaluator["evaluation_metric_implemented"]
 
     structurally_ready = (
         not dataset["blockers"]
@@ -865,6 +908,7 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
         "model_config_checks": contracts,
         "environment_checks": environment,
         "checkpoint_checks": checkpoint,
+        "evaluator_checks": evaluator,
         "loader_checks": loader,
         "model_smoke_checks": model,
         "seed": experiment.get("seed"),

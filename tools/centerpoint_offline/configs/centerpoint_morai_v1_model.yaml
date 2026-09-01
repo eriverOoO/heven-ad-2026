@@ -70,10 +70,13 @@ MODEL:
 
   POST_PROCESSING:
     RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
-    # No MORAI evaluation metric is implemented. MoraiHevenDataset.evaluation()
-    # raises NotImplementedError by design. A validation AP/recall number cannot
-    # be computed today even with a populated val split.
-    EVAL_METRIC: morai_not_implemented
+    # MoraiHevenDataset.evaluation() runs the CenterPoint MORAI evaluator
+    # (tools/centerpoint_offline/morai_evaluator.py, schema
+    # morai_centerpoint_eval_v1): oriented BEV + 3D IoU AP / precision / recall
+    # at {0.25, 0.50, 0.70}, matched centre/dimension/yaw diagnostics and
+    # BEV-range-binned recall. eval_metric is accepted-and-ignored by the
+    # wrapper; this value is the evaluator protocol version.
+    EVAL_METRIC: morai_centerpoint_eval_v1
 
 # Untuned optimizer defaults, copied from morai_centerpoint_train.yaml. Present
 # only so the future training command is complete. NOT selected against any
