@@ -539,6 +539,9 @@ if(BUILD_TESTING)
     test_perception_visualization_launch
     test/test_perception_visualization_launch.py)
   ament_add_pytest_test(
+    test_training_free_perception_rviz_launch
+    test/test_training_free_perception_rviz_launch.py)
+  ament_add_pytest_test(
     test_check_autoware_perception
     "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/tests/test_check_autoware_perception.py"
     ENV "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1")

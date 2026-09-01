@@ -1,5 +1,130 @@
 # STATUS
 
+## Training-Free Perception + Camera RViz Demo v1 — COMPLETE (launch + visualization + docs only)
+
+Branch `feat/training-free-rviz-demo-v1`, from merged PR #33 main `49d02f3`
+(`feat(data): add KalmanNet detector measurement attachment`). **Launch wiring,
+one read-only RViz config, one launch-only visibility gate, one pre-existing
+launch-bug fix, docs + tests. No detector / association / KF / prediction /
+ground-segmentation / occupancy / planner / selection algorithm change. No
+production launch default changed. Not merged.**
+
+**What it is:** one opt-in command that brings up the model-free perception
+stack and shows it in RViz with the front camera image in the same session.
+Needs no CenterPoint, KalmanNet, trained weights, MORAI training dataset,
+`torch`, CUDA, or OpenPCDet — only live sensor topics or an existing rosbag
+(runtime replay input, not a training dataset).
+
+**Backend (locked, all already the checked-in defaults of the paths it wraps):**
+detector = adaptive Euclidean clustering; association = Euclidean BEV
+centre-distance gate 3.0 m + Hungarian; estimator = Linear KF with the AB3DMOT
+lifecycle, `yaw_measurement_mode=unobserved`; prediction = analytical CV/CT/IMM
+(`ad_autoware_prediction_node`, no learned model). Reuses
+`lidar_perception.launch.py` with `tracker_backend:=ab3dmot` over the checked-in
+`config/lidar_perception.yaml` composition (Euclidean detector + static +
+dynamic + combined occupancy). The `tracker_backend` override is applied after
+`load_selection`, so the composition's `dynamic_enabled: true` (which
+`selection.py` only permits with `tracker: autoware`) still drives prediction +
+dynamic OGM + combined OGM through the training-free AB3DMOT tracker. AB3DMOT
+publishes on `/ad/perception/objects/tracked`, so prediction, both occupancy
+grids and the primary `A-` visualizer consume it directly. No new composition
+YAML.
+
+**New launch** `ad_lidar_perception/launch/training_free_perception_rviz.launch.py`
+— opt-in, never included by another launch. Args: `input_mode:=live|replay`
+(default `live`), `bag_path` (required for replay), `rate` / `loop` /
+`start_paused` (replay), `enable_camera` (default false — replay adds the front
+camera topic to `ros2 bag play`; live camera comes from the driver),
+`enable_camera_perception` (default false — optional YOLO 2D overlay, needs
+`ultralytics`/`torch` + `ad_camera_perception`, wrapped in a scoped
+`use_sim_time` group), `enable_dynamic_object_risk` (default true — observational
+node), `start_rviz` (default true), `rviz_config`. Live path: includes
+`ad_description/description.launch.py` + `lidar_perception.launch.py`
+(`use_sim_time=false`, viz off) + `perception_visualization.launch.py`. Replay
+path: includes `lidar_bag_replay.launch.py` (MCAP validation, `/clock`,
+`ad_description`, perception on sim time) + `perception_visualization.launch.py`
+with `use_sim_time:=true` **explicitly** (the bag-replay `SetParameter` group is
+scoped and does not cover the separately-included visualizer/RViz — otherwise
+markers expire instantly against wall clock).
+
+**New RViz config** `ad_lidar_perception/rviz/training_free_perception_camera.rviz`
+— Fixed Frame `odom`. Grid, TF; PointCloud2 `/ad/perception/lidar/cropped`
+(enabled) + raw / ground / nonground (disabled, toggleable); `nav_msgs/OccupancyGrid`
+Map displays for `/ad/perception/occupancy/{dynamic (enabled), combined, static}`
+(SensorDataQoS → Best Effort / Volatile); MarkerArray `/ad/visualization/{detected,
+tracked,predicted}_objects`; Image `/ad/sensors/camera/front/compressed`
+(enabled) + `/ad/viz/perception/camera/dynamic_obstacle` (disabled). No
+CenterPoint / experiment-only topics.
+
+**Camera: LEVEL A only.** Image panel in the same RViz session as the 3D LiDAR
+scene. **LEVEL B (geometric 3D projection) NOT supported** — there is no
+`CameraInfo` publisher anywhere in the repo; the camera↔LiDAR extrinsics exist
+in TF (`camera_front_link` / `camera_front_optical_frame` are static children of
+`rear_axle_link`, siblings of `lidar_link`) but intrinsics are only
+*reconstructed* (fx=fy=640, cx=cy from HFOV 90° / 1280×720). Projecting boxes
+either way would be a fabricated geometric claim. Documented honestly; camera
+does not affect tracking.
+
+**Launch-only changes to reused files (additive, default-preserving):**
+- `perception_visualization.launch.py`: new `enable_experiment_tracker_view`
+  arg (default `true`). Gates the second `B-` visualizer (bound to
+  `/experiment/tracked/ab3dmot`) with `IfCondition`. The demo sets it `false`
+  because the training-free AB3DMOT arm publishes on
+  `/ad/perception/objects/tracked` (covered by the `A-` visualizer), so the
+  `B-` node would otherwise be an inert phantom subscriber.
+- `lidar_bag_replay.launch.py`: new `tracker_backend` (default `""`) +
+  `dynamic_object_risk` (default `false`) passthrough args forwarded into its
+  existing `lidar_perception.launch.py` include. Blank/false = byte-identical to
+  prior behaviour.
+
+**Pre-existing bug fixed (found while wiring replay):** `lidar_bag_replay.launch.py`
+emitted `--topics` **twice** in the `ros2 bag play` command line (a dead
+`command.extend(["--topics", *SOURCE_TOPICS])` immediately before the real
+`replay_topics` extend). `test_lidar_bag_replay_launch.py::test_graph_scopes_
+sim_time_and_replays_only_source_whitelist` had been **failing on `origin/main`**
+because of it. Removed the dead line; the test now passes. Also fixed
+`test_perception_visualization_launch.py::test_top_level_visualization_is_opt_in_
+and_rviz_implies_node`, likewise **already failing on `origin/main`** (its
+`context()` helper was missing the `tracker_backend` / `dynamic_object_risk`
+launch configurations that `lidar_perception.launch.py` reads).
+
+**Tests:** new `test_training_free_perception_rviz_launch.py` (10 — opt-in
+defaults, live wiring, replay + sim-time wiring, replay-needs-bag-path,
+invalid-input-mode, camera overlay opt-in, no-learned-backend scan, RViz config
+contents). Updated `test_perception_visualization_launch.py` (3) for the new
+gate. Updated `test_lidar_bag_replay_launch.py` (42) for the two new passthrough
+args + the `--topics` fix. Full affected set green:
+`test_training_free_perception_rviz_launch` 10, `test_perception_visualization_launch`
+3, `test_lidar_bag_replay_launch` 42, `test_camera_lidar_tracking_replay_launch`,
+`test_lidar_perception_launch`, `test_selection_config`,
+`test_object_detection_launch`, `test_tracking_launch`,
+`test_ground_segmentation_launch`, `test_preprocessing_launch`,
+`test_ab3dmot_core`, `test_competition_mot_baseline` — **293 passed** across the
+two runs. `colcon build --packages-select ad_lidar_perception` clean; installed
+launch imports; `colcon test -R` for the three launch tests: 55/55.
+
+**NOT live-tested.** Host lacks `rosbag2_storage_mcap` + `compressed_image_transport`
+and cannot run RViz / capture screenshots. Launch-structure, RViz-config, unit
+and installed-import validation only — the graph was not brought up against a
+live bag or live sensors this session (documented in the demo doc's "Not
+live-tested here").
+
+**Files:** `ad_lidar_perception/launch/training_free_perception_rviz.launch.py`
+(new), `ad_lidar_perception/rviz/training_free_perception_camera.rviz` (new),
+`ad_lidar_perception/test/test_training_free_perception_rviz_launch.py` (new),
+`ad_lidar_perception/launch/perception_visualization.launch.py`,
+`ad_lidar_perception/launch/lidar_bag_replay.launch.py`,
+`ad_lidar_perception/test/test_perception_visualization_launch.py`,
+`ad_lidar_perception/test/test_lidar_bag_replay_launch.py`,
+`ad_lidar_perception/CMakeLists.txt`,
+`docs/perception/training_free_rviz_demo_v1.md` (new), this file. No perception
+C++ / config YAML / production launch default / `ad_interfaces` change.
+
+**Recommended next task:** MORAI Dataset Collection Pilot v1 — once a
+MORAI-capable machine/session is available, capture the first real canonical
+dataset and export the SAME runs for CenterPoint and KalmanNet; until then, use
+the new training-free RViz demo for live/bag-based system validation.
+
 ## KalmanNet Detector Measurement Attachment v1 — COMPLETE (supervised data construction only)
 
 Branch `feat/kalmannet-measurement-attachment-v1`, from merged PR #32 main

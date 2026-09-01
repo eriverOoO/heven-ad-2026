@@ -38,6 +38,7 @@ def test_launch_starts_diagnostic_node_and_keeps_rviz_opt_in(monkeypatch):
         "start_rviz",
         "use_sim_time",
         "visualize_predictions",
+        "enable_experiment_tracker_view",
         "rviz_config",
     }
     nodes = [
@@ -50,7 +51,17 @@ def test_launch_starts_diagnostic_node_and_keeps_rviz_opt_in(monkeypatch):
     assert len(visualizers) == 2
     for visualizer in visualizers:
         assert visualizer.node_executable == "perception_visualizer_node"
-        assert visualizer.condition is None
+    # The primary "A-" visualizer is always started; the experimental "B-"
+    # visualizer is gated so the training-free demo can drop the inert node.
+    unconditional = [v for v in visualizers if v.condition is None]
+    gated = [v for v in visualizers if isinstance(v.condition, IfCondition)]
+    assert len(unconditional) == 1
+    assert len(gated) == 1
+    context = LaunchContext()
+    context.launch_configurations["enable_experiment_tracker_view"] = "true"
+    assert gated[0].condition.evaluate(context) is True
+    context.launch_configurations["enable_experiment_tracker_view"] = "false"
+    assert gated[0].condition.evaluate(context) is False
     launch_source = LAUNCH.read_text(encoding="utf-8")
     assert '"id_prefix": "A-"' in launch_source
     assert '"id_prefix": "B-"' in launch_source
@@ -137,6 +148,8 @@ occupancy:
             {
                 "composition_config": str(composition),
                 "detector_backend": "euclidean",
+                "tracker_backend": "",
+                "dynamic_object_risk": "false",
                 "platform_profile": "morai",
                 "start_ground_segmentation": "false",
                 "deskew_enabled": "false",
