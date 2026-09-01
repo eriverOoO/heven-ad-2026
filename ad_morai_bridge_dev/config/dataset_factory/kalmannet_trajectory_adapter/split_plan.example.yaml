@@ -1,0 +1,25 @@
+# Explicit train/val/test plan for ad_morai_dataset_export_kalmannet --split-plan.
+#
+# Identical format and grouping to the CenterPoint adapter's split plan:
+# groups are assigned at (scenario_id, requested_seed) level - never per
+# trajectory - so every trajectory of one capture run stays in one split.
+# A group listed in two splits is a hard error; a group referenced here but
+# absent from the source is a hard error; a source group not referenced
+# here is dropped with a warning.
+#
+# Because the auto-split hashes with the shared adapter salt, using the SAME
+# groups here as in the CenterPoint split plan keeps the KalmanNet and
+# CenterPoint derived datasets on the same train/val/test partition - use
+# that when both are exported from one canonical capture.
+splits:
+  train:
+    - scenario: lead_constant
+      seeds: [0, 1]
+    - scenario: cut_in
+      seeds: [0]
+  val:
+    - scenario: dense_multi_object
+      seeds: [0]
+  test:
+    - scenario: cut_in
+      seeds: [1]
