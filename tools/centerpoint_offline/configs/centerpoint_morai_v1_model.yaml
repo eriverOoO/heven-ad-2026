@@ -1,0 +1,87 @@
+# CenterPoint MORAI experiment v1 - MODEL config (self-contained; no _BASE_CONFIG_).
+#
+# Architecture is held IDENTICAL to the existing smoke/train config
+# (morai_centerpoint_smoke.yaml) EXCEPT the class list, which is reduced to
+# vehicle-only to match `centerpoint_morai_adapter_v1` (a vehicle-only export).
+# This is a data-discipline experiment, not an architecture redesign.
+#
+# Consequence of vehicle-only: the CenterHead heatmap `hm` output channel is 1,
+# not 3. The historical T-14 checkpoint
+# (centerpoint_t14_reproduction.pth, sha256 466c8181...dbc95) has a 3-class
+# heatmap head (hm.1.weight [3,64,3,3]) and therefore CANNOT be strict-loaded
+# into this config. Initialization policy is recorded in centerpoint_morai_v1.yaml.
+
+CLASS_NAMES: [vehicle]
+
+MODEL:
+  NAME: CenterPoint
+
+  VFE:
+    NAME: MeanVFE
+
+  BACKBONE_3D:
+    NAME: VoxelResBackBone8x
+
+  MAP_TO_BEV:
+    NAME: HeightCompression
+    NUM_BEV_FEATURES: 256
+
+  BACKBONE_2D:
+    NAME: BaseBEVBackbone
+    LAYER_NUMS: [5, 5]
+    LAYER_STRIDES: [1, 2]
+    NUM_FILTERS: [128, 256]
+    UPSAMPLE_STRIDES: [1, 2]
+    NUM_UPSAMPLE_FILTERS: [256, 256]
+
+  DENSE_HEAD:
+    NAME: CenterHead
+    CLASS_AGNOSTIC: false
+    CLASS_NAMES_EACH_HEAD: [[vehicle]]
+    SHARED_CONV_CHANNEL: 64
+    USE_BIAS_BEFORE_NORM: true
+    NUM_HM_CONV: 2
+    SEPARATE_HEAD_CFG:
+      HEAD_ORDER: [center, center_z, dim, rot]
+      HEAD_DICT:
+        center: {out_channels: 2, num_conv: 2}
+        center_z: {out_channels: 1, num_conv: 2}
+        dim: {out_channels: 3, num_conv: 2}
+        rot: {out_channels: 2, num_conv: 2}
+    TARGET_ASSIGNER_CONFIG:
+      FEATURE_MAP_STRIDE: 8
+      NUM_MAX_OBJS: 500
+      GAUSSIAN_OVERLAP: 0.1
+      MIN_RADIUS: 2
+    LOSS_CONFIG:
+      LOSS_WEIGHTS:
+        cls_weight: 1.0
+        loc_weight: 2.0
+        code_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    POST_PROCESSING:
+      SCORE_THRESH: 0.1
+      POST_CENTER_LIMIT_RANGE: [-4.0, -25.0, -3.0, 100.0, 25.0, 5.0]
+      MAX_OBJ_PER_SAMPLE: 500
+      NMS_CONFIG:
+        NMS_TYPE: nms_gpu
+        NMS_THRESH: 0.7
+        NMS_PRE_MAXSIZE: 4096
+        NMS_POST_MAXSIZE: 500
+
+  POST_PROCESSING:
+    RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
+    # No MORAI evaluation metric is implemented. MoraiHevenDataset.evaluation()
+    # raises NotImplementedError by design. A validation AP/recall number cannot
+    # be computed today even with a populated val split.
+    EVAL_METRIC: morai_not_implemented
+
+# Untuned optimizer defaults, copied from morai_centerpoint_train.yaml. Present
+# only so the future training command is complete. NOT selected against any
+# dataset distribution or GPU. Do not treat as recommended values.
+OPTIMIZATION:
+  OPTIMIZER: adam
+  LR: 0.001
+  WEIGHT_DECAY: 0.01
+  DECAY_STEP_LIST: [1]
+  LR_DECAY: 0.1
+  LR_CLIP: 0.00001

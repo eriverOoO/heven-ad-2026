@@ -1,5 +1,128 @@
 # STATUS
 
+## CenterPoint MORAI Training Prep v1 — COMPLETE (audit + config + preflight only)
+
+Branch `feat/centerpoint-morai-training-prep-v1`, from merged PR #29 main
+`3951ea99349474eee58691e6ea337937b3b65bc7` (`feat(data): add CenterPoint MORAI
+data adapter (#29)`). **NO FULL TRAINING. No optimizer step, no backward, no
+epoch loop, no fine-tune, no weights downloaded, no OpenPCDet downloaded, no
+production detector default / model architecture / AB3DMOT / tracker / planner
+change, no frozen T-2…T-16 conclusion touched, no new CenterPoint performance
+or generalization claim, no historical-metric comparison.**
+
+**What it is:** a reproducible preflight layer that validates a leakage-safe
+`centerpoint_morai_adapter_v1` export against the repo's current
+CenterPoint/OpenPCDet contracts (point features, class list, 3D box
+convention, point-cloud range, voxel grid, loader), refuses
+evaluation-readiness when no independent validation group exists, records
+model/data/config/checkpoint/code provenance, audits the PyTorch/CUDA/OpenPCDet
+environment, and emits the future train/validate commands — **without training**.
+
+**PR #29 verification (squash-aware):** `gh pr view 29` → state `MERGED`,
+merge commit `3951ea9`; `origin/main` contains
+`centerpoint_adapter{,_cli,_validate}.py`, `class_map.yaml`, the leakage-safe
+split logic, and `ADAPTER_SCHEMA_VERSION = "centerpoint_morai_adapter_v1"`.
+
+**New experiment configs** (`tools/centerpoint_offline/configs/`,
+self-contained, no `_BASE_CONFIG_`): `centerpoint_morai_v1.yaml` (experiment
+manifest — id, seed, init policy, group minimums, forbidden claims),
+`centerpoint_morai_v1_dataset.yaml` (data config,
+`EXPECTED_DATASET_VERSION: morai_centerpoint_v1` — a loader-level guard that
+makes `MoraiHevenDatasetCore` **raise** on the historical `unversioned_step03`
+overlap dataset), `centerpoint_morai_v1_model.yaml` (model config, **vehicle-only
+`CLASS_NAMES: [vehicle]` + `CLASS_NAMES_EACH_HEAD: [[vehicle]]`** — architecture
+otherwise byte-identical to the existing smoke config). The existing
+`morai_heven_dataset.yaml` / `morai_centerpoint_{smoke,train}.yaml` and
+`train_morai_centerpoint.py` defaults are **unchanged**.
+
+**Preflight CLI** `tools/centerpoint_offline/preflight_morai_training.py`
+(`--dataset --config --output-dir [--assert-real-dataset --init-checkpoint
+--attempt-{loader,model,forward}-smoke]`). Refuses an `--output-dir` inside the
+repo. Writes atomic `preflight_report.json`. Exit 0 only on `final_status ==
+READY` (impossible today). **Never trains.**
+
+**Split gate:** grouping key `(scenario_id, requested_seed)` (fallback
+`run_id`) read from `split_manifest.json`. `val` groups ≥ 1 required, else
+`evaluation_ready = false` with reason "no independent validation group"; the
+preflight **never** falls back to evaluating on train. Small `val` group count
+→ warning only. Leakage re-checked by invoking
+`ad_morai_dataset_validate_centerpoint` (subprocess; reuses the adapter's own
+`check_split_leakage`). `test` split is structurally reserved
+(`DATA_SPLIT: {train: train, test: val}` → `splits/test.txt` unreachable
+during tuning).
+
+**Honest status separation:** `dataset_status` (structural: contracts + val
+group + no leakage) is reported **separately** from `real_dataset_available`
+(false unless `--assert-real-dataset` **and** path not under a temp dir). A
+fixture reports `dataset_status: READY` but `final_status: BLOCKED_DATASET`.
+`final_status` precedence `BLOCKED_CONFIG → BLOCKED_DATASET → BLOCKED_EVALUATOR
+→ BLOCKED_ENVIRONMENT → READY`.
+
+**Contract audit result (fixture run):** MODEL CONTRACT **PASS** — point
+features `[x,y,z,intensity]`/4 match; box fields + `lidar_link` + no-crop/no-filter
+match; range `[-4,-25,-3,100,25,5]` consistent across data cfg / head
+`POST_CENTER_LIMIT_RANGE` / export metadata; voxel `[0.125,0.125,0.2]` → grid
+**exactly** `[832,400,40]`, `grid_x/grid_y % FEATURE_MAP_STRIDE(8) == 0` → BEV
+map `[104,50]`, divisible by `BACKBONE_2D` strides `[1,2]`; `vehicle → class id
+1`. `config_fingerprint` (SHA-256 over resolved
+`{experiment,data,model}`) `b9451d6d6c88bfc90f466d96a87291c4428aaa0b9b7af1b2b3536d9ccf6abe4b`.
+
+**Environment audit:** system `python3` has no torch → `environment_ready:
+false`. `~/venvs/heven-centerpoint` has torch `2.1.2+cu118`, CUDA **true**, RTX
+4060, `spconv.pytorch`, `pcdet 0.6.0+233f849` (resolved from
+`~/projects/OpenPCDet/pcdet`, a separate `-e` checkout at the same pinned
+commit as the `references/openpcdet` submodule) → `environment_ready: true`.
+The training environment is the one thing **not** blocking.
+
+**Model smoke (venv, fixture export):** `CenterPoint` constructs, **7 757 225**
+params, on `cuda`; `DataProcessor` → `voxels (M,5,4)` / `voxel_coords (M,3)`;
+`collate_batch` → `voxels`+`voxel_coords`+`points`+padded `gt_boxes (B,K,8)`;
+one `torch.no_grad()` forward → `pred_boxes [N,7]` (the 3→1 head reduction
+yields correct shapes). **No backward, no optimizer.step, no metric.**
+Negative (empty-GT) frame loads to `gt_boxes (0,7)` without error.
+
+**Checkpoint audit:** `centerpoint_t14_reproduction.pth` (SHA-256
+`466c8181…dbc95`, 93 474 618 B, T-14 reproduction epoch 3/iter 5292 on the
+overlapping 1764/0/0 split) has a **3-class** heatmap head (`hm.1.weight
+[3,64,3,3]`) — **strict `state_dict` load into vehicle-only v1 fails by
+construction**. Init policy: `train_from_scratch`. Reusable as an
+initialization artifact only, never as evaluation evidence.
+
+**Blocked (two independent reasons):** (1) no real leakage-safe dataset — no
+`morai_tracking_dataset_v1` and no `centerpoint_morai_adapter_v1` export on
+disk (only pytest `tmp_path`); the only on-disk MORAI detection data is the
+historical `~/datasets/morai_heven` 1764-train / 0-val / 0-test 100%-overlap
+set; (2) no MORAI evaluation metric — `MoraiHevenDataset.evaluation()` raises
+`NotImplementedError`. `training_started: false`, `optimizer_step_executed:
+false`.
+
+**Guards documented:** no comparison to the historical `0.368 m` (or any T-14
+figure) until an independent val split + matching metric/protocol exist; no
+generalization claim; simulator→real VLP-16 domain gap explicitly unaddressed.
+
+**Tests:** `test_centerpoint_morai_training_prep.py` 20 (data / config /
+environment gates; system `python3` + `pytest`). Regression:
+`test_centerpoint_adapter.py` 23, `test_dataset_factory.py` 27,
+`tools/morai_dataset_exporter/test_exporter_core.py` 9,
+`test_centerpoint_offline.py` 11/12 (`test_training_dataloader_creation` needs
+`torch` — pre-existing env gap, unrelated). `pyflakes` + `compileall` clean.
+The venv lacks `pytest`; the model/forward smoke is verified by direct
+`preflight_morai_training.py` CLI runs under the venv.
+
+**Files:** `tools/centerpoint_offline/preflight_morai_training.py`,
+`tools/centerpoint_offline/configs/{centerpoint_morai_v1.yaml,
+centerpoint_morai_v1_dataset.yaml, centerpoint_morai_v1_model.yaml}`,
+`tools/centerpoint_offline/test_centerpoint_morai_training_prep.py`,
+`docs/perception/centerpoint_morai_training_prep_v1.md`, this file.
+
+**Recommended next task:** no real, non-fixture `centerpoint_morai_adapter_v1`
+export exists (val == 0, no independent groups), so — **MORAI Dataset
+Collection Pilot v1**: run a small real MORAI capture campaign with the
+Tracking Dataset Factory, collect multiple independent `scenario+seed` groups,
+validate synchronization / GT quality, export them through the CenterPoint
+adapter, and produce the first non-overlapping train/validation dataset before
+any CenterPoint training.
+
 ## CenterPoint MORAI Data Adapter v1 — COMPLETE (data adaptation only)
 
 Branch `feat/centerpoint-morai-data-adapter-v1`, from merged PR #28 main

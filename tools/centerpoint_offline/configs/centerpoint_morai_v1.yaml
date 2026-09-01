@@ -1,0 +1,68 @@
+# CenterPoint MORAI experiment v1 - EXPERIMENT MANIFEST.
+#
+# Read by tools/centerpoint_offline/preflight_morai_training.py. This file is
+# the single source of truth for experiment identity; it references the
+# self-contained data + model configs it must be run with.
+#
+# NO TRAINING has been run against this experiment. training_started: false.
+
+experiment_id: centerpoint_morai_v1
+
+# Purpose: hold the CenterPoint architecture fixed vs the historical smoke/train
+# config and change only the DATA discipline - a genuinely leakage-safe
+# train/validation separation sourced from centerpoint_morai_adapter_v1.
+purpose: data_discipline_only
+
+data_config: centerpoint_morai_v1_dataset.yaml
+model_config: centerpoint_morai_v1_model.yaml
+
+# The adapter export's metadata.json.dataset_version must equal this.
+required_adapter_schema_version: centerpoint_morai_adapter_v1
+required_dataset_version: morai_centerpoint_v1
+
+class_names: [vehicle]
+point_feature_names: [x, y, z, intensity]
+box_fields: [x, y, z, length, width, height, yaw]
+gt_frame: lidar_link
+point_cloud_range: [-4.0, -25.0, -3.0, 100.0, 25.0, 5.0]
+voxel_size: [0.125, 0.125, 0.2]
+
+# Minimum independent-group recommendations for the preflight. These are
+# advisory: val must have >= 1 independent group to be evaluation-ready; small
+# val group counts only warn (unstable metrics), they do not hard-block.
+minimum_train_groups: 2
+minimum_val_groups: 1
+minimum_test_groups: 1
+
+seed: 2026
+# python/numpy/torch/cuda seeds are set. cudnn.deterministic and
+# torch.use_deterministic_algorithms are NOT set, and spconv voxelization is
+# not bit-deterministic -> determinism_level is "seeded", not "bit_exact".
+determinism_level: seeded
+
+# Initialization policy (NOT executed here):
+#  - default: train_from_scratch (vehicle-only 1-class head).
+#  - the historical T-14 checkpoint has a 3-class head and cannot be
+#    strict-loaded; a future selective backbone-only load is a separate,
+#    explicit decision, not part of training prep.
+init_policy: train_from_scratch
+historical_checkpoint:
+  path_env: HEVEN_CENTERPOINT_T14_CKPT
+  sha256: 466c8181a377682e032bb32579c8ddb65807b5feebd8625a750b1d5538ddbc95
+  provenance: >-
+    T-14 reproduction, 3 epochs / 5292 iters over the historical 1764-sample
+    single-scene train split (val=0, test=0, 100% train/eval overlap). Usable
+    only as an initialization artifact, NEVER as evaluation evidence.
+  class_head: 3-class (incompatible with vehicle-only strict load)
+
+test_split_reserved: true
+
+# Explicitly forbidden claims for any run built on this experiment:
+#  - CenterPoint improved / generalizes
+#  - MORAI validation predicts real VLP-16 performance
+#  - the historical 0.368 m localization result is reproduced or beaten
+#  - the detector beats Euclidean clustering
+#  - tracking improved
+forbidden_claims: true
+
+training_started: false
