@@ -155,6 +155,15 @@ class PreflightDataGateTests(unittest.TestCase):
         self.assertEqual(loader["pre_voxel_collate"]["vehicle_class_id"], 1.0)
         self.assertIn("val_samples", loader)
 
+    def test_evaluator_detected_but_fixture_still_blocked_dataset(self):
+        report = self._report()
+        self.assertTrue(report["evaluation_metric_implemented"])
+        ev = report["evaluator_checks"]
+        self.assertEqual(ev["evaluator_schema_version"], "morai_centerpoint_eval_v1")
+        self.assertTrue(ev["model_config_selects_evaluator"])
+        # evaluator present, env may be ready, but a fixture is never trainable
+        self.assertEqual(report["final_status"], pf.STATUS_BLOCKED_DATASET)
+
 
 class PreflightConfigGateTests(unittest.TestCase):
     def setUp(self):

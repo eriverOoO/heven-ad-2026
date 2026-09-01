@@ -34,6 +34,13 @@ minimum_train_groups: 2
 minimum_val_groups: 1
 minimum_test_groups: 1
 
+# Engineering checkpoint-selection metric for MORAI v1 (NOT a universal
+# CenterPoint standard). 3D oriented-IoU AP at 0.50 - the strictest widely-used
+# 3D operating point that still admits real matches on simulator data. No
+# checkpoint is selected in training prep or the evaluator PR.
+primary_validation_metric: vehicle/3d_ap@0.50
+evaluator_schema_version: morai_centerpoint_eval_v1
+
 seed: 2026
 # python/numpy/torch/cuda seeds are set. cudnn.deterministic and
 # torch.use_deterministic_algorithms are NOT set, and spconv voxelization is

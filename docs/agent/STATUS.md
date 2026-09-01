@@ -1,5 +1,131 @@
 # STATUS
 
+## CenterPoint MORAI Evaluator v1 — COMPLETE (evaluator implementation only)
+
+Branch `feat/centerpoint-morai-evaluator-v1`, from merged PR #30 main
+`ddb0b61211493f419aee38822bcfd1bd89fcdab9` (`feat(perception): prepare
+CenterPoint MORAI training (#30)`). **No training, no `optimizer.step()`, no
+weights downloaded, no architecture / voxel / range change, no Dataset Factory
+or adapter schema change, no tracking / planner change, no real-world
+generalization claim, no historical T-14 comparison.**
+
+**What it is:** replaces `MoraiHevenDataset.evaluation()` (was
+`NotImplementedError`) with a deterministic, versioned, **CPU-only, torch-free**
+LiDAR-only detector evaluator: oriented BEV + 3D IoU AP / precision / recall at
+`{0.25, 0.50, 0.70}`, matched centre / dimension / yaw diagnostics, and
+BEV-range-binned recall. No AB3DMOT / HOTA / IDSW / KalmanNet / planner.
+
+**PR #30 verification (squash-aware):** `gh pr view 30` → state `MERGED`, merge
+commit `ddb0b61`; `origin/main` contains `preflight_morai_training.py`, the
+`centerpoint_morai_v1*` configs and the training-prep doc.
+
+**MORAI Dataset Collection Pilot still blocked** (separate task): no MORAI
+simulator / gRPC / ROS bridge in this environment → no real
+`morai_tracking_dataset_v1`, no real adapter export. This task removes the
+*second* blocker (the missing evaluator) at the software level only.
+
+**OpenPCDet contract (audited, not guessed):**
+`references/openpcdet/tools/eval_utils/eval_utils.py` calls
+`dataset.evaluation(det_annos, class_names, eval_metric=..., output_path=...)`
+→ `(result_str: str, result_dict: {str: float})`; `result_dict` is folded into
+`ret_dict` for tensorboard + checkpoint selection. `det_annos` = list, one dict
+per sample (`name` `(N,)` str, `score` `(N,)`, `boxes_lidar` `(N,7)` =
+`[x,y,z,l,w,h,yaw]` lidar-frame geometric centre, `frame_id` scalar
+`numpy.str_`). The wrapper recovers GT from `self.morai_core`, aligns by
+`str(frame_id) == sample_id` (never list position), and ignores the
+`eval_metric` / `output_path` kwargs.
+
+**Core** `tools/centerpoint_offline/morai_evaluator.py` (pure NumPy):
+`MORAI_EVALUATOR_SCHEMA_VERSION = "morai_centerpoint_eval_v1"` (exported
+constant Training Prep reads), `IOU_THRESHOLDS = (0.25, 0.50, 0.70)`,
+`REFERENCE_MATCH_METRIC/THRESHOLD = "3d" / 0.50`,
+`PRIMARY_VALIDATION_METRIC = "vehicle/3d_ap@0.50"` (**engineering**
+checkpoint-selection metric for MORAI v1, not a universal standard; **no
+checkpoint selected**). Vehicle-only. Range bins `hypot(x,y)` ≤ 20 / ≤ 45 / >
+45 m — identical to `centerpoint_adapter.py`.
+
+**Geometry:** oriented BEV IoU + 3D IoU built on `_bev_corners` /
+`_polygon_clip` (Sutherland-Hodgman) / `_polygon_area` (shoelace) /
+`_height_overlap` — **ported verbatim with attribution from
+`ad_lidar_perception/ad_lidar_perception/ab3dmot_geometry.py`** (itself a port
+of `AB3DMOT_libs/dist_metrics.py`), so the evaluator is one self-contained
+file. A test cross-checks the ported clip against the live `ab3dmot_geometry`.
+KITTI's R40 evaluator is camera-frame-specific and deliberately not reused.
+Verified: identical → exactly 1.0, touching edge → exactly 0.0, yaw π/2 (4×2
+dims) → 1/3, z-separated → BEV > 0 & 3D = 0, yaw wrap +179°/−179° → ~0.035 rad.
+
+**AP:** global score-desc sort, tie-break `(sample_id, pred_index)`; **COCO
+rule — the IoU threshold gates the candidate set** (a below-threshold "best"
+consumes no GT), so `AP@0.25 ≥ AP@0.50 ≥ AP@0.70` holds by construction; each
+GT matched once; **101-point interpolated AP** (VOC monotone envelope). All-FP
+→ AP 0; confidence order matters (high-score FP before low-score TP → AP 0.5
+vs 1.0).
+
+**Negative / degenerate:** frame with 0 GT = valid negative (predictions there
+are FP, counted); **entire split with 0 vehicle GT → `MoraiEvaluatorError`**
+(never a misleading AP=1); 0 predictions + GT = valid (recall 0, AP 0);
+**invalid GT box → raise** (adapter validator should prevent it); invalid
+prediction box → excluded + counted (`invalid_prediction_boxes`); duplicate
+prediction on one GT → first TP, rest FP. Diagnostics with 0 reference-TP →
+`None` (never fabricated 0).
+
+**`SCORE_THRESH` / NMS audit:** `detector3d_template.post_processing` applies
+`score_thresh=SCORE_THRESH` (0.1) inside NMS **before**
+`generate_prediction_dicts`, so AP is over post-NMS post-threshold detections —
+not a full score sweep. Documented; `SCORE_THRESH` / NMS unchanged.
+
+**Standalone CLI** `tools/centerpoint_offline/evaluate_morai_predictions.py`
+(`--dataset --split val --predictions <jsonl> --output`): reads
+`heven.offline_detection.v1`-compatible JSONL, invokes
+`ad_morai_dataset_validate_centerpoint` and **refuses a leaky export**, default
+split `val`, `--split test` needs `--allow-test`, `--split train` needs
+`--allow-train`. `DATA_SPLIT: {train: train, test: val}` unchanged.
+
+**Config:** `centerpoint_morai_v1_model.yaml` `EVAL_METRIC`
+`morai_not_implemented` → `morai_centerpoint_eval_v1`; `centerpoint_morai_v1.yaml`
++`primary_validation_metric: vehicle/3d_ap@0.50`. `morai_heven_dataset.yaml` /
+`morai_centerpoint_{smoke,train}.yaml` untouched.
+
+**Preflight:** new `audit_evaluator()` — `evaluation_metric_implemented` is now
+`True` when the evaluator module exports `morai_centerpoint_eval_v1` **and**
+the model config's `EVAL_METRIC` selects it. On a fixture:
+`EVALUATOR: implemented=True` but `FINAL STATUS: BLOCKED_DATASET` (no real
+dataset) — fixture existence never yields `READY`.
+
+**Validation type: schema-faithful temporary fixtures only. NO real MORAI
+dataset, NO CenterPoint training, NO T-14 reproduction, NO real-world
+generalization claim.** Fixtures via the real Dataset Factory writer +
+CenterPoint adapter; predictions synthesised.
+
+**Tests:** `test_centerpoint_morai_evaluator.py` 26 (+1 skipped-guard removed:
+the `ab3dmot_geometry` cross-check runs). `MoraiHevenDataset.evaluation()`
+integration smoke (venv, real OpenPCDet `DatasetTemplate`): `(result_str, {37
+float keys})`, deterministic, `eval_metric` kwarg ignored. Latency: fixture
+~1 ms/frame; 100-frame × 3-15-box synthetic ~7.5 ms/frame CPU. Regression:
+`test_centerpoint_morai_training_prep.py` 21 (+1 new: evaluator detected,
+fixture still `BLOCKED_DATASET`), `test_centerpoint_adapter.py` 23,
+`test_dataset_factory.py` 27, `tools/morai_dataset_exporter/test_exporter_core.py`
+9, `test_centerpoint_offline.py` 11/12 (`test_training_dataloader_creation`
+needs `torch` — pre-existing env gap, unrelated). `pyflakes` + `compileall`
+clean.
+
+**Files:** `tools/centerpoint_offline/{morai_evaluator.py,
+evaluate_morai_predictions.py, test_centerpoint_morai_evaluator.py}`;
+`tools/centerpoint_offline/morai_dataset.py` (`evaluation()` body only);
+`tools/centerpoint_offline/preflight_morai_training.py` (+`audit_evaluator`);
+`tools/centerpoint_offline/configs/{centerpoint_morai_v1.yaml,
+centerpoint_morai_v1_model.yaml}`;
+`tools/centerpoint_offline/test_centerpoint_morai_training_prep.py` (+1 test);
+`docs/perception/centerpoint_morai_evaluator_v1.md`, this file.
+
+**Recommended next task:** MORAI Dataset Collection Pilot v1 — rerun the
+already-defined real-data pilot on a machine/session with the MORAI simulator,
+gRPC runtime, ROS bridge, raw LiDAR, ego GT, actor GT and TF active; collect at
+least six independent scenario+seed groups, validate synchronization/GT
+quality, export a leakage-safe CenterPoint train/validation dataset, then run
+the Training Prep preflight and this MORAI evaluator before any full CenterPoint
+training.
+
 ## CenterPoint MORAI Training Prep v1 — COMPLETE (audit + config + preflight only)
 
 Branch `feat/centerpoint-morai-training-prep-v1`, from merged PR #29 main
