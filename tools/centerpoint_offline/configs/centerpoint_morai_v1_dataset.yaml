@@ -1,0 +1,55 @@
+# CenterPoint MORAI experiment v1 - DATA config (self-contained; no _BASE_CONFIG_).
+#
+# Consumes ONLY a derived `centerpoint_morai_adapter_v1` export
+# (ad_morai_dataset_export_centerpoint). Never point this at the historical
+# `~/datasets/morai_heven` STEP-03 export: that dataset reports version
+# `unversioned_step03` and is 1764 train / 0 val / 0 test with 100% train/eval
+# overlap. The EXPECTED_DATASET_VERSION guard below makes MoraiHevenDatasetCore
+# raise on that dataset by construction.
+#
+# These are integration/pipeline values copied unchanged from the existing
+# smoke config. They are NOT tuned training hyperparameters and must not be
+# used for any performance claim.
+
+DATASET: MoraiHevenDataset
+DATA_PATH: ''  # Pass --dataset explicitly; never commit a machine-local path.
+
+# The adapter writes metadata.json.dataset_version from its class-map config
+# (config/dataset_factory/centerpoint_adapter/class_map.yaml -> morai_centerpoint_v1).
+EXPECTED_DATASET_VERSION: morai_centerpoint_v1
+
+POINT_CLOUD_RANGE: [-4.0, -25.0, -3.0, 100.0, 25.0, 5.0]
+
+# OpenPCDet `test` mode reads splits/val.txt here; splits/test.txt is
+# deliberately unreachable through this config so the held-out test split
+# cannot be touched during tuning.
+DATA_SPLIT:
+  train: train
+  test: val
+
+POINT_FEATURE_ENCODING:
+  encoding_type: absolute_coordinates_encoding
+  used_feature_list: [x, y, z, intensity]
+  src_feature_list: [x, y, z, intensity]
+
+# No augmentation in v1. No GT/database sampler: no MORAI GT database is built,
+# and the historical config references none. Do not add beam dropout, intensity
+# randomization, ring dropout, or any sim-to-real noise here - that needs
+# separate evidence and is out of scope for training prep.
+DATA_AUGMENTOR:
+  DISABLE_AUG_LIST: []
+  AUG_CONFIG_LIST: []
+
+DATA_PROCESSOR:
+  - NAME: mask_points_and_boxes_outside_range
+    REMOVE_OUTSIDE_BOXES: true
+  - NAME: shuffle_points
+    SHUFFLE_ENABLED:
+      train: false
+      test: false
+  - NAME: transform_points_to_voxels
+    VOXEL_SIZE: [0.125, 0.125, 0.2]
+    MAX_POINTS_PER_VOXEL: 5
+    MAX_NUMBER_OF_VOXELS:
+      train: 150000
+      test: 150000
