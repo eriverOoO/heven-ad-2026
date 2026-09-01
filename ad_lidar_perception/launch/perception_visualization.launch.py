@@ -25,6 +25,17 @@ def generate_launch_description():
                 "visualize_predictions", default_value="true"
             ),
             DeclareLaunchArgument(
+                "enable_experiment_tracker_view",
+                default_value="true",
+                description=(
+                    "Start the second read-only visualizer bound to the "
+                    "experimental /experiment/tracked/ab3dmot topic. Set false "
+                    "when the AB3DMOT arm publishes on /ad/perception/objects/"
+                    "tracked (e.g. the training-free demo), where that node "
+                    "would have no publisher to display."
+                ),
+            ),
+            DeclareLaunchArgument(
                 "rviz_config",
                 default_value=str(
                     package_share / "rviz" / "heven_perception.rviz"
@@ -51,6 +62,9 @@ def generate_launch_description():
                 executable="perception_visualizer_node",
                 name="perception_visualizer_ab3dmot",
                 output="screen",
+                condition=IfCondition(
+                    LaunchConfiguration("enable_experiment_tracker_view")
+                ),
                 parameters=[
                     {
                         "use_sim_time": use_sim_time,

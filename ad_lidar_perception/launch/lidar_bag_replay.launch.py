@@ -232,6 +232,14 @@ def _launch_setup(context):
     detector_backend = _parse_detector_backend(
         _perform(context, "detector_backend")
     )
+    tracker_backend = _perform(context, "tracker_backend").strip()
+    if tracker_backend not in {"", "autoware", "ab3dmot"}:
+        raise RuntimeError(
+            "tracker_backend must be empty, autoware, or ab3dmot"
+        )
+    dynamic_object_risk = _parse_bool(
+        "dynamic_object_risk", _perform(context, "dynamic_object_risk")
+    )
 
     # Reformat the validated number to prevent passing non-numeric shell-like
     # input through to the subprocess while retaining a readable command line.
@@ -257,7 +265,6 @@ def _launch_setup(context):
         command.append("--start-paused")
     if loop:
         command.append("--loop")
-    command.extend(["--topics", *SOURCE_TOPICS])
     replay_topics = list(SOURCE_TOPICS)
     if include_front_camera:
         replay_topics.append(FRONT_CAMERA_TOPIC)
@@ -271,6 +278,8 @@ def _launch_setup(context):
         launch_arguments={
             "composition_config": str(composition_config),
             "detector_backend": detector_backend,
+            "tracker_backend": tracker_backend,
+            "dynamic_object_risk": "true" if dynamic_object_risk else "false",
             "checkpoint_path": _perform(context, "checkpoint_path"),
             "device": _perform(context, "device"),
             "openpcdet_root": _perform(context, "openpcdet_root"),
@@ -380,6 +389,22 @@ def generate_launch_description():
                 "detector_backend",
                 default_value="euclidean",
                 description="euclidean (default) or opt-in centerpoint",
+            ),
+            DeclareLaunchArgument(
+                "tracker_backend",
+                default_value="",
+                description=(
+                    "Blank preserves the composition config tracker; "
+                    "'autoware' or opt-in 'ab3dmot' overrides it"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "dynamic_object_risk",
+                default_value="false",
+                description=(
+                    "Opt-in: also start the Dynamic Object Risk node "
+                    "(observational, no behaviour change)"
+                ),
             ),
             DeclareLaunchArgument("checkpoint_path", default_value=""),
             DeclareLaunchArgument("device", default_value="cuda:0"),
