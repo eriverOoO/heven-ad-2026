@@ -1,0 +1,21 @@
+# KalmanNet MORAI Trajectory Adapter config (schema kalmannet_morai_trajectory_v1).
+#
+# The adapter converts the tracking-valid GT of a canonical
+# morai_tracking_dataset_v1 into per-(run, actor) time-major trajectories
+# ([x, y, vx, vy] in the MORAI map frame, native source velocity). It trains
+# no model and attaches no measurements in v1.
+
+# End the current trajectory segment when the gap between consecutive
+# tracking-valid GT samples of one actor exceeds this. The canonical LiDAR
+# anchor is nominally 10 Hz (0.1 s); this default is 10 nominal periods.
+# The observed per-run dt distribution is recorded in export_manifest.json
+# -> observed_dt_s so this can be retuned against real captures.
+max_gt_gap_s: 1.0
+
+# End the segment when an implied step speed exceeds this (actor respawn /
+# teleport under a reused MORAI unique_id). Highway speed plus margin.
+max_teleport_speed_mps: 60.0
+
+# A trajectory shorter than this is still exported but flagged
+# valid_for_kalmannet_gt = false (too short to fit a filter).
+min_gt_samples: 5

@@ -1,5 +1,130 @@
 # STATUS
 
+## KalmanNet MORAI Trajectory Adapter v1 — COMPLETE (GT trajectory data only)
+
+Branch `feat/kalmannet-morai-trajectory-adapter-v1`, from merged PR #31 main
+`7ccf9de` (`feat(perception): add CenterPoint MORAI evaluator (#31)`).
+**Data adaptation only. No KalmanNet trained, no KNet architecture /
+hyperparameter change, no Linear KF / production tracker default / AB3DMOT /
+CenterPoint / planner change, no frozen T-9 / T-12 conclusion touched, no
+synthetic noise written as canonical data, no KNet-vs-KF claim.**
+
+**What it is:** deterministically converts the *tracking-valid* GT of a
+canonical `morai_tracking_dataset_v1` into a per-trajectory dataset for
+later Linear-KF replay and KalmanNet training / validation. Builds the GT
+trajectory side + an explicit measurement-attachment contract whose values
+are **entirely absent in v1**. New modules
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{kalmannet_trajectory_adapter.py,
+kalmannet_trajectory_adapter_cli.py,kalmannet_trajectory_adapter_validate.py,
+kalmannet_trajectory_loader.py}`. Entry points
+`ad_morai_dataset_export_kalmannet`, `ad_morai_dataset_validate_kalmannet`.
+
+**Schema** `kalmannet_morai_trajectory_v1` /
+`kalmannet_morai_measurement_contract_v1`. State / measurement dims mirrored
+from `ad_lidar_perception/.../kalmannet_core.py` (`STATE_DIM = 4` ->
+`[x, y, vx, vy]`, `MEAS_DIM = 2` -> `[x, y]`; parity test scans the
+literals). GT in the MORAI **`map` frame** (what `valid_for_tracking_gt`
+guarantees; no TF chain). Position = `box.map_frame.center[:2]` (box centre
+- a future detector measurement is also a box centre, so no rear-axle
+offset is learned as bias). Velocity = `box.source.velocity_map[:2]`
+(**native**, never finite difference; `finite_diff_velocity` stored as a
+diagnostic only).
+
+**Trajectory unit:** one persistent MORAI `unique_id` within one capture
+run, optionally segmented. Id `<run_id>__actor_<uid>__segment_<nnn>`
+(`run_id` = `<scenario>__seed_<seed>__run_<nnn>`), so no trajectory spans a
+run. Frame eligibility = frame-row `valid_for_tracking_gt` **and** per-box
+`valid_for_tracking_gt` + finite `map_frame`/`velocity_map`/`position_map`;
+box-level vs frame-level rejections counted separately. Within `(run,
+actor)`: order by `lidar_header_stamp_ns` (dup stamps dropped+counted,
+backward dropped+counted); new segment when `dt > max_gt_gap_s` (default
+**1.0 s** = 10 x nominal 0.1 s / 10 Hz; observed dt distribution recorded in
+`export_manifest.json -> observed_dt_s`) or implied step speed >
+`max_teleport_speed_mps` (default **60 m/s**). No fabricated zero states, no
+interpolation, no forward-fill.
+
+**Output:** `<root>/{.kalmannet_morai_trajectory_adapter, export_manifest.json,
+metadata.json, trajectory_index.jsonl, split_manifest.json,
+splits/{train,val,test}.txt, trajectories/<id>.npz}`. Each `.npz` is a
+**deterministic** archive (uncompressed, fixed 1980-01-01 member stamps,
+sorted) of time-major `[T, ...]` arrays: `timestamps_ns` (int64, strictly
+increasing), `dt_s` (`dt_s[0]=nan`, `dt_s[1:]>0`), `gt_state [T,4]`,
+`gt_position_map [T,3]`, `gt_velocity_map [T,3]`, `gt_yaw`,
+`source_position_map`, `finite_diff_velocity` (diagnostic), `source_frame_indices`,
+`source_sample_ids` (`<U128`), `actor_gt_skew_ns`, and the measurement-contract
+slots (`measurement [T,2]`, `measurement_state [T,4]`, `measurement_valid [T]`,
+`measurement_score`, `measurement_match_distance_m`, `measurement_match_iou`,
+`measurement_box_lidar [T,7]`, `measurement_source`, `measurement_class`) -
+**all `nan` / `False` / `""` in v1**.
+
+**Measurement contract:** `build_measurement_arrays(trajectory,
+per_frame_measurements, *, assignment_method, source)` - pure function a
+future Euclidean / CenterPoint measurement pass must satisfy; overlays only
+the frames it is given (keyed by `source_frame_index`), leaves the rest
+masked. No forward-fill / interpolation / detector inference / synthetic
+noise. Mask invariant (`measurement` finite iff `measurement_valid`) holds
+in v1 and after attachment; validator checks it. v1 exports never call it.
+
+**Splits:** `plan_split` / `auto_split` / `check_split_leakage` **imported
+verbatim from `centerpoint_adapter.py`** (shared `AdapterError` too).
+Grouping `(scenario_id, requested_seed)` fallback `run_id`, group-level
+assignment - a run never frame-split across splits. `auto_split` uses the
+shared adapter salt, so a `(scenario, seed)` group lands in the **same**
+split for the KalmanNet and CenterPoint derived datasets (deliberate shared
+provenance). `<3` groups -> all-train + warning. Zero tracking-valid
+trajectories -> hard error (no empty manifest).
+
+**GT-ready vs training-ready:** `valid_for_kalmannet_gt` per trajectory
+(`sample_count >= min_gt_samples` default 5, all `dt` finite positive, all
+`gt_state` finite); a shorter trajectory is still exported, flagged false.
+`kalmannet_training_ready` / manifest `training_ready` = **always false in
+v1** (no measurements attached). Content fingerprint SHA-256 over schema +
+source manifest sha + canonical config + split manifest + sorted per-artifact
+hashes (`created_at` excluded); repeat export byte-identical.
+
+**Real source dataset: NO** (no `morai_tracking_dataset_v1` on disk).
+Validated by **27 tests** (`test_kalmannet_trajectory_adapter.py`), sources
+built through the real factory `RunWriter`/`CaptureSession`: contract parity
+vs `kalmannet_core.py`, single/multi-actor extraction, run-reset same-id
+independence, native-velocity-not-finite-diff (deliberate 7 vs 10 m/s
+mismatch), time-gap / teleport / variable-dt segmentation, eligibility
+accounting, full export+validator, zero-trajectory rejection, deterministic
+repeat export, `min_gt_samples` flag, explicit split plan, multi-actor run
+never frame-split, injected-leakage detection, `<3` groups all-train,
+absent/double-listed split-plan errors, CenterPoint-shared auto-split
+partition, empty v1 measurement slots, `build_measurement_arrays` mask +
+unknown-frame rejection, loader tensor-layout parity, source-never-modified.
+Regression: `test_dataset_factory.py` 27, `test_centerpoint_adapter.py` 22
+pass unchanged; pyflakes clean; CLI `--validate-only` / `--dry-run` /
+`--overwrite` export / standalone validator end-to-end; venv cross-check
+runs an exported trajectory's GT through the real `kalmannet_core.LinearCVKF`
+(`STATE_DIM=4`, `MEAS_DIM=2`, `dt[0]=None`, time-major - runtime parity).
+`colcon build --packages-select ad_morai_bridge_dev` still can't complete
+here (deps not built - pre-existing); `find_packages` + `py_compile` +
+entry-point import + config parse verified.
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{kalmannet_trajectory_adapter.py,
+kalmannet_trajectory_adapter_cli.py,kalmannet_trajectory_adapter_validate.py,
+kalmannet_trajectory_loader.py}`;
+`ad_morai_bridge_dev/config/dataset_factory/kalmannet_trajectory_adapter/{trajectory_config.yaml,
+split_plan.example.yaml}`;
+`ad_morai_bridge_dev/test/test_kalmannet_trajectory_adapter.py`;
+`ad_morai_bridge_dev/setup.py` (+2 entry points, +config data_files);
+`docs/perception/kalmannet_morai_trajectory_adapter_v1.md`, this file. No
+`kalmannet_core.py` / Linear KF / AB3DMOT / CenterPoint / planner change.
+
+**Recommended next task:** CONDITIONAL. **If** a real `morai_tracking_dataset_v1`
+exists **and** real detector measurements have been produced: KalmanNet
+MORAI Training Prep v1 - audit this trajectory dataset + the attached
+measurements against `kalmannet_core.py`, define a leakage-safe train/val
+experiment and preflight dataset/model compatibility without training.
+**Else:** MORAI Dataset Collection Pilot v1 - run the existing real MORAI
+pilot on a machine/session with the simulator + gRPC + ROS bridge active,
+then export both the CenterPoint dataset and KalmanNet GT trajectories from
+the same canonical capture before any learned-model training.
+
+---
+
 ## CenterPoint MORAI Evaluator v1 — COMPLETE (evaluator implementation only)
 
 Branch `feat/centerpoint-morai-evaluator-v1`, from merged PR #30 main
