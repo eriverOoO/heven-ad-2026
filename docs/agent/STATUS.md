@@ -1,5 +1,142 @@
 # STATUS
 
+## KalmanNet Detector Measurement Attachment v1 — COMPLETE (supervised data construction only)
+
+Branch `feat/kalmannet-measurement-attachment-v1`, from merged PR #32 main
+`deb6cb9` (`feat(data): add KalmanNet MORAI trajectory adapter (#32)`).
+**Supervised DATA CONSTRUCTION only. No KalmanNet trained, no `optimizer.step`,
+no synthetic Gaussian noise, no simulated dropout, no filled / interpolated /
+forward-filled measurements, no detector inference, no KNet architecture /
+state-dim / measurement-dim change, no Linear KF / CenterPoint / AB3DMOT /
+production tracker / planner change, no frozen T-9 / T-12 conclusion touched.**
+
+**What it is:** consumes (A) a `kalmannet_morai_trajectory_v1` export and (B)
+sample-aligned **real detector outputs**, produces `kalmannet_morai_measurement_v1`
+- the same GT trajectories byte-for-byte unchanged, measurement slots
+populated **only** where a real detection was supervised-matched to the GT
+actor. New modules `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{kalmannet_supervised_association.py,
+kalmannet_measurement_attachment.py,kalmannet_measurement_attachment_cli.py,
+kalmannet_measurement_attachment_validate.py}`. Entry points
+`ad_morai_dataset_attach_kalmannet_measurements`,
+`ad_morai_dataset_validate_kalmannet_measurements`.
+
+**Three concepts, only #2 handled:** (1) GT presence, (2) detector measurement
+presence [SUPERVISED, for dataset construction], (3) runtime tracker
+association [NOT implemented / evaluated]. The runtime system has no GT and
+cannot reproduce this association.
+
+**Detector contracts audited (both already in the repo):**
+- CenterPoint: `heven.offline_detection.v1` JSONL (`prediction_bridge.py`) -
+  `sample_id`, `source_header_stamp_ns`, `frame_id: lidar_link`, detections
+  `{class_name, score, box_lidar [x,y,z,l,w,h,yaw] geometric centre}`.
+  class-aware, yaw available.
+- Euclidean: `heven.ros_detection_comparison.v1` JSONL (`record_detected_objects.py`
+  <- `adaptive_euclidean_cluster_node.cpp`) - `header_stamp_ns` + `frame_id`,
+  **no `sample_id`, no yaw**, AABB centre `position` + `dimensions`,
+  `classification = UNKNOWN`, `existence_probability = 1.0`. class-agnostic,
+  yaw unavailable. Output frame = input LiDAR frame (`lidar_link`).
+
+**Normalized record** `kalmannet_detector_measurements_v1` + two source
+adapters (`centerpoint_records_from_heven_offline`,
+`euclidean_records_from_ros_comparison`). Euclidean aligns by exact LiDAR
+anchor stamp **scoped to a caller-supplied `--run-id`**; two frames of that
+run at one stamp -> hard error. No inference run.
+
+**Frame:** KNet `z_k` stored as **map-frame `[x, y]`** (`MEAS_DIM = 2`,
+re-verified vs `kalmannet_core.py`, unchanged). Detector centres are
+`lidar_link` -> transformed to `map` at the exact source sample stamp using
+`map_to_lidar = base_to_lidar^-1 . odom_to_base^-1 . map_to_odom` recomposed
+offline from the canonical `tf/<frame>.json` (`map_to_odom`, `odom_to_base`,
+`static_edges` - exactly what the factory stored); **no live / latest TF**. A
+test recomposes it and reproduces the factory's own recorded
+`lidar_frame.center` from `map_frame.center`.
+
+**Supervised association** (`kalmannet_supervised_association.py`, pure NumPy,
+no scipy): frame-local (no future GT / no track continuity),
+class-compatible + BEV centre-distance gate (`max_distance_m` default
+**2.5 m** = MORAI vehicle footprint half-diagonal; **NOT** the AB3DMOT
+`euclidean_gate_m` 3.0 m, **NOT** the evaluator IoU threshold 0.50) +
+deterministic pure-NumPy Hungarian (`hungarian_min_cost`, tested optimal vs
+brute force to 4x4, no silent greedy fallback). One-to-one both directions; a
+non-candidate is never forced through. Class matching auto-disabled for a
+class-agnostic source (effective value in the manifest). Oriented BEV IoU is a
+**diagnostic only**, computed only when the detector supplies yaw
+(`measurement_match_iou` = nan for Euclidean).
+
+**Measurement value = detector transformed centre, never GT.**
+`measurement_state` velocity columns stay `nan` (detector supplies none; `z_k`
+is position-only; no finite differencing). Missing detection -> `measurement_valid
+= false`, `measurement = nan`, **GT timestep kept**; per-trajectory
+`miss_reason_counts` distinguishes `detector_frame_missing` / `zero_detections`
+/ `no_map_transform` / `gated_out` / `assigned_elsewhere`. No forward-fill, no
+interpolation, no KF pseudo-measurement. False-positive detections counted at
+frame/run/dataset, never create a trajectory.
+
+**Natural miss runs** (`longest_missing_run_frames` / `_s`, dataset
+`longest_natural_missing_run_frames`) = dataset characterization only, from
+naturally-missing detector observations - **not** a KNet robustness claim, no
+synthetic T-12 gap.
+
+**Output** `<root>/{.kalmannet_morai_measurement_dataset, export_manifest.json,
+metadata.json, trajectory_index.jsonl, split_manifest.json,
+splits/{train,val,test}.txt, trajectories/<id>.npz}`. Each NPZ = every
+`kalmannet_morai_trajectory_v1` GT array **numerically identical** (locked by
+test + validator) + (re)written measurement arrays. Splits copied **verbatim**
+from the trajectory export (no resplit; Euclidean vs CenterPoint attachment ->
+identical membership). `kalmannet_training_ready` = `valid_for_kalmannet_gt`
+AND `measurement_count > 0` AND all valid measurements finite AND dim 2 - **no
+coverage threshold** (schema-ready vs recommended-eligibility separated).
+Cross-dataset pairing (trajectory export from dataset A + canonical B, by
+manifest sha) -> hard fail. Incomplete detector run -> refused unless
+`--allow-incomplete-detector`. Content fingerprint over measurement schema +
+trajectory fingerprint + detector manifest sha + association config + sorted
+artifact hashes; repeat export byte-identical; record order does not change
+any trajectory NPZ / index row.
+
+**Real data: NO** (`morai_tracking_dataset_v1` absent -> no real detector
+records, **no real measurement-attached trajectories**). Fixture-only:
+sources via the real Dataset Factory + real trajectory adapter; detector
+records synthesised for unit testing (`fixture_detector_records`), not
+detector-performance evidence. **27 tests**
+(`test_kalmannet_measurement_attachment.py`): Hungarian vs brute force,
+positive-match-is-detector-not-GT, gate, class mismatch / agnostic,
+1-det/2-GT + 2-det/1-GT one-to-one, false positive, `lidar->map` recomposition
+vs recorded `lidar_frame`, TF-absent `no_map_transform`, end-to-end +
+validator, zero-detections vs frame-missing, FP creates no trajectory, GT
+immutable, natural miss-run stats, sample-order invariance, deterministic
+repeat export, training-ready, split verbatim + detector-agnostic,
+cross-dataset refused, incomplete-detector refused, Euclidean source adapter,
+Euclidean stamp-ambiguity hard error. Regression:
+`test_kalmannet_trajectory_adapter.py` 27, `test_dataset_factory.py` 27,
+`test_centerpoint_adapter.py` 22 pass unchanged; pyflakes + `py_compile` clean;
+CLI `--dry-run` + validator end-to-end. `colcon build` still blocked (deps not
+built - pre-existing).
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/{kalmannet_supervised_association.py,
+kalmannet_measurement_attachment.py,kalmannet_measurement_attachment_cli.py,
+kalmannet_measurement_attachment_validate.py}`;
+`ad_morai_bridge_dev/config/dataset_factory/kalmannet_measurement_attachment/attachment_config.yaml`;
+`ad_morai_bridge_dev/test/test_kalmannet_measurement_attachment.py`;
+`ad_morai_bridge_dev/setup.py` (+2 entry points, +config data_files);
+`docs/perception/kalmannet_detector_measurement_attachment_v1.md`, this file.
+No `kalmannet_core.py` / trajectory adapter / Linear KF / CenterPoint /
+AB3DMOT / planner change.
+
+**Recommended next task:** CONDITIONAL. **If** a real `morai_tracking_dataset_v1`
+exists **and** real detector measurements from >=1 source have been attached
+**and** train/val independent groups exist: KalmanNet MORAI Training Prep v1 -
+audit the real measurement-attached trajectories against the current KNet
+model/state/observation contract, define sequence batching / masking /
+normalization / loss+eval protocol and leakage-safe train/validation
+manifests, run data/model/environment preflight **without** starting training.
+**Else:** MORAI Dataset Collection Pilot v1 - run the already-defined real
+MORAI pilot with the simulator + gRPC + ROS bridge active, export the same
+canonical capture through the CenterPoint adapter and the KalmanNet trajectory
+adapter, generate real detector outputs, and attach those measurements before
+any learned-model training.
+
+---
+
 ## KalmanNet MORAI Trajectory Adapter v1 — COMPLETE (GT trajectory data only)
 
 Branch `feat/kalmannet-morai-trajectory-adapter-v1`, from merged PR #31 main

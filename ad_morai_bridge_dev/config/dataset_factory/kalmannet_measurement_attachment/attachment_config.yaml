@@ -1,0 +1,28 @@
+# KalmanNet Detector Measurement Attachment config
+# (schema kalmannet_morai_measurement_v1).
+#
+# Supervised GT<->detection association for KalmanNet training/validation
+# dataset construction. This is NOT runtime tracker association.
+
+association:
+  # BEV centre-distance metric. Only "bev_center_distance" is supported -
+  # the historical KalmanNet observation is a 2-D position and the Euclidean
+  # detector supplies no yaw.
+  metric: bev_center_distance
+
+  # One-to-one minimum-cost assignment. Only "hungarian_min_cost" is
+  # supported (pure NumPy, deterministic; no silent greedy fallback).
+  assignment: hungarian_min_cost
+
+  # Maximum supervised match centre distance (map frame, metres).
+  # Provenance: the MORAI vehicle footprint is ~4.6 x 1.9 m, half-diagonal
+  # ~= 2.5 m. This is a LABEL-CONSTRUCTION gate - NOT the AB3DMOT runtime
+  # euclidean_gate_m (3.0 m) and NOT the CenterPoint evaluator's IoU
+  # threshold (0.50). A detection beyond this is never matched.
+  max_distance_m: 2.5
+
+  # Require class compatibility (vehicle<->{vehicle,car,truck,bus}).
+  # Automatically forced to false for a class-agnostic detector source
+  # (the Euclidean detector labels every cluster UNKNOWN); the effective
+  # value is recorded in export_manifest.json -> association.
+  class_matching: true
