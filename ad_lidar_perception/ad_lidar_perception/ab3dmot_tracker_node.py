@@ -47,6 +47,10 @@ from ad_lidar_perception.ab3dmot_ros import (
     track_id_to_uuid,
     tracked_states_to_message,
 )
+from ad_lidar_perception.ab3dmot_tf_deferred_queue import (
+    DeferredDetectionQueue,
+    ReleaseEvent,
+)
 
 MESSAGE_TYPES = {
     "TrackedObject": TrackedObject,
@@ -93,15 +97,50 @@ class Ab3dmotTrackerNode(Node):
             "velocity_audit_topic",
             "/ad/perception/objects/tracked/ab3dmot_velocity_audit",
         )
+        # AB3DMOT Exact-Stamp TF Deferred Processing v1 (see
+        # docs/perception/ab3dmot_tf_deferred_processing_v1.md): when the
+        # exact-stamp `target_frame <- detection frame_id` transform is not
+        # yet available because only its FUTURE side hasn't arrived (a
+        # tf2 "extrapolation into the future" rejection), hold the
+        # detection in a small bounded FIFO queue instead of discarding it
+        # immediately, and process it -- still at its ORIGINAL stamp -- once
+        # tf2 can supply the exact transform. Never extrapolates, never
+        # blocks, never reorders. Any other TF failure (unknown frame,
+        # extrapolation into the past / evicted, disconnected tree) still
+        # fails fast exactly as before. Default `true`: this only ever
+        # widens the set of frames a strictly-experimental tracker accepts
+        # under the same exact-stamp geometry and safety guarantees: no
+        # timestamp is changed, no transform is fabricated, memory/wait are
+        # bounded. See "Production default decision" in the design doc.
+        self.declare_parameter("defer_until_tf_ready", True)
+        # Evidence-derived default: see Phase 2 of the design doc
+        # (measured detection-arrival -> exact-stamp-transform-ready lag on
+        # the morai_cam4_20260813_163222 replay with enable_localization:=true).
+        self.declare_parameter("max_tf_wait_ms", 500)
+        self.declare_parameter("max_pending_detections", 8)
 
         self.enabled = bool(self.get_parameter("enabled").value)
         self.target_frame = str(self.get_parameter("target_frame").value)
+        self._defer_until_tf_ready = bool(self.get_parameter("defer_until_tf_ready").value)
+        max_tf_wait_ms = int(self.get_parameter("max_tf_wait_ms").value)
+        max_pending_detections = int(self.get_parameter("max_pending_detections").value)
+        if max_tf_wait_ms <= 0:
+            raise ValueError("max_tf_wait_ms must be > 0")
+        if max_pending_detections <= 0:
+            raise ValueError("max_pending_detections must be > 0")
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
+        self._deferred_queue: DeferredDetectionQueue | None = None
+        if self._defer_until_tf_ready:
+            self._deferred_queue = DeferredDetectionQueue(
+                max_pending=max_pending_detections,
+                max_wait_s=max_tf_wait_ms / 1000.0,
+                can_transform=self._can_transform_for,
+            )
+        self._last_admitted_stamp_ns: int | None = None
 
         self._tracker: AB3DMOTTracker | None = None
-        self._last_stamp_ns: int | None = None
         self._runtime_summary_interval_frames = int(
             self.get_parameter("runtime_summary_interval_frames").value
         )
@@ -175,13 +214,21 @@ class Ab3dmotTrackerNode(Node):
         if not self.enabled or self._tracker is None:
             return
 
+        # Release anything already resolvable, oldest-first, before
+        # admitting the newly-arrived message -- this is what lets a
+        # detection whose exact-stamp transform just became available get
+        # processed even without a *new* detection sharing that exact
+        # readiness event (Phase 12/21: event-driven, non-blocking drain).
+        if self._deferred_queue is not None:
+            self._drain_deferred_queue()
+
         try:
             stamp_ns = stamp_to_ns(msg.header.stamp)
         except DetectedObjectsAdapterError as error:
             self.get_logger().warn(f"rejected DetectedObjects: malformed stamp: {error}")
             return
 
-        decision = classify_timestamp(stamp_ns, self._last_stamp_ns)
+        decision = classify_timestamp(stamp_ns, self._last_admitted_stamp_ns)
         if decision is TimestampDecision.SKIP_DUPLICATE:
             self.get_logger().warn("rejected DetectedObjects: duplicate timestamp")
             return
@@ -191,6 +238,78 @@ class Ab3dmotTrackerNode(Node):
             )
             return
 
+        if self._deferred_queue is None:
+            # defer_until_tf_ready:=false -- byte-identical to the
+            # pre-existing behaviour: any TF failure drops the frame
+            # immediately, never deferred.
+            self._last_admitted_stamp_ns = stamp_ns
+            self._process_detection(msg, stamp_ns)
+            return
+
+        # Admitted into the pipeline now (whether processed immediately or
+        # deferred): a duplicate/rollback of this exact stamp arriving
+        # while this message is still pending must still be rejected, so
+        # this must advance *before* the (possibly deferred) outcome is
+        # known -- not only once processing eventually completes.
+        self._last_admitted_stamp_ns = stamp_ns
+        event, payload = self._deferred_queue.offer(stamp_ns, msg)
+        if event is ReleaseEvent.READY:
+            self._process_detection(payload, stamp_ns)
+        elif event is ReleaseEvent.DROPPED_PERMANENT:
+            self.get_logger().warn(
+                "rejected DetectedObjects: TF permanently unavailable "
+                f"stamp_ns={stamp_ns}"
+            )
+        # event is ReleaseEvent.DEFERRED: nothing further to do here; a
+        # later drain() call (triggered by the next detection callback)
+        # will release this same message exactly once.
+
+    def _can_transform_for(self, msg: DetectedObjects) -> tuple[bool, str]:
+        """Non-blocking, exact-stamp transform-availability check for one
+        `DetectedObjects` message. An empty message needs no transform at
+        all, so it is trivially "ready" without ever touching the TF
+        buffer -- matches the pre-existing skip-TF-for-empty-messages
+        contract exactly."""
+        if not msg.objects:
+            return True, ""
+        return self._tf_buffer.can_transform(
+            self.target_frame,
+            msg.header.frame_id,
+            msg.header.stamp,
+            return_debug_tuple=True,
+        )
+
+    def _drain_deferred_queue(self) -> None:
+        assert self._deferred_queue is not None
+        for event, msg in self._deferred_queue.drain():
+            try:
+                stamp_ns = stamp_to_ns(msg.header.stamp)
+            except DetectedObjectsAdapterError:
+                # Cannot happen: only already-`stamp_to_ns`-validated
+                # messages are ever offered to the queue. Kept as a
+                # defensive backstop matching this repo's reject-rather-
+                # than-crash convention.
+                continue
+            if event is ReleaseEvent.READY:
+                self._process_detection(msg, stamp_ns)
+            elif event is ReleaseEvent.DROPPED_TIMEOUT:
+                self.get_logger().warn(
+                    "dropped deferred DetectedObjects: tf_timeout "
+                    f"stamp_ns={stamp_ns}"
+                )
+            elif event is ReleaseEvent.DROPPED_PERMANENT:
+                self.get_logger().warn(
+                    "dropped deferred DetectedObjects: TF permanently "
+                    f"unavailable stamp_ns={stamp_ns}"
+                )
+
+    def _process_detection(self, msg: DetectedObjects, stamp_ns: int) -> None:
+        """Runs the actual AB3DMOT tracker step for one already-admitted
+        message, using its own original stamp. Called either immediately
+        (TF already exact-stamp available) or later, from
+        `_drain_deferred_queue`, once it becomes available -- both paths
+        converge on this single tracker-update implementation (no
+        copy/paste algorithm branch)."""
         transform = None
         if msg.objects:
             try:
@@ -198,6 +317,12 @@ class Ab3dmotTrackerNode(Node):
                     self.target_frame, msg.header.frame_id, msg.header.stamp
                 )
             except (LookupException, ConnectivityException, ExtrapolationException) as error:
+                # `_can_transform_for` said ready (or deferral is
+                # disabled), but the underlying lookup still failed -- a
+                # genuine race is possible between the non-blocking check
+                # and this call. Fails exactly like the pre-existing
+                # unconditional-drop behaviour; never re-enqueued (would
+                # risk unbounded bouncing).
                 self.get_logger().warn(f"rejected DetectedObjects: TF unavailable: {error}")
                 return
 
@@ -213,10 +338,12 @@ class Ab3dmotTrackerNode(Node):
             states = self._tracker.step(detections, timestamp_seconds)
             step_latency_ms = (time.perf_counter() - step_started) * 1000.0
         except ValueError as error:
-            # Should not happen: the non-increasing timestamp gating above already
-            # guarantees a strictly-increasing timestamp reaches step().
-            # Kept as a defensive backstop, matching this repo's existing
-            # reject-rather-than-crash policy for malformed timing.
+            # Should not happen: the non-increasing timestamp gating in
+            # `_on_detected_objects` already guarantees a strictly-
+            # increasing timestamp reaches step(), and the deferred queue
+            # never reorders admitted messages. Kept as a defensive
+            # backstop, matching this repo's existing reject-rather-than-
+            # crash policy for malformed timing.
             self.get_logger().error(f"AB3DMOT tracker rejected step: {error}")
             return
 
@@ -237,7 +364,6 @@ class Ab3dmotTrackerNode(Node):
             self._frames_with_position_covariance_bounded += 1
         self.publisher.publish(output)
         self._publish_velocity_audit(states, msg.header.stamp)
-        self._last_stamp_ns = stamp_ns
 
     def _publish_velocity_audit(self, states, stamp) -> None:
         if self._velocity_audit_publisher is None:
@@ -272,6 +398,20 @@ class Ab3dmotTrackerNode(Node):
             return
         ordered = sorted(self._step_latency_ms)
         p95_index = max(0, math.ceil(0.95 * len(ordered)) - 1)
+        deferred_summary = ""
+        if self._deferred_queue is not None:
+            s = self._deferred_queue.stats
+            deferred_summary = (
+                " deferred_tf_detections_received="
+                f"{s.detections_received} "
+                f"deferred_tf_processed_immediately={s.processed_immediately} "
+                f"deferred_tf_processed_deferred={s.processed_deferred} "
+                f"deferred_tf_dropped_timeout={s.dropped_tf_timeout} "
+                f"deferred_tf_dropped_permanent={s.dropped_permanent_tf_failure} "
+                f"deferred_tf_dropped_overflow={s.dropped_queue_overflow} "
+                f"deferred_tf_queue_depth={s.pending_queue_depth} "
+                f"deferred_tf_max_queue_depth={s.max_observed_queue_depth}"
+            )
         self.get_logger().info(
             "AB3DMOT_RUNTIME_SUMMARY "
             f"frames={len(ordered)} "
@@ -283,6 +423,7 @@ class Ab3dmotTrackerNode(Node):
             f"median_step_ms={statistics.median(ordered):.6f} "
             f"p95_step_ms={ordered[p95_index]:.6f} "
             f"max_step_ms={ordered[-1]:.6f}"
+            f"{deferred_summary}"
         )
 
 

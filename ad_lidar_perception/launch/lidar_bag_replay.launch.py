@@ -316,6 +316,13 @@ def _launch_setup(context):
             "finite_filter_enabled": "true",
             "densifier_enabled": "false",
             "point_layout_adapter_enabled": "false",
+            "ab3dmot_defer_until_tf_ready": _perform(
+                context, "ab3dmot_defer_until_tf_ready"
+            ),
+            "ab3dmot_max_tf_wait_ms": _perform(context, "ab3dmot_max_tf_wait_ms"),
+            "ab3dmot_max_pending_detections": _perform(
+                context, "ab3dmot_max_pending_detections"
+            ),
             # Keep replay input ownership separate from visualization.  These
             # must be explicit because an enclosing launch can otherwise leak
             # identically named start_* configurations into this include.
@@ -463,6 +470,21 @@ def generate_launch_description():
                     "Opt-in: also start the Dynamic Object Risk node "
                     "(observational, no behaviour change)"
                 ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_defer_until_tf_ready",
+                default_value="true",
+                description=(
+                    "tracker_backend:=ab3dmot only: AB3DMOT Exact-Stamp TF "
+                    "Deferred Processing v1 pass-through -- see "
+                    "ab3dmot_tracker.launch.py's 'defer_until_tf_ready' arg."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_tf_wait_ms", default_value="500"
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_pending_detections", default_value="8"
             ),
             DeclareLaunchArgument("checkpoint_path", default_value=""),
             DeclareLaunchArgument("device", default_value="cuda:0"),

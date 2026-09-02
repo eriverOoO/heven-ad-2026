@@ -494,6 +494,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_ab3dmot_tracker_node test/test_ab3dmot_tracker_node.py)
   ament_add_pytest_test(
+    test_ab3dmot_tf_deferred_queue test/test_ab3dmot_tf_deferred_queue.py)
+  ament_add_pytest_test(
     test_ab3dmot_association test/test_ab3dmot_association.py)
   ament_add_pytest_test(
     test_ab3dmot_association_metrics test/test_ab3dmot_association_metrics.py)

@@ -265,6 +265,15 @@ def _launch_setup(context):
                         "state_estimator": "linear_kf",
                         "yaw_measurement_mode": "unobserved",
                         "velocity_audit_enabled": "true",
+                        "defer_until_tf_ready": _perform(
+                            context, "ab3dmot_defer_until_tf_ready"
+                        ),
+                        "max_tf_wait_ms": _perform(
+                            context, "ab3dmot_max_tf_wait_ms"
+                        ),
+                        "max_pending_detections": _perform(
+                            context, "ab3dmot_max_pending_detections"
+                        ),
                     },
                 ),
                 _include(
@@ -370,6 +379,21 @@ def generate_launch_description():
                 "start_visualization", default_value="false"
             ),
             DeclareLaunchArgument("start_rviz", default_value="false"),
+            DeclareLaunchArgument(
+                "ab3dmot_defer_until_tf_ready",
+                default_value="true",
+                description=(
+                    "ab3dmot_tracker_backend only: AB3DMOT Exact-Stamp TF "
+                    "Deferred Processing v1 pass-through. See "
+                    "ab3dmot_tracker.launch.py's 'defer_until_tf_ready' arg."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_tf_wait_ms", default_value="500"
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_pending_detections", default_value="8"
+            ),
             DeclareLaunchArgument(
                 "dynamic_object_risk",
                 default_value="false",

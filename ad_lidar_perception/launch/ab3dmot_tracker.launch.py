@@ -116,6 +116,43 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "velocity_audit_enabled", default_value="false"
         ),
+        DeclareLaunchArgument(
+            "defer_until_tf_ready",
+            default_value="true",
+            description=(
+                "AB3DMOT Exact-Stamp TF Deferred Processing v1: when the "
+                "exact-stamp target_frame<-detection transform is not yet "
+                "available only because its FUTURE side hasn't arrived "
+                "(tf2 'extrapolation into the future'), hold the detection "
+                "in a small bounded FIFO queue and process it -- at its "
+                "original stamp -- once tf2 can supply the exact "
+                "transform, instead of discarding it immediately. Never "
+                "extrapolates, blocks, or reorders. 'false' reproduces the "
+                "pre-fix unconditional-drop-on-any-TF-failure behavior "
+                "exactly."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "max_tf_wait_ms",
+            default_value="500",
+            description=(
+                "Bounded wait (ms) a detection may sit in the deferred "
+                "queue before being dropped as tf_timeout. Evidence-"
+                "derived default -- see "
+                "docs/perception/ab3dmot_tf_deferred_processing_v1.md "
+                "Phase 2 (measured detection-arrival -> exact-stamp-"
+                "transform-ready lag)."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "max_pending_detections",
+            default_value="8",
+            description=(
+                "Bounded FIFO depth for deferred detections; oldest "
+                "unresolved entry is dropped on overflow (deterministic, "
+                "never random)."
+            ),
+        ),
     ]
     node = Node(
         package="ad_lidar_perception",
@@ -154,6 +191,15 @@ def generate_launch_description():
                 "velocity_audit_enabled": ParameterValue(
                     LaunchConfiguration("velocity_audit_enabled"),
                     value_type=bool,
+                ),
+                "defer_until_tf_ready": ParameterValue(
+                    LaunchConfiguration("defer_until_tf_ready"), value_type=bool
+                ),
+                "max_tf_wait_ms": ParameterValue(
+                    LaunchConfiguration("max_tf_wait_ms"), value_type=int
+                ),
+                "max_pending_detections": ParameterValue(
+                    LaunchConfiguration("max_pending_detections"), value_type=int
                 ),
             },
         ],
