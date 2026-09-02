@@ -39,7 +39,8 @@ training-free tracker directly.
 | `/ad/perception/objects/detected` | `autoware_perception_msgs/DetectedObjects` | Euclidean clustering (frame `lidar_link`) |
 | `/ad/perception/objects/tracked` | `autoware_perception_msgs/TrackedObjects` | AB3DMOT (frame `odom`) |
 | `/ad/perception/objects/predicted` | `autoware_perception_msgs/PredictedObjects` | prediction |
-| `/ad/perception/occupancy/{dynamic,combined,static}` | `nav_msgs/OccupancyGrid` | occupancy grids |
+| `/ad/perception/occupancy/{dynamic,combined,static}` | `nav_msgs/OccupancyGrid` | occupancy grids (gated - see below) |
+| `/ad/planning/drivable_mask` | `nav_msgs/OccupancyGrid` | `ad_road_corridor_mask` (`ad_planner`, opt-in via `enable_drivable_mask:=true`, frame `base_link`) |
 | `/ad/planning/dynamic_object_risks` | `ad_interfaces/DynamicObjectRiskArray` | Dynamic Object Risk |
 | `/ad/visualization/{detected,tracked,predicted}_objects` | `visualization_msgs/MarkerArray` | `ad_viz` (read-only) |
 | `/ad/sensors/camera/front/compressed` | `sensor_msgs/CompressedImage` | sensor / bag (camera panel) |
@@ -146,6 +147,8 @@ See "Replaying a bag without recorded localization" below.
 | `enable_dynamic_object_risk` | `true` | start the observational Dynamic Object Risk node |
 | `enable_camera_perception` | `false` | also start the YOLO 2D overlay (needs torch) |
 | `enable_localization` | `false` | replay-only: also replay `/ad/sensors/gps/fix` + `/ad/vehicle/status` and start `ad_localization`'s `gnss_imu` backend, for a bag with raw ego sensors but no recorded `/ad/localization/odometry` |
+| `enable_drivable_mask` | `false` | also start `ad_planner`'s existing `ad_road_corridor_mask_node` standalone, so the already-gated dynamic/static/combined occupancy grids can publish (needs `data_dir`) |
+| `data_dir` | `$AD_DATA_DIR` | competition data directory; only read when `enable_drivable_mask:=true` |
 | `start_rviz` | `true` | set `false` for a headless graph |
 | `loop` | `true` | replay the bag repeatedly |
 | `start_paused` | `false` | start the bag paused |
@@ -211,6 +214,86 @@ visualization/replay use. For a bag that already contains a real, recorded
 at its default `false` — do not run a second, duplicate localization
 producer against already-recorded localization output.
 
+## Drivable mask + dynamic/static occupancy grid completion
+
+`/ad/perception/occupancy/dynamic` and `/ad/perception/occupancy/static` both
+ship `road_gate.enabled: true` by default (`config/occupancy_grid/{dynamic,
+static}.yaml`) — they withhold publication until a timestamp-matched
+`/ad/planning/drivable_mask` (`nav_msgs/OccupancyGrid`, `base_link` frame,
+`0` = drivable, `100` = non-drivable, exact geometry `1040x200 @ 0.1 m`,
+origin `(-4.0, -10.0)`) arrives for that stamp. This demo has never included a
+planner or road-boundary node, so that gate correctly stayed closed and both
+grids (and `/ad/perception/occupancy/combined`, which needs both) stayed
+empty — this was always expected gating behaviour, not an OGM bug.
+
+`enable_drivable_mask:=true` (default `false`; replay or live) starts
+`ad_planner`'s existing, already-production `ad_road_corridor_mask_node`
+standalone (`ad_planner/launch/road_corridor_mask.launch.py`, new this
+change — the node itself is unmodified and is the same one
+`planner.launch.py` already starts as part of the full planner graph). It
+rasterizes the committed, checksum-verified competition route corridor
+(`ad_data/map/route_corridor.json`, guarded against staleness by the SHA-256
+of `ad_data/path/2026_molit_comp_global_path.txt`) into the exact grid
+contract the two OGM nodes already require, triggered by
+`/ad/sensors/lidar/points` or `/ad/perception/objects/predicted` at that
+message's exact stamp via a real `map -> base_link` TF lookup. **No fabricated
+mask**: no route data or no transform at that stamp means no publish for that
+stamp — never a fallback to an all-drivable or all-unknown grid. No planner,
+controller, or `CtrlCmd` publisher is started; this only reads LiDAR/
+prediction timing and TF.
+
+```
+ros2 launch ad_lidar_perception training_free_perception_rviz.launch.py \
+    input_mode:=replay \
+    bag_path:=/absolute/path/to/rosbag_dir \
+    enable_camera:=true \
+    enable_localization:=true \
+    enable_drivable_mask:=true \
+    data_dir:=/absolute/path/to/heven-ad-2026/ad_data
+```
+
+`data_dir` defaults to the `AD_DATA_DIR` environment variable; pass it
+explicitly (or export `AD_DATA_DIR`) if that is unset, since
+`enable_drivable_mask:=true` needs it to locate the committed route/corridor
+files.
+
+**A real launch-time bug was found and fixed while wiring this up** (documented
+in `road_corridor_mask.launch.py`'s own module docstring): passing the
+checked-in `road_corridor_mask.yaml` and a real-value override as two
+separate `--params-file` arguments to the SAME node — the exact pattern
+`cut_in_risk.launch.py` and `planner.launch.py` already use — was found,
+empirically, to non-deterministically fail to apply the override for
+`data_dir` / `route_corridor.expected_global_path_sha256` (reproduced with
+byte-identical params files across repeated runs of the identical command, in
+an otherwise clean single-process environment: `FATAL: set data_dir or
+AD_DATA_DIR` / `expected SHA-256 for 'global_path' is malformed`), a real
+merge race in `rcl_yaml_param_parser` across two files that both declare the
+same keys for one node name under different specificity. The fix — reading
+the checked-in YAML in Python and overlaying the override on top of it
+*before* launch, so the node process receives exactly one parameter source —
+was verified clean across repeated launches. This is launch-wiring-only, the
+node's own C++ parameter-declaration code is unchanged. The same underlying
+two-file pattern is still used by `cut_in_risk.launch.py` and
+`planner.launch.py`; fixing those is out of scope for this change and is
+noted as a follow-up.
+
+**Runtime-validated** (same bag, `enable_localization:=true
+enable_drivable_mask:=true`, replay rate `0.15`): `/ad/planning/drivable_mask`
+published at ~1.0-1.1 Hz with real, non-trivial content — one sampled frame
+had 10,405 of 208,000 cells marked drivable (`0`), the rest non-drivable
+(`100`); the real GPS-derived ego position in this recording happens to fall
+near the real committed competition route corridor for at least part of the
+replay. With the mask flowing, `/ad/perception/occupancy/static` (~1.2-1.3 Hz)
+and `/ad/perception/occupancy/combined` (observed publishing, intermittent)
+both produced real, non-trivial `OccupancyGrid` content — static showed a
+graduated inflation-cost distribution from `0` (free) through intermediate
+values up to `100` (occupied), consistent with real LiDAR-derived obstacles.
+`/ad/perception/occupancy/dynamic` also published (~0.4 Hz) but was mostly
+empty (`0` everywhere) in the sampled frames — a direct, expected consequence
+of the already-documented tracker/prediction exact-stamp TF race on this
+specific recording (see "Live validation status" below), **not** re-tuned or
+worked around here. No crash, no exception, across the full run.
+
 ## RViz displays
 
 `rviz/training_free_perception_camera.rviz` (Fixed Frame `odom`):
@@ -223,6 +306,7 @@ producer against already-recorded localization output.
 - **Dynamic Occupancy** `/ad/perception/occupancy/dynamic` (Map) — enabled
 - **Combined Occupancy** `/ad/perception/occupancy/combined` (Map) — disabled
 - **Static Occupancy** `/ad/perception/occupancy/static` (Map) — disabled
+- **Drivable Mask (debug)** `/ad/planning/drivable_mask` (Map) — disabled, toggle on when `enable_drivable_mask:=true`
 - **Detected Objects** `/ad/visualization/detected_objects` (MarkerArray)
 - **Tracked Objects** `/ad/visualization/tracked_objects` (MarkerArray) — training-free AB3DMOT
 - **Predicted Objects** `/ad/visualization/predicted_objects` (MarkerArray)
@@ -249,6 +333,7 @@ ros2 topic hz /ad/perception/objects/detected
 ros2 topic hz /ad/perception/objects/tracked
 ros2 topic hz /ad/perception/objects/predicted
 ros2 topic hz /ad/perception/occupancy/dynamic
+ros2 topic hz /ad/planning/drivable_mask                 # enable_drivable_mask only
 ros2 topic hz /ad/sensors/camera/front/compressed        # camera only
 ros2 node list | grep -E 'euclidean|ab3dmot|prediction|occupancy|perception_visualizer'
 ```
@@ -267,7 +352,7 @@ There must be **no** `centerpoint` / `kalmannet` node in `ros2 node list`.
 | Camera panel blank | Replay without `enable_camera:=true`; or no camera driver (live); or `compressed_image_transport` not installed. |
 | Camera and LiDAR look out of sync | Different sensor rates + nearest-timestamp display; the demo does not time-align the two — expected, not a fusion. |
 | CenterPoint / KalmanNet started | You passed `detector_backend:=centerpoint` or ran a different launch — this demo never sets them. |
-| Occupancy grid missing | Two independent causes: (1) `/ad/localization/odometry` absent — the OGM nodes need ego pose; or (2) `road_gate.enabled: true` (the checked-in default for both `occupancy_grid/dynamic.yaml` and `.../static.yaml`) — the grids withhold publication until a timestamp-matched `/ad/planning/drivable_mask` arrives, and this demo does not include a planner/road-boundary node that produces one. Case (2) is expected, correct gating, not a bug — see "Live validation status". |
+| Occupancy grid missing | Two independent causes: (1) `/ad/localization/odometry` absent — the OGM nodes need ego pose; or (2) `road_gate.enabled: true` (the checked-in default for both `occupancy_grid/dynamic.yaml` and `.../static.yaml`) — the grids withhold publication until a timestamp-matched `/ad/planning/drivable_mask` arrives. Pass `enable_drivable_mask:=true data_dir:=<abs ad_data>` to start the existing route-corridor mask producer — see "Drivable mask + dynamic/static occupancy grid completion" above. Without that flag this is expected, correct gating, not a bug. |
 
 ## Live validation status
 
@@ -314,13 +399,18 @@ camera_front_optical_frame}` chain resolves. With that TF present:
 **Two limitations, both explained, neither fixed by weakening a safety
 behaviour:**
 
-1. **Dynamic/static/combined occupancy grids stayed empty.** Both
+1. **Dynamic/static/combined occupancy grids stayed empty** in v2. Both
    `occupancy_grid/dynamic.yaml` and `.../static.yaml` ship
    `road_gate.enabled: true`, gating publication on a timestamp-matched
-   `/ad/planning/drivable_mask`. No planner/road-boundary node is part of
-   this opt-in demo graph, so the gate correctly withholds output by design
-   — the same behaviour, and the same explanation, every other repo-local
-   replay has already documented. **Not disabled in this change.**
+   `/ad/planning/drivable_mask`. No planner/road-boundary node was part of
+   the v2 demo graph, so the gate correctly withheld output by design — the
+   same behaviour, and the same explanation, every other repo-local replay
+   had already documented. **Resolved in "Training-Free Dynamic OGM
+   Completion v1"** (see "Drivable mask + dynamic/static occupancy grid
+   completion" above) by reusing `ad_planner`'s existing
+   `ad_road_corridor_mask_node` standalone (`enable_drivable_mask:=true`) —
+   the gate itself was never disabled or weakened, it is now legitimately
+   satisfied.
 2. **Tracking/prediction throughput was lower than detection throughput,
    not zero.** The detection path (4 processing hops) and the localization
    path (3 hops) are independently timed against the same replay clock;
