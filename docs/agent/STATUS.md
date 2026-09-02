@@ -1,5 +1,212 @@
 # STATUS
 
+## Training-Free Full-Chain RViz Runtime v2 — VALIDATED (chain; OGM/throughput caveats)
+
+Training-free LiDAR detection -> tracking -> prediction runtime chain
+validated with replay-derived real ego motion; dynamic OGM visualization
+remains unvalidated because the demo graph had no drivable-mask producer.
+
+Branch `fix/training-free-full-chain-runtime-v2`, from merged PR #35 `3dd189a`
+(`fix(perception): isolate replay visualization (#35)`, verified via
+`gh pr view 35` before any edit). Continues v1's gap: v1's replay bag
+(`morai_cam4_20260813_163222`) has `/tf_static` only, zero `/tf`, and no
+`/ad/localization/odometry`, so AB3DMOT correctly rejected every detection
+for missing target-frame TF and tracked/predicted/OGM rates were zero. This
+task finds and wires a **real** ego-motion source for that same bag —
+**no fabricated TF, no synthetic odometry, no constant-pose hack.**
+
+**Bag inventory.** Searched `~`, `~/projects`, `~/datasets`,
+`/mnt/c/Users/*` (bounded), `/mnt/d` (absent). Two real bags exist:
+`bags/static_20260805_003151/` is **metadata-only** (`ros2 bag play` fails,
+`Could not open ... .mcap`, "read failed" — the underlying MCAP file is not
+on disk, only `metadata.yaml`; unusable, documented not fabricated-around) —
+its metadata does record a prior live-recorded session with real
+`/ad/localization/odometry` (14,483 msgs) and `/tf` (4,652 msgs), which is
+why a converter for this exact deployment already existed and was worth
+reusing. `morai_cam4_20260813_163222/` (the v1 bag, unchanged, re-verified
+via `ros2 bag info`: 165,433 msgs, 360.170 s) has **no**
+`/ad/localization/odometry` but **does** have `/ad/sensors/gps/fix`
+(NavSatFix, 6,770), `/ad/sensors/imu/data` (Imu, 14,280), and
+`/ad/vehicle/status` (`ad_morai_interfaces/msg/EgoVehicleStatus`, 14,141) —
+real MORAI ego/GNSS/IMU state, `/tf` still 0.
+
+**Existing converter audit (Phase 4, per this task's own explicit
+instruction to look before inventing).** `ad_localization` (README:
+"GNSS, IMU, Competition Vehicle Status를 공통 형식으로 바꾸고 ... canonical
+odometry와 TF로 승격") is a real, already-committed production package with
+a default `gnss_imu` backend that subscribes exactly
+`/ad/sensors/gps/fix` + `/ad/sensors/imu/data` + `/ad/vehicle/status`
+(source-confirmed defaults in `localization_node.cpp`,
+`localization.launch.py`) and its `localization_manager_node` broadcasts a
+real dynamic `odom -> base_link` TF plus a static `map -> odom` (identity,
+by the node's own convention) via `tf2_ros::TransformBroadcaster` /
+`StaticTransformBroadcaster`. **Reused verbatim — zero lines of estimation/
+TF/tracking algorithm written.** `ad_localization` was not previously built
+in this workspace; built it into `heven_ros_ws` this session
+(`colcon build --packages-select ad_localization --cmake-args
+-DBUILD_TESTING=OFF`), which needed three environment-only workarounds, no
+repo/algorithm change: (1) `fast_lio` / `kalman_filter_localization`
+(exec_depend, needed only by the unused hybrid/ESKF backends) satisfied via
+a local stub `AMENT_PREFIX_PATH` prefix (`~/stub_ament_overlay`, empty
+`ament_index` markers + `local_setup.bash` — colcon's own documented
+"used from the environment" fallback, not a source patch); (2)
+`kalman_filter_localization_core` (test-only `find_package`) skipped via
+`-DBUILD_TESTING=OFF`; (3) `ad_localization/maps/` (gitignore-excepted
+`cp14_to_cp15.pcd`, absent from this checkout, needed only by the unused
+FastLIO/hybrid backends) created empty locally so the symlink-install step
+has a directory to link — not committed, not fabricated map data. `xacro`
+(missing system-wide, same v1 finding) staged via `apt-get download
+ros-humble-xacro` + `dpkg-deb -x` into `~/ros-local-debs/extracted` (no
+root). `patchworkpp` was already built in `~/projects/patchwork_ws` from a
+prior session and reused unmodified.
+
+**Launch change (the only repo diff this session).**
+`ad_lidar_perception/launch/lidar_bag_replay.launch.py`: new opt-in
+`enable_localization` arg (default `false`) additionally replays
+`/ad/sensors/gps/fix` + `/ad/vehicle/status` from the bag and includes
+`ad_localization/launch/localization.launch.py` unmodified. A real bug was
+found and fixed while wiring this: `IncludeLaunchDescription(...)` nested
+inside the file's existing `scoped=True` outer `GroupAction` raised
+`SubstitutionFailure: launch configuration 'autostart' does not exist` —
+`localization.launch.py`'s `RegisterEventHandler`/`EmitEvent` lifecycle
+autostart condition is evaluated **asynchronously** when the process-start
+event fires, by which time a *scoped* group's LaunchConfiguration values
+are no longer resolvable; reproduced and isolated with a 6-line standalone
+launch file before fixing. Fix: the localization include is its own
+**separate, `scoped=False`** `GroupAction` (still carrying
+`SetParameter(use_sim_time=True)`), appended after the already-scoped
+perception group so nothing leaks backward. `enable_localization` threaded
+through `training_free_perception_rviz.launch.py` (replay path only, `false`
+default, zero effect on live mode or any other existing behaviour).
+`ad_localization` was not added to `ad_lidar_perception/package.xml`
+(optional runtime include only, matching the existing precedent for
+`ad_camera_perception`). Regression: `test_lidar_bag_replay_launch.py`
+(context helper + 2 exact-argument-set assertions updated for the new arg,
+same pattern as the prior session's `tracker_backend`/`dynamic_object_risk`
+fix) and `test_training_free_perception_rviz_launch.py` (context helper +
+1 exact-argument-set assertion) — **124/124** pass across both files plus
+`test_perception_visualization_launch.py` + `test_lidar_perception_launch.py`
+unchanged.
+
+**Live result.** `ros2 launch ad_lidar_perception
+training_free_perception_rviz.launch.py input_mode:=replay
+bag_path:=<morai_cam4> rate:=0.5 enable_camera:=true
+enable_localization:=true start_rviz:=true` — 17/17 processes start, 0
+crashes, 0 non-`RTPS_TRANSPORT_SHM`-noise errors. `/ad_localization`
+lifecycle node reaches `active [3]`. `tf2_echo odom base_link` /
+`odom lidar_link` / `odom camera_front_optical_frame` all resolve at
+**multiple distinct real timestamps** with a genuinely moving pose (e.g.
+translation (-130.0,-318.4,29.3) -> (-130.2,-312.3,27.9) across ~0.5 s) —
+this is the first session in this project where the full
+`odom -> base_link -> rear_axle_link -> {lidar_link, camera_front_link ->
+camera_front_optical_frame}` chain is dynamically populated from real data
+for this bag. `/ad/localization/odometry` publishes at ~9.4-9.6 Hz
+(rate 0.5); its upstream `/ad/localization/backends/gnss_imu/odometry` is
+GNSS-arrival-rate-limited (measured ~2.8 Hz at rate 0.15, matching
+6,770/360 s x 0.15).
+
+**Tracking/prediction: real, not zero, but throughput-limited by a genuine
+TF race.** AB3DMOT logs `rejected DetectedObjects: TF unavailable: ...
+extrapolation into the future` for a majority of non-empty detection
+frames, at all three tested rates (0.5 / 0.15 / 0.05) — the LiDAR-detection
+path (self-crop -> ground-seg -> finite-filter -> cluster, 4 hops) reaches
+a given recorded timestamp in real wall-clock time slightly ahead of the
+localization path (adapter -> gnss_imu_localizer -> manager, 3 hops)
+publishing TF for that same timestamp; gaps in the rejection log are
+sub-millisecond to ~50 ms. **Root-caused, not papered over:** slowing
+replay 10x (0.5 -> 0.05) did not change the accept ratio, ruling out
+real-time-throughput starvation and confirming this is a fixed relative
+processing-latency skew between the two chains, reproducible regardless of
+rate. **Not fixed with an unsafe patch**: `ab3dmot_tracker_node.py`'s
+`lookup_transform(..., timeout=...)` call runs inside a single-threaded
+`rclpy.spin(node)` callback; adding a blocking timeout there would starve
+the same executor's own `/tf` subscription callback (a documented rclpy
+deadlock pattern), so no code change was made to the tracker — correctly
+in scope as "do not force a fix past a genuine architecture question."
+**Despite the majority-reject rate, real tracking is proven, not
+fabricated**: a 90 s window (rate 0.5, RViz off) captured 35
+`/ad/perception/objects/tracked` messages, 12 non-empty, spanning **20
+distinct track UUIDs**, with finite odom-frame positions/velocities/
+covariances (e.g. one track's KF-fused velocity (0.639,-0.559,1.616) m/s,
+another's steady-state covariance ~0.24 after multiple real updates vs. a
+freshly-born track's birth-prior 10/10000) and 0 NaN/Inf across the sample.
+`/ad/perception/objects/predicted` published concurrently at ~0.79-1.2 Hz.
+Measured rates (rate 0.5): raw LiDAR ~4.5 Hz, cropped ~4.5-4.7 Hz, detected
+~3.7-4.4 Hz, camera ~9-10 Hz, tracked ~0.6-1.0 Hz (partial-accept), predicted
+~0.79-1.2 Hz.
+
+**Dynamic/static/combined occupancy grids: correctly empty, not a
+failure.** `ad_dynamic_occupancy_grid` / `ad_lidar_perception` (static OGM)
+both ship `road_gate.enabled: true` by default, gating publication on a
+timestamp-matched `/ad/planning/drivable_mask` (config-confirmed in
+`occupancy_grid/{dynamic,static}.yaml`). No planner/road-boundary node is
+part of this opt-in demo graph, so that mask never arrives and both grids
+correctly withhold output by design — the same gate, and the same
+explanation, prior sessions already documented for every other repo-local
+replay. Combined OGM has no independent input and is empty as a direct
+consequence.
+
+**Camera/LiDAR timing:** freshly recomputed this session (not assumed) via
+a small `rosbag2_py` script reading only header stamps from the unchanged
+mcap — median **19.995 ms**, p95 **39.139 ms**, max **49.693 ms** over all
+2,982 LiDAR frames matched to nearest camera frame — reproduces v1's
+offline numbers (19.989 / 39.139 / 49.693 ms) to within rounding, confirming
+the bag file itself is byte-identical to v1's.
+
+**RViz:** opened successfully with a real OpenGL 4.2 context in this WSLg
+session (unlike every prior session in this project) and subscribed the
+expected `MarkerArray`/`Image`/`Map` topics; no screenshot tool is
+available here either (`xwd`/`scrot`/`gnome-screenshot`/`PIL` all absent) —
+per this task's own instruction not to spend excessive time on that, none
+was installed. No node crash, no TF exception, no stray-process
+contamination in the final verified run (daemon restarted + PID-pattern
+kill between attempts after an early run showed 3 launch generations
+overlapping from an incomplete cleanup pattern — caught and fixed
+mid-session).
+
+**Not done / explicit limitation carried forward:** the TF-race-driven
+partial accept rate means this validation demonstrates the full chain is
+mechanically correct end-to-end with real ego motion, not that it sustains
+near-100% throughput on this exact recording — that would need either a
+different bag whose LiDAR/GNSS/IMU relative record-time skew happens to
+favor the localization path, or a real architectural change (e.g. a
+bounded look-ahead buffer in the tracker) that is out of scope for an
+input-contract validation task.
+
+**Tests:** `test_lidar_bag_replay_launch.py` gained two new regression
+tests locking the scoping fix -
+`test_enable_localization_true_replays_raw_ego_topics_and_starts_localization_unscoped`
+(asserts the localization `GroupAction` is `scoped=False` and separate from
+the perception group, and that the raw ego topics are appended to the
+replay `--topics` list) and
+`test_enable_localization_false_starts_no_localization_group` (asserts the
+default path is unaffected). Verified these are real regression coverage,
+not tautological: temporarily reverted the launch file to the original
+buggy nested-`scoped=True` form and confirmed the new test fails
+(`assert 1 == 2`), then restored the fix and confirmed **126/126** pass
+across `test_lidar_bag_replay_launch.py` (44) +
+`test_training_free_perception_rviz_launch.py` (10) +
+`test_perception_visualization_launch.py` +
+`test_lidar_perception_launch.py`.
+
+**Files:** `ad_lidar_perception/launch/lidar_bag_replay.launch.py`,
+`ad_lidar_perception/launch/training_free_perception_rviz.launch.py`,
+`ad_lidar_perception/test/test_lidar_bag_replay_launch.py`,
+`ad_lidar_perception/test/test_training_free_perception_rviz_launch.py`,
+`docs/perception/training_free_rviz_demo_v1.md` (new "Replaying a bag
+without recorded localization" + "Live validation status" sections,
+replacing the stale v1 "Not live-tested here" section), this file. No
+detector/association/KF/prediction/occupancy/planner/CenterPoint/KalmanNet
+algorithm file changed, no `ad_interfaces` change, no production launch
+default changed.
+
+**Recommended next task:** MORAI Dataset Collection Pilot v1 — capture the
+first real canonical multi-scenario dataset (with the simulator/gRPC/ROS
+bridge active, so recorded GPS/IMU/status/LiDAR/camera share one
+consistent relative timing, unlike this repurposed bag) and export the same
+runs for CenterPoint and KalmanNet; this session's `enable_localization`
+wiring is directly reusable for validating that future capture in RViz.
+
 ## Training-Free RViz Runtime Validation v1 — PARTIAL (real replay; TF-limited)
 
 Starting `main` was merged PR #34 commit `9217603`.  A real 360.170 s MCAP

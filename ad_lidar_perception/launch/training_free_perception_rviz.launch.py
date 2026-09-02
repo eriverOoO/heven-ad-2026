@@ -89,6 +89,9 @@ def _launch_setup(context):
         "enable_dynamic_object_risk",
         _perform(context, "enable_dynamic_object_risk"),
     )
+    enable_localization = _parse_bool(
+        "enable_localization", _perform(context, "enable_localization")
+    )
     start_rviz = _parse_bool("start_rviz", _perform(context, "start_rviz"))
 
     composition_config = str(
@@ -130,6 +133,9 @@ def _launch_setup(context):
                     "dynamic_object_risk": risk_flag,
                     "include_front_camera": (
                         "true" if enable_camera else "false"
+                    ),
+                    "enable_localization": (
+                        "true" if enable_localization else "false"
                     ),
                 }.items(),
             )
@@ -259,6 +265,16 @@ def generate_launch_description():
                 default_value="true",
                 description=(
                     "Start the observational Dynamic Object Risk node"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_localization",
+                default_value="false",
+                description=(
+                    "Replay only: also replay /ad/sensors/gps/fix + "
+                    "/ad/vehicle/status and start ad_localization's "
+                    "gnss_imu backend for a bag that has raw ego sensors "
+                    "but no recorded /ad/localization/odometry"
                 ),
             ),
             DeclareLaunchArgument(
