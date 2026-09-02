@@ -42,6 +42,9 @@ def launch_context(**overrides):
         "data_dir": "",
         "start_rviz": "true",
         "rviz_config": str(RVIZ),
+        "ab3dmot_defer_until_tf_ready": "true",
+        "ab3dmot_max_tf_wait_ms": "500",
+        "ab3dmot_max_pending_detections": "8",
     }
     values.update({name: str(value) for name, value in overrides.items()})
     context = LaunchContext()
@@ -90,6 +93,9 @@ def test_declares_opt_in_defaults(monkeypatch):
         "bag_path",
         "rate",
         "loop",
+        "ab3dmot_defer_until_tf_ready",
+        "ab3dmot_max_tf_wait_ms",
+        "ab3dmot_max_pending_detections",
         "start_paused",
         "enable_camera",
         "enable_camera_perception",

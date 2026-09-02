@@ -83,6 +83,9 @@ def launch_context(bag, **overrides):
             PACKAGE / "config" / "replay_qos_overrides.yaml"
         ),
         "crop_clearance_m": "0.20",
+        "ab3dmot_defer_until_tf_ready": "true",
+        "ab3dmot_max_tf_wait_ms": "500",
+        "ab3dmot_max_pending_detections": "8",
     }
     values.update({name: str(value) for name, value in overrides.items()})
     context = LaunchContext()
@@ -149,6 +152,9 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "ground_config",
         "qos_overrides",
         "crop_clearance_m",
+        "ab3dmot_defer_until_tf_ready",
+        "ab3dmot_max_tf_wait_ms",
+        "ab3dmot_max_pending_detections",
     }
     assert arguments["bag_path"] is None
     context = LaunchContext()
@@ -188,6 +194,9 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
             PACKAGE / "config" / "replay_qos_overrides.yaml"
         ),
         "crop_clearance_m": "0.20",
+        "ab3dmot_defer_until_tf_ready": "true",
+        "ab3dmot_max_tf_wait_ms": "500",
+        "ab3dmot_max_pending_detections": "8",
     }
 
 
@@ -395,6 +404,9 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
         "start_visualization": "false",
         "start_rviz": "false",
         "start_ground_segmentation": "true",
+        "ab3dmot_defer_until_tf_ready": "true",
+        "ab3dmot_max_tf_wait_ms": "500",
+        "ab3dmot_max_pending_detections": "8",
     }
 
     timer = scoped[3]

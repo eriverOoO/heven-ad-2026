@@ -140,6 +140,15 @@ def _launch_setup(context):
                     "enable_localization": (
                         "true" if enable_localization else "false"
                     ),
+                    "ab3dmot_defer_until_tf_ready": _perform(
+                        context, "ab3dmot_defer_until_tf_ready"
+                    ),
+                    "ab3dmot_max_tf_wait_ms": _perform(
+                        context, "ab3dmot_max_tf_wait_ms"
+                    ),
+                    "ab3dmot_max_pending_detections": _perform(
+                        context, "ab3dmot_max_pending_detections"
+                    ),
                 }.items(),
             )
         )
@@ -163,6 +172,15 @@ def _launch_setup(context):
                     "start_visualization": "false",
                     "start_rviz": "false",
                     "use_sim_time": "false",
+                    "ab3dmot_defer_until_tf_ready": _perform(
+                        context, "ab3dmot_defer_until_tf_ready"
+                    ),
+                    "ab3dmot_max_tf_wait_ms": _perform(
+                        context, "ab3dmot_max_tf_wait_ms"
+                    ),
+                    "ab3dmot_max_pending_detections": _perform(
+                        context, "ab3dmot_max_pending_detections"
+                    ),
                 }.items(),
             )
         )
@@ -307,6 +325,23 @@ def generate_launch_description():
                     "gnss_imu backend for a bag that has raw ego sensors "
                     "but no recorded /ad/localization/odometry"
                 ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_defer_until_tf_ready",
+                default_value="true",
+                description=(
+                    "AB3DMOT Exact-Stamp TF Deferred Processing v1 pass-"
+                    "through -- see ab3dmot_tracker.launch.py's "
+                    "'defer_until_tf_ready' arg. 'false' reproduces the "
+                    "pre-fix unconditional-drop-on-any-TF-failure behavior "
+                    "exactly (used for BEFORE/AFTER A/B replay validation)."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_tf_wait_ms", default_value="500"
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_max_pending_detections", default_value="8"
             ),
             DeclareLaunchArgument(
                 "enable_drivable_mask",

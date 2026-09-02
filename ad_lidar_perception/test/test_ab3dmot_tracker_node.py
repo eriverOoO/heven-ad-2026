@@ -66,6 +66,14 @@ def build_enabled_node(**parameters):
     )
     node.publisher = RecordingPublisher()
     node._tf_buffer.lookup_transform = lambda *args, **kwargs: identity_transform()
+    # Deferred-processing (T-FIX: AB3DMOT Exact-Stamp TF Deferred
+    # Processing v1) is on by default and additionally checks
+    # `can_transform` (non-blocking) before ever calling `lookup_transform`.
+    # These pre-existing tests exercise the surrounding tracker logic, not
+    # tf2's own buffer state, so `can_transform` is stubbed "always ready"
+    # consistently with the `lookup_transform` stub above -- every message
+    # in this file is still processed synchronously/immediately.
+    node._tf_buffer.can_transform = lambda *args, **kwargs: (True, "")
     return node
 
 
@@ -274,6 +282,213 @@ class Ab3dmotTrackerNodeTest(unittest.TestCase):
         # A matched detection: its covariance is small and untouched.
         self.assertLess(self._pos_var(healthy), 10.0)
         node.destroy_node()
+
+
+class _ToggleCanTransform:
+    """Stateful `Buffer.can_transform` fake: stamps in `ready` succeed;
+    every other stamp reports "extrapolation into the future" until added
+    to `ready` (mirroring the real tf2 message text this repo's code
+    classifies on)."""
+
+    def __init__(self):
+        self.ready: set[tuple[int, int]] = set()
+        self.calls: list[tuple[int, int]] = []
+
+    def __call__(self, target_frame, source_frame, stamp, return_debug_tuple=False):
+        key = (stamp.sec, stamp.nanosec)
+        self.calls.append(key)
+        if key in self.ready:
+            return True, ""
+        return False, "Lookup would require extrapolation into the future."
+
+
+class DeferredTfProcessingTest(unittest.TestCase):
+    """T-FIX: AB3DMOT Exact-Stamp TF Deferred Processing v1 -- node-level
+    integration (the pure queue mechanics are covered exhaustively by
+    test_ab3dmot_tf_deferred_queue.py; these lock the node wiring: which
+    stamp reaches the tracker/publisher, in what order, and when)."""
+
+    @classmethod
+    def setUpClass(cls):
+        rclpy.init()
+
+    @classmethod
+    def tearDownClass(cls):
+        rclpy.shutdown()
+
+    def _build(self, **parameters):
+        node = build_enabled_node(**parameters)
+        toggle = _ToggleCanTransform()
+        node._tf_buffer.can_transform = toggle
+        return node, toggle
+
+    # Phase 19: immediate TF -> processed once immediately, pending == 0.
+    def test_immediate_tf_processes_synchronously_with_empty_queue(self):
+        node, toggle = self._build()
+        toggle.ready.add((100, 0))
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(len(node.publisher.published), 1)
+        self.assertEqual(len(node._deferred_queue), 0)
+        self.assertEqual(node._deferred_queue.stats.processed_immediately, 1)
+        node.destroy_node()
+
+    # Phase 20: delayed TF -> not processed/dropped while pending; released
+    # exactly once, at its ORIGINAL stamp, once TF becomes available.
+    def test_delayed_tf_is_held_then_released_with_original_stamp(self):
+        node, toggle = self._build()
+        # D1's transform is not ready yet.
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(node.publisher.published, [])
+        self.assertEqual(len(node._deferred_queue), 1)
+
+        # A later detection arrives while D1 is still not ready: it must be
+        # enqueued behind D1, not processed ahead of it.
+        node._on_detected_objects(make_detected_objects(100, int(1e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(node.publisher.published, [])
+        self.assertEqual(len(node._deferred_queue), 2)
+
+        # D1's transform becomes available; the next callback (any new
+        # detection, here D3, whose own TF is also already ready) triggers
+        # a drain that releases D1 and D2 in order, then processes D3
+        # itself.
+        toggle.ready.add((100, 0))
+        toggle.ready.add((100, int(1e8)))
+        toggle.ready.add((100, int(2e8)))
+        node._on_detected_objects(make_detected_objects(100, int(2e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+
+        self.assertEqual(len(node.publisher.published), 3)
+        stamps = [
+            (m.header.stamp.sec, m.header.stamp.nanosec) for m in node.publisher.published
+        ]
+        self.assertEqual(stamps, [(100, 0), (100, int(1e8)), (100, int(2e8))])
+        self.assertEqual(len(node._deferred_queue), 0)
+        self.assertEqual(node._deferred_queue.stats.processed_deferred, 2)
+        node.destroy_node()
+
+    # Phase 21 (node level): a ready later detection must never overtake an
+    # earlier still-pending one.
+    def test_later_ready_detection_waits_behind_earlier_pending_one(self):
+        node, toggle = self._build()
+        toggle.ready.add((100, int(1e8)))  # D2's own TF is ready immediately.
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        node._on_detected_objects(
+            make_detected_objects(100, int(1e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)])
+        )
+        # D2's own TF was ready, but D1 was still pending ahead of it in the
+        # queue -- neither has published yet.
+        self.assertEqual(node.publisher.published, [])
+        self.assertEqual(len(node._deferred_queue), 2)
+        node.destroy_node()
+
+    # Phase 22: timeout -> dropped once, no tracker update.
+    def test_never_ready_detection_is_dropped_after_max_wait(self):
+        node, toggle = self._build(max_tf_wait_ms=100)
+        clock = {"t": 0.0}
+        node._deferred_queue._monotonic = lambda: clock["t"]
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(len(node._deferred_queue), 1)
+
+        clock["t"] = 0.2  # 200ms > 100ms max_tf_wait_ms
+        # A subsequent detection's callback triggers the drain that expires D1.
+        node._on_detected_objects(make_detected_objects(100, int(3e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        # D3 itself is still not ready (never added to `toggle.ready`), so
+        # only D1's timeout-drop happened; nothing published yet.
+        self.assertEqual(node.publisher.published, [])
+        self.assertEqual(node._deferred_queue.stats.dropped_tf_timeout, 1)
+        self.assertEqual(len(node._deferred_queue), 1)  # D3 itself now pending
+        node.destroy_node()
+
+    # Phase 23: a permanent (non-future) TF failure drops immediately,
+    # never sits in the queue.
+    def test_permanent_tf_failure_drops_without_queueing(self):
+        node = build_enabled_node()
+        node._tf_buffer.can_transform = lambda *a, **k: (
+            False,
+            'Invalid frame ID "lidar_link" passed to canTransform argument source_frame - frame does not exist',
+        )
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(node.publisher.published, [])
+        self.assertEqual(len(node._deferred_queue), 0)
+        self.assertEqual(node._deferred_queue.stats.dropped_permanent_tf_failure, 1)
+        node.destroy_node()
+
+    # Phase 24: bounded queue, deterministic oldest-drop overflow.
+    def test_queue_overflow_drops_oldest_deterministically(self):
+        node, toggle = self._build(max_pending_detections=2)
+        for i in range(4):
+            node._on_detected_objects(
+                make_detected_objects(100, int(i * 1e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)])
+            )
+        self.assertEqual(len(node._deferred_queue), 2)
+        self.assertEqual(node._deferred_queue.stats.dropped_queue_overflow, 2)
+        node.destroy_node()
+
+    # Phase 25: no duplicate tracker update for one admitted detection.
+    def test_deferred_detection_is_processed_at_most_once(self):
+        node, toggle = self._build()
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        toggle.ready.add((100, 0))
+        # Two callbacks in a row after readiness: the second must find
+        # nothing left to release.
+        node._on_detected_objects(make_detected_objects(100, int(1e8), [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        published_after_first_drain = len(node.publisher.published)
+        node._drain_deferred_queue()
+        self.assertEqual(len(node.publisher.published), published_after_first_drain)
+        self.assertEqual(node._deferred_queue.stats.processed_deferred, 1)
+        node.destroy_node()
+
+    # Phase 27: out-of-order input relative to an in-flight deferral is
+    # still rejected by the pre-existing rollback policy -- no new
+    # mechanism, and it must not silently jump the queue.
+    def test_rollback_while_a_detection_is_deferred_is_still_rejected(self):
+        node, toggle = self._build()
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(len(node._deferred_queue), 1)
+        node._on_detected_objects(make_detected_objects(50, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        # Rejected outright: still only the one (still-pending) entry in
+        # the queue, no rollback frame admitted anywhere.
+        self.assertEqual(len(node._deferred_queue), 1)
+        self.assertEqual(node.publisher.published, [])
+        node.destroy_node()
+
+    def test_duplicate_of_a_still_pending_stamp_is_rejected(self):
+        node, toggle = self._build()
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(len(node._deferred_queue), 1)
+        # Same exact stamp arrives again while the first is still pending.
+        node._on_detected_objects(make_detected_objects(100, 0, [(1, 1, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(len(node._deferred_queue), 1)  # not admitted twice
+        node.destroy_node()
+
+    def test_defer_disabled_matches_original_immediate_drop_behavior(self):
+        node = build_enabled_node(defer_until_tf_ready=False)
+        self.assertIsNone(node._deferred_queue)
+
+        def raise_lookup(*args, **kwargs):
+            raise LookupException("no transform available")
+
+        node._tf_buffer.lookup_transform = raise_lookup
+        node._on_detected_objects(make_detected_objects(100, 0, [(0, 0, 0, 0, 4, 2, 1.5, 1, 0.9)]))
+        self.assertEqual(node.publisher.published, [])
+        node.destroy_node()
+
+    def test_max_tf_wait_ms_must_be_positive(self):
+        with self.assertRaises(ValueError):
+            Ab3dmotTrackerNode(
+                parameter_overrides=[
+                    Parameter("enabled", Parameter.Type.BOOL, True),
+                    Parameter("max_tf_wait_ms", Parameter.Type.INTEGER, 0),
+                ]
+            )
+
+    def test_max_pending_detections_must_be_positive(self):
+        with self.assertRaises(ValueError):
+            Ab3dmotTrackerNode(
+                parameter_overrides=[
+                    Parameter("enabled", Parameter.Type.BOOL, True),
+                    Parameter("max_pending_detections", Parameter.Type.INTEGER, 0),
+                ]
+            )
 
 
 if __name__ == "__main__":

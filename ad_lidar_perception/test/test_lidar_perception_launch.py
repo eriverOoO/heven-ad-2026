@@ -121,6 +121,9 @@ def launch_context(config, **overrides):
         "centerpoint_enabled": "true",
         "centerpoint_mock_mode": "false",
         "openpcdet_root": "",
+        "ab3dmot_defer_until_tf_ready": "true",
+        "ab3dmot_max_tf_wait_ms": "500",
+        "ab3dmot_max_pending_detections": "8",
     }
     values.update(overrides)
     context = LaunchContext()
@@ -504,6 +507,9 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "centerpoint_enabled",
         "centerpoint_mock_mode",
         "openpcdet_root",
+        "ab3dmot_defer_until_tf_ready",
+        "ab3dmot_max_tf_wait_ms",
+        "ab3dmot_max_pending_detections",
     }
     default_context = LaunchContext()
     assert perform_substitutions(
@@ -649,6 +655,9 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
         "state_estimator": "linear_kf",
         "yaw_measurement_mode": "unobserved",
         "velocity_audit_enabled": "true",
+        "defer_until_tf_ready": "true",
+        "max_tf_wait_ms": "500",
+        "max_pending_detections": "8",
     }
     assert arguments["config_path"].endswith(
         "config/tracking/competition_mot_baseline_v1.yaml"

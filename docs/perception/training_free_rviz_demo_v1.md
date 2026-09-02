@@ -421,11 +421,21 @@ behaviour:**
    Slowing the replay rate 10x (0.5 -> 0.05) did not change the accept
    ratio, ruling out simple throughput starvation — this is a fixed
    relative processing-latency skew between the two chains on this
-   recording. **Not fixed** with an unsafe blocking TF timeout (the
-   tracker's `rclpy.spin(node)` is single-threaded; blocking inside the
-   detection callback while waiting for a `/tf` message would starve the
-   same executor's own TF subscription) or with any relaxed/interpolated
-   extrapolation.
+   recording. **Resolved (materially, not perfectly) in "AB3DMOT
+   Exact-Stamp TF Deferred Processing v1"**
+   (`docs/perception/ab3dmot_tf_deferred_processing_v1.md`): a detection
+   whose exact-stamp transform is only *not yet* available (an
+   `ExtrapolationException` "into the future", i.e. the sample that would
+   let tf2 interpolate at the detection's own stamp simply hasn't arrived
+   yet) is now held in a small bounded FIFO queue and processed — still at
+   its original stamp — once tf2 can supply the exact transform, instead of
+   being discarded immediately. **Not fixed** with an unsafe blocking TF
+   timeout (the tracker's `rclpy.spin(node)` is single-threaded; blocking
+   inside the detection callback while waiting for a `/tf` message would
+   starve the same executor's own TF subscription), a relaxed/interpolated
+   extrapolation, or `Time()`/latest-TF fallback — every one of those was
+   ruled out by design; see the linked doc for the exact classification and
+   bounds used instead.
 
 Full detail, exact rates, and the launch-scoping bug fixed while wiring
 `enable_localization` are in `docs/agent/STATUS.md`

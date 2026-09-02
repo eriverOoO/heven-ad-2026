@@ -1,5 +1,172 @@
 # STATUS
 
+## AB3DMOT Exact-Stamp TF Deferred Processing v1 — VALIDATED
+
+Branch `fix/ab3dmot-tf-deferred-processing-v1`, from merged PR #38 `d5453a8`
+(`feat(data): add real sensor bag capture workflow (#38)`, verified via
+`gh pr view 38` before any edit). Fixes a real replay-scheduling race in the
+experimental, opt-in AB3DMOT ROS tracker (`ad_ab3dmot_tracker`,
+`tracker_backend:=ab3dmot`) that was silently discarding detection frames
+whose exact-stamp `odom <- lidar_link` transform had not arrived *yet*, even
+though it would become available a short time later. **No Hungarian/
+association, Linear KF, AB3DMOT state model, lifecycle threshold, ground
+segmentation, Euclidean detector, prediction math, planner, CenterPoint, or
+KalmanNet code changed.** Autoware remains the default production tracker,
+untouched.
+
+**Root cause (source-audited, then reproduced live before any code
+change).** `ab3dmot_tracker_node.py::_on_detected_objects` requests
+`self._tf_buffer.lookup_transform(target_frame, msg.header.frame_id,
+msg.header.stamp)` at the detection's own **exact** source stamp, never
+`Time()`/latest. Detection (self-crop -> ground-seg -> finite-filter ->
+cluster, 4 hops) and localization (adapter -> `gnss_imu_localizer` ->
+manager, 3 hops) are independently-scheduled chains racing against the same
+replay clock; at the instant a detection callback runs, tf2 frequently has
+only the localization sample *before* that stamp, and the sample *after* it
+(needed for interpolation) has not arrived yet. tf2 correctly raises
+`ExtrapolationException` ("... extrapolation into the future ...") --
+refusing to extrapolate is safety-correct -- but the pre-existing code
+treated that exactly like every other TF failure: log a warning and drop the
+frame **permanently**, even though the missing sample typically arrives
+within tens of milliseconds. This was the same throughput gap already
+documented, unresolved, in "Training-Free Full-Chain RViz Runtime v2"'s own
+STATUS entry (detection ~4.2-4.5 Hz vs. tracked ~0.6-1.0 Hz, unaffected by a
+10x replay slowdown).
+
+**Fix: hold, don't extrapolate.** New pure module
+`ab3dmot_tf_deferred_queue.py` (`DeferredDetectionQueue`, no
+`rclpy`/`tf2_ros` import, unit-testable with plain fakes, same injection
+pattern as `ab3dmot_ros.py`), wired into `ab3dmot_tracker_node.py`. A
+detection whose `can_transform(..., return_debug_tuple=True)` failure
+classifies as `"extrapolation into the future"` specifically (measured
+directly against a real `tf2_ros.Buffer` on this repo's ROS Humble install
+to get the exact three distinguishing message strings -- future/transient
+vs. past-evicted/unknown-frame/other-permanent) is held in a small bounded
+FIFO instead of dropped, and released -- still at its **original** stamp --
+once tf2 can supply the exact transform. Every other failure (unknown
+frame, `"extrapolation into the past"`, disconnected tree) still fails
+fast, unchanged. The queue never calls `lookup_transform` itself and never
+returns a transform -- it only classifies non-blocking `can_transform`
+availability; the node performs the actual (unchanged) `lookup_transform`
+call once "ready", so tf2's own interpolation reconstructs the pose *at*
+the original stamp using the real before/after samples -- no future
+transform's pose is ever consumed directly. FIFO/order-preserving (a later
+detection whose own transform is already ready may never overtake an
+earlier one still pending); `_last_admitted_stamp_ns` (the duplicate/
+rollback reference `classify_timestamp` compares against) now advances at
+**admission** time, not final-processing time, so a duplicate of a
+still-pending stamp cannot be silently admitted twice. Exactly-once release
+(`offer()`/`drain()` never re-release an entry); both the immediate and
+deferred paths converge on the single existing `_process_detection()`
+implementation (no copy/paste tracker-update branch). Bounded by
+`max_pending_detections` (default 8; oldest unresolved entry dropped
+deterministically on overflow) and `max_tf_wait_ms` (default 500; a
+detection stuck pending beyond this wall/steady-clock duration drops as
+`tf_timeout` -- and a subsequent detection's own callback discovers and
+clears an already-expired backlog entry the first time it runs, so a long
+localization outage never later floods the tracker with a burst of stale
+frames on recovery). Non-blocking: no `sleep`, no blocking
+`waitForTransform`; `_drain_deferred_queue()` runs at the top of every
+detection callback (event-driven -- this pipeline's detections arrive
+continuously even during a slow replay, so no periodic ROS-time timer is
+used, which also sidesteps a paused-`/clock` no-fire risk). Source
+timestamp is never modified: a deferred detection's published
+`header.stamp` and the timestamp driven into `AB3DMOTTracker.step()` are
+identical to the immediate-processing case.
+
+**`defer_until_tf_ready` defaults to `true`** (opt-out reproduces the
+pre-fix byte-for-byte drop-on-any-TF-failure behaviour). Justified because
+this only ever widens the set of frames the strictly-experimental tracker
+accepts under *identical* geometry (same `lookup_transform` call, same
+stamp), *identical* timestamps, and *equal-or-stronger* safety (no
+extrapolation is ever introduced; every non-transient failure still fails
+exactly as fast as before) -- with both wait and memory explicitly bounded.
+
+**Live A/B replay validation** (`morai_cam4_20260813_163222`,
+`enable_localization:=true` since this bag has raw GPS/IMU/vehicle-status
+but no recorded odometry/TF, `rate:=0.5`, `loop:=false`, 185 s wall-clock /
+~92.5 s source-time window, only `ab3dmot_defer_until_tf_ready` differs
+between arms, same build both times, exact install-path-pattern process
+cleanup + `ros2 daemon` restart before each run):
+
+| metric | BEFORE (`:=false`, byte-identical pre-fix) | AFTER (`:=true`, default) |
+| --- | --- | --- |
+| detected (total/non-empty) | 786 / 756 | 786 / 756 (unchanged -- detector unaffected) |
+| tracked (total/non-empty) | 107 / 82 | 785 / 762 |
+| predicted (total/non-empty) | 107 / 82 | 785 / 762 |
+| tracked throughput | 0.578 Hz | 4.243 Hz |
+| **acceptance ratio (tracked/detected)** | **13.6%** | **99.9%** |
+| `TF unavailable` rejections logged | 730 | 0 |
+| deferred-queue timeout/permanent/overflow drops | n/a | 0 / 0 / 0 (`AB3DMOT_RUNTIME_SUMMARY`, frames=720) |
+| processed immediately vs. deferred | n/a | 110 / 610 (84.7% of frames needed deferral -- a frequent race on this recording, not an edge case) |
+| max deferred-queue depth observed | n/a | 2 (of a configured bound of 8) |
+| errors/exceptions/crashes | 0 | 0 |
+
+Measured TF-availability lag (from the BEFORE run's own
+`ExtrapolationException` "Requested time X but the latest data is at time
+Y" messages, n=730): source-time gap p50/p90/p95/p99/max = 11.1/32.8/65.9/
+88.5/120.8 ms; wall-clock equivalent at `rate:=0.5` = 22.2/65.6/131.8/177.0/
+241.6 ms -- `max_tf_wait_ms:=500` carries ~2x margin over the observed
+maximum, an engineering bound, not a scientifically fitted threshold.
+Prediction and Dynamic Object Risk both track the throughput increase
+directly with 0 rejections (`PREDICTION_RUNTIME_SUMMARY frames=720
+objects_in=5436 objects_out=5436 ... rejected=0`). Dynamic OGM (secondary,
+`enable_drivable_mask:=true`, shorter 100 s window, this fix enabled):
+428 grids published, 232 (54.2%) non-empty -- regularly non-empty now that
+far more tracked/predicted frames survive to reach the road-gated occupancy
+layer; the periodic `oversized_objects_skipped` warnings are the same
+pre-existing, already-documented PR #9 covariance-driven skip behaviour,
+untouched by this change. **No tracking-accuracy claim is made anywhere --
+all numbers are message counts, throughput, and TF-classification
+counters, per AGENTS.md "execution success is not performance
+validation."**
+
+**Tests:** new `test_ab3dmot_tf_deferred_queue.py` (17, pure queue-level:
+immediate/delayed/ordering/timeout/permanent-failure/queue-bound/no-
+duplicate/source-stamp-preserved, no ROS import needed). New
+`DeferredTfProcessingTest` class in `test_ab3dmot_tracker_node.py` (12,
+node-level integration covering the same scenarios end-to-end through
+`_on_detected_objects`). `build_enabled_node()` updated to also stub
+`can_transform` (consistent with the pre-existing `lookup_transform` stub)
+so all pre-existing tests keep exercising immediate/synchronous processing
+unchanged. **414/414 pass** across
+`test_ab3dmot_{geometry,core,ros,tracker_node,tf_deferred_queue,
+association,association_metrics,hybrid_gate,ekf,heading,imm}.py` +
+`test_competition_mot_baseline.py` + `test_tracking_launch.py` +
+`test_lidar_perception_launch.py` + `test_lidar_bag_replay_launch.py` +
+`test_training_free_perception_rviz_launch.py` + `test_selection_config.py`
+(0 regressions). `colcon build --packages-select ad_lidar_perception`
+clean; installed `ctest -R ab3dmot` 11/11.
+
+**Launch wiring (additive-only, default-preserving):** three new params on
+`ab3dmot_tracker.launch.py` (`defer_until_tf_ready` default `true`,
+`max_tf_wait_ms` default `500`, `max_pending_detections` default `8`),
+threaded through as `ab3dmot_defer_until_tf_ready`/`ab3dmot_max_tf_wait_ms`/
+`ab3dmot_max_pending_detections` on `lidar_perception.launch.py`,
+`lidar_bag_replay.launch.py`, and `training_free_perception_rviz.launch.py`
+(`tracker_backend:=ab3dmot` path only; inert for the default Autoware
+path). Exact-argument-set assertions in the three affected launch test
+files updated for the new declared args/forwarded keys.
+
+**Files:** `ad_lidar_perception/ad_lidar_perception/{ab3dmot_tf_deferred_queue.py
+(new),ab3dmot_tracker_node.py}`,
+`ad_lidar_perception/test/{test_ab3dmot_tf_deferred_queue.py (new),
+test_ab3dmot_tracker_node.py,test_lidar_perception_launch.py,
+test_lidar_bag_replay_launch.py,test_training_free_perception_rviz_launch.py}`,
+`ad_lidar_perception/launch/{ab3dmot_tracker.launch.py,
+lidar_perception.launch.py,lidar_bag_replay.launch.py,
+training_free_perception_rviz.launch.py}`, `ad_lidar_perception/CMakeLists.txt`,
+`docs/perception/{ab3dmot_tf_deferred_processing_v1.md (new),
+training_free_rviz_demo_v1.md}`, this file. No detector/association/
+estimator/prediction/occupancy/planner/CenterPoint/KalmanNet algorithm file
+changed; no production (Autoware) launch default changed.
+
+**Recommended next task:** Public-Dataset CenterPoint Baseline v1 --
+integrate one manageable public 3D detection dataset or mini split with the
+current CenterPoint/OpenPCDet environment, train/evaluate a reproducible
+vehicle-focused baseline, and use it only as public-domain pretraining
+evidence before any future real-vehicle adaptation.
+
 ## Real Sensor Bag Capture Readiness v1 — COMPLETE (workflow + tool; no new real-vehicle capture)
 
 Branch `feat/real-sensor-bag-readiness-v1`, from merged PR #37 `128ce6e`
