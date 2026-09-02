@@ -1,5 +1,125 @@
 # STATUS
 
+## Real Sensor Bag Capture Readiness v1 — COMPLETE (workflow + tool; no new real-vehicle capture)
+
+Branch `feat/real-sensor-bag-readiness-v1`, from merged PR #37 `128ce6e`
+(`feat(perception): complete training-free dynamic OGM demo (#37)`, verified
+via `gh pr view 37` before any edit). Defines and validates ONE canonical
+recording contract for LiDAR + camera + localization + TF so a future
+real-vehicle (or any non-MORAI) recording can be captured, checked
+immediately, replayed through the existing training-free pipeline, and
+retained as useful real sensor-domain data. **Not a GT dataset task — no
+object ground truth is fabricated, inferred, or claimed anywhere here.**
+
+**No new real vehicle/sensor rig was available in this environment.** This
+task produces the reusable workflow/tool and validates it against the one
+already-committed real bag (`morai_cam4_20260813_163222`); it does not claim
+a new real-vehicle capture happened.
+
+**Audit (Phase 0, source-grounded, not old names).** The canonical topic
+contract is read directly from `ad_lidar_perception/launch/
+lidar_bag_replay.launch.py`'s own `SOURCE_TOPICS` + `LOCALIZATION_SOURCE_
+TOPICS` + front-camera topic (the exact whitelist the training-free replay
+pipeline already consumes) and from `ad_localization/src/adapter/
+localization_node.cpp`'s declared subscription types:
+`/ad/sensors/lidar/points` (`sensor_msgs/PointCloud2`),
+`/ad/sensors/camera/front/compressed` (`sensor_msgs/CompressedImage`),
+`/ad/localization/odometry` (`nav_msgs/Odometry`), `/tf` + `/tf_static`
+(`tf2_msgs/TFMessage`), `/ad/sensors/gps/fix` (`sensor_msgs/NavSatFix`),
+`/ad/sensors/imu/data` (`sensor_msgs/Imu`), `/ad/vehicle/status`
+(**`ad_morai_interfaces/msg/EgoVehicleStatus`** — a real, source-confirmed
+MORAI-typed dependency the adapter subscribes to unconditionally regardless
+of backend; documented as a genuine real-vehicle-capture caveat, not
+resolved here since `gnss_imu`'s own fusion does not appear to need its
+content).
+
+**New tool** `tools/runtime/check_sensor_bag_ready.py` (+ `test_check_
+sensor_bag_ready.py`, 17 tests). Two independent tiers so the core is fully
+unit-testable without any sourced ROS environment, RViz, CUDA, torch,
+CenterPoint, or KalmanNet: (1) `classify_bag_metadata()` — pure `metadata.
+yaml` parsing (PyYAML only) into one of 7 statuses (`BROKEN`,
+`MISSING_LIDAR`, `MISSING_TF`, `MISSING_LOCALIZATION`,
+`PARTIAL_SENSOR_ONLY`, `READY_REPLAY_WITH_LOCALIZATION_RECOMPUTE`,
+`READY_FULL_REPLAY`), including detecting a metadata-only bag (declared
+storage file missing on disk) as `BROKEN` rather than silently treating it
+as usable; (2) `inspect_bag_messages()`/`timestamp_diagnostics()`/
+`nearest_stamp_offset_stats()` — optional deeper diagnostics (header-stamp
+nonzero/monotonic/duplicate/backward audit, nearest camera<->LiDAR and
+LiDAR<->odometry `|dt|` median/p95/max) that read real message content via
+`rosbag2_py` (needs a sourced ROS environment, no GPU). A third,
+independent `check_live_topics()` tier checks a currently-running ROS graph
+(topic presence/type + the full `odom -> base_link -> rear_axle_link ->
+{lidar_link, camera_front_optical_frame}` TF chain via `tf2_ros`) —
+read-only, subscribes only, never publishes. Never rewrites, reindexes, or
+deletes a bag.
+
+**Regression validation (Phase 17/18/21, real bags, no fixtures
+substituted).** `morai_cam4_20260813_163222` classifies as
+`READY_REPLAY_WITH_LOCALIZATION_RECOMPUTE` (LiDAR 2,982 + camera 7,038 +
+GPS 6,770 + IMU 14,280 + vehicle status 14,141 all recorded;
+`/ad/localization/odometry` absent; `/tf` present but 0 messages) — matching
+the exact expected category from every prior session on this bag, now
+locked by an automated classifier instead of manual inspection.
+`bags/static_20260805_003151` classifies as `BROKEN` (`metadata.yaml`
+declares `static_20260805_003151_0.mcap`, which does not exist on disk) —
+confirming the tool correctly refuses to treat a metadata-only remnant as a
+usable bag. `--deep` diagnostics on `morai_cam4` reproduce the
+independently-measured camera/LiDAR nearest-stamp offset exactly (median
+19.995 ms, p95 39.139 ms, max 49.693 ms over all 2,982 LiDAR frames) —
+cross-validating both this new tool and the prior finding.
+
+**Live-mode regression**, same bag, `enable_localization:=true
+enable_drivable_mask:=true`: all 8 canonical topics present with the exact
+expected types, and all 4 TF chains resolved `OK`
+(`odom->base_link`, `base_link->rear_axle_link`, `rear_axle_link->
+lidar_link`, `rear_axle_link->camera_front_optical_frame`). Detection
+(~1.2-1.4 Hz) and drivable-mask (~1.2 Hz) topics continued publishing at the
+same rates already documented in `training_free_rviz_demo_v1.md` — no new
+lengthy performance analysis was re-run, per this task's own explicit scope.
+
+**Storage cost measured directly** (not estimated) from `morai_cam4`'s real
+per-topic byte totals: LiDAR only ~0.16 GB/min, LiDAR + front camera
+~0.34 GB/min, full canonical contract ~0.34 GB/min (small topics add only a
+few MB total).
+
+**Documentation** `docs/perception/real_sensor_bag_capture_v1.md` (new):
+before-recording checklist, exact `ros2 bag record` command (canonical
+topic list, not `-a`), immediate-validation steps, full-replay and
+localization-recompute replay commands (exact current launch argument
+names, verified via `--show-args`), expected RViz layers, a session-manifest
+JSON schema (bag id, software commit, `sensor_mounts.yaml` SHA-256 for
+calibration *provenance* — no accuracy claim, since no `CameraInfo`
+publisher exists anywhere in this repository), and an explicit "what this
+data can/cannot be used for" section distinguishing unlabeled
+CenterPoint-domain-adaptation usefulness from the **no** to direct
+supervised CenterPoint or KalmanNet training without separately captured
+object ground truth.
+
+**Tests:** `test_check_sensor_bag_ready.py` 17/17 (full replay -> `READY_
+FULL_REPLAY`; camera optional; raw ego without odometry -> `READY_REPLAY_
+WITH_LOCALIZATION_RECOMPUTE`; a synthetic fixture matching `morai_cam4`'s
+exact real topic shape; no LiDAR -> `MISSING_LIDAR`; LiDAR present with 0
+messages -> `MISSING_LIDAR`; odometry without dynamic TF -> `MISSING_TF`;
+LiDAR-only with zero localization signal -> `MISSING_LOCALIZATION`;
+incomplete raw-ego set -> `PARTIAL_SENSOR_ONLY`; missing storage file ->
+`BROKEN`; missing/invalid `metadata.yaml` -> `BROKEN`; wrong message type
+flagged in `reasons`; deterministic repeat classification; zero bag
+mutation, file-mtime-verified). All pass with **no ROS environment
+sourced** (pure PyYAML), confirming the core tier's RViz/CUDA/torch/
+CenterPoint/KalmanNet-free testability requirement. `pyflakes` clean.
+
+**Files:** `tools/runtime/check_sensor_bag_ready.py` (new),
+`tools/runtime/test_check_sensor_bag_ready.py` (new),
+`docs/perception/real_sensor_bag_capture_v1.md` (new), this file. No
+detector/association/estimator/prediction/occupancy/planner/CenterPoint/
+KalmanNet algorithm file changed; no production launch default changed; no
+bag/checkpoint/generated data committed.
+
+**Recommended next task:** Real-Vehicle Data Capture v1 — use this completed
+recording/preflight workflow on the actual vehicle or available sensor rig
+to capture the first clean full-replay-ready bag; do not add more fixture
+infrastructure before obtaining new real sensor data.
+
 ## Training-Free Dynamic OGM Demo v1 — VALIDATED (real mask; no accuracy claim)
 
 Branch `feat/training-free-dynamic-ogm-demo-v1`, from merged PR #36 `1741bea`
