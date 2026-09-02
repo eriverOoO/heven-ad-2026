@@ -26,6 +26,14 @@ SOURCE_TOPICS = (
     "/ad/sensors/imu/data",
 )
 FRONT_CAMERA_TOPIC = "/ad/sensors/camera/front/compressed"
+# Raw ego-state topics consumed by ad_localization's gnss_imu backend (the
+# repository's own MORAI ego -> odometry/TF converter). Only replayed when
+# enable_localization is opted in, for a bag that has no recorded
+# /ad/localization/odometry but does have these raw sensor topics.
+LOCALIZATION_SOURCE_TOPICS = (
+    "/ad/sensors/gps/fix",
+    "/ad/vehicle/status",
+)
 _MCAP_MAGIC = b"\x89MCAP0\r\n"
 
 
@@ -229,6 +237,9 @@ def _launch_setup(context):
     include_front_camera = _parse_bool(
         "include_front_camera", _perform(context, "include_front_camera")
     )
+    enable_localization = _parse_bool(
+        "enable_localization", _perform(context, "enable_localization")
+    )
     detector_backend = _parse_detector_backend(
         _perform(context, "detector_backend")
     )
@@ -268,10 +279,19 @@ def _launch_setup(context):
     replay_topics = list(SOURCE_TOPICS)
     if include_front_camera:
         replay_topics.append(FRONT_CAMERA_TOPIC)
+    if enable_localization:
+        replay_topics.extend(LOCALIZATION_SOURCE_TOPICS)
     command.extend(["--topics", *replay_topics])
 
     description = IncludeLaunchDescription(
         _launch_file("ad_description", "description.launch.py")
+    )
+    localization = (
+        IncludeLaunchDescription(
+            _launch_file("ad_localization", "localization.launch.py")
+        )
+        if enable_localization
+        else None
     )
     perception = IncludeLaunchDescription(
         _launch_file("ad_lidar_perception", "lidar_perception.launch.py"),
@@ -314,17 +334,38 @@ def _launch_setup(context):
         emulate_tty=True,
     )
 
-    return [
+    group_actions = [
+        SetParameter(name="use_sim_time", value=True),
+        description,
+        perception,
+        TimerAction(period=delay, actions=[player]),
+    ]
+
+    actions = [
         GroupAction(
             scoped=True,
-            actions=[
-                SetParameter(name="use_sim_time", value=True),
-                description,
-                perception,
-                TimerAction(period=delay, actions=[player]),
-            ],
+            actions=group_actions,
         )
     ]
+    if localization is not None:
+        # A separate, UNSCOPED group: localization.launch.py uses
+        # RegisterEventHandler/EmitEvent for its lifecycle autostart, whose
+        # IfCondition is evaluated asynchronously when the event fires -
+        # after a *scoped* GroupAction has already been popped from the
+        # launch context, which makes that later lookup fail with
+        # "launch configuration 'autostart' does not exist". This group is
+        # the last action in this launch's action list, so an unscoped
+        # SetParameter here cannot leak into any preceding node.
+        actions.append(
+            GroupAction(
+                scoped=False,
+                actions=[
+                    SetParameter(name="use_sim_time", value=True),
+                    localization,
+                ],
+            )
+        )
+    return actions
 
 
 def generate_launch_description():
@@ -388,6 +429,18 @@ def generate_launch_description():
                 description=(
                     "Also replay the front compressed-camera topic; opt-in "
                     "so the LiDAR-only replay contract stays unchanged"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_localization",
+                default_value="false",
+                description=(
+                    "Opt-in: also replay /ad/sensors/gps/fix + "
+                    "/ad/vehicle/status and start ad_localization's "
+                    "gnss_imu backend (existing MORAI ego -> "
+                    "/ad/localization/odometry + odom->base_link TF "
+                    "converter), scoped to this replay's sim time. For a "
+                    "bag with raw ego sensors but no recorded odometry."
                 ),
             ),
             DeclareLaunchArgument(

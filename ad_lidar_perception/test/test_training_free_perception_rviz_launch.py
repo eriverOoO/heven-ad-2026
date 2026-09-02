@@ -37,6 +37,7 @@ def launch_context(**overrides):
         "enable_camera": "false",
         "enable_camera_perception": "false",
         "enable_dynamic_object_risk": "true",
+        "enable_localization": "false",
         "start_rviz": "true",
         "rviz_config": str(RVIZ),
     }
@@ -91,6 +92,7 @@ def test_declares_opt_in_defaults(monkeypatch):
         "enable_camera",
         "enable_camera_perception",
         "enable_dynamic_object_risk",
+        "enable_localization",
         "start_rviz",
         "rviz_config",
     }

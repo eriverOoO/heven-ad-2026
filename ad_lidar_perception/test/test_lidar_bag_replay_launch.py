@@ -57,6 +57,7 @@ def launch_context(bag, **overrides):
         "start_paused": "false",
         "loop": "true",
         "include_front_camera": "false",
+        "enable_localization": "false",
         "detector_backend": "euclidean",
         "tracker_backend": "",
         "dynamic_object_risk": "false",
@@ -136,6 +137,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "start_paused",
         "loop",
         "include_front_camera",
+        "enable_localization",
         "detector_backend",
         "tracker_backend",
         "dynamic_object_risk",
@@ -160,6 +162,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "start_paused": "false",
         "loop": "true",
         "include_front_camera": "false",
+        "enable_localization": "false",
         "detector_backend": "euclidean",
         "tracker_backend": "",
         "dynamic_object_risk": "false",
@@ -488,6 +491,72 @@ def test_front_camera_replay_is_explicitly_opt_in(tmp_path, monkeypatch):
 
     assert module.FRONT_CAMERA_TOPIC in command
     assert command.count(module.FRONT_CAMERA_TOPIC) == 1
+
+
+def test_enable_localization_false_starts_no_localization_group(
+    tmp_path, monkeypatch
+):
+    # Regression coverage for the default (unchanged) replay contract: no
+    # second GroupAction, no raw ego-sensor topics, no ad_localization
+    # include - byte-identical to the pre-enable_localization behaviour.
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    actions = record_setup(
+        module, monkeypatch, launch_context(bag, enable_localization="false")
+    )
+
+    assert len(actions) == 1
+    command = actions[0].kwargs["actions"][3].kwargs["actions"][0].kwargs[
+        "cmd"
+    ]
+    for topic in module.LOCALIZATION_SOURCE_TOPICS:
+        assert topic not in command
+
+
+def test_enable_localization_true_replays_raw_ego_topics_and_starts_localization_unscoped(
+    tmp_path, monkeypatch
+):
+    # Regression test for the real launch-scoping bug found while wiring
+    # this feature: nesting the ad_localization include inside the existing
+    # scoped=True GroupAction raised, at launch time,
+    # "launch configuration 'autostart' does not exist" - localization.
+    # launch.py's RegisterEventHandler/EmitEvent lifecycle-autostart
+    # condition is evaluated asynchronously, after a *scoped* group has
+    # already been popped from the launch context. The fix is a second,
+    # separate, scoped=False GroupAction. This test locks that structure:
+    # any regression back to nesting it inside the scoped group, or to
+    # scoped=True on its own group, must fail this assertion.
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    actions = record_setup(
+        module, monkeypatch, launch_context(bag, enable_localization="true")
+    )
+
+    assert len(actions) == 2
+    perception_group, localization_group = actions
+
+    # The original perception/replay group is unaffected: still one scoped
+    # group with the same four actions in the same order.
+    assert perception_group.kwargs["scoped"] is True
+    assert len(perception_group.kwargs["actions"]) == 4
+
+    # The localization group is separate and, critically, NOT scoped.
+    assert localization_group.kwargs["scoped"] is False
+    loc_actions = localization_group.kwargs["actions"]
+    set_param, include = loc_actions
+    assert set_param.args == ()
+    assert set_param.kwargs == {"name": "use_sim_time", "value": True}
+    assert include.args == ("ad_localization/localization.launch.py",)
+
+    # The raw ego-sensor topics ad_localization's gnss_imu backend needs
+    # are replayed alongside the existing whitelist, never in place of it.
+    command = perception_group.kwargs["actions"][3].kwargs["actions"][
+        0
+    ].kwargs["cmd"]
+    for topic in module.SOURCE_TOPICS:
+        assert topic in command
+    for topic in module.LOCALIZATION_SOURCE_TOPICS:
+        assert command.count(topic) == 1
 
 
 def test_composition_config_must_be_an_absolute_regular_yaml(tmp_path):
