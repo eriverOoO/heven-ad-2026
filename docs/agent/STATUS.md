@@ -1,5 +1,127 @@
 # STATUS
 
+## Training-Free Dynamic OGM Demo v1 — VALIDATED (real mask; no accuracy claim)
+
+Branch `feat/training-free-dynamic-ogm-demo-v1`, from merged PR #36 `1741bea`
+(`fix(perception): support replay localization in RViz demo (#36)`, verified
+via `gh pr view 36` before any edit). Closes v2's remaining gap: dynamic/
+static/combined occupancy grids never published in the training-free demo
+because `road_gate.enabled: true` (the checked-in default for both
+`occupancy_grid/dynamic.yaml` and `.../static.yaml`) gates publication on a
+timestamp-matched `/ad/planning/drivable_mask`, and the demo graph had no
+producer for it. **Launch wiring only — no new mask rasterization, no
+fabricated drivable area, `road_gate` never disabled or weakened.**
+
+**Audit (Phase 1, per this task's own instruction to look before inventing):
+a real, already-production drivable-mask producer already exists.**
+`ad_planner`'s `RoadCorridorMaskNode` (`ad_road_corridor_mask_node`
+executable) rasterizes the committed, checksum-verified competition route
+corridor (`ad_data/map/route_corridor.json`, `map` frame) into a `base_link`-
+frame `nav_msgs/OccupancyGrid` (`0`=drivable, `100`=non-drivable) with a
+**hard-coded required window** `x=[-4,100] y=[-10,10] res=0.1` -> exactly
+`1040x200` cells — confirmed, source-grounded, to be the *exact* geometry
+both `occupancy_grid/dynamic.yaml` and `.../static.yaml` already declare
+(`target_frame: base_link`, same `x_min/x_max/y_min/y_max/resolution`), not
+a coincidence: this node was clearly built as this exact consumer's intended
+companion. It is already started by `planner.launch.py`'s
+`_create_road_corridor_mask_node` as part of the full planner graph and
+already covered by 27 gtests + `test_road_corridor_mask_launch.py`. **Reused
+verbatim — zero lines of rasterization/geometry/TF logic written.**
+
+**New standalone launch** `ad_planner/launch/road_corridor_mask.launch.py`
+(mirrors `cut_in_risk.launch.py`'s existing pattern) starts *only* this one
+node — no planner, no controller, no `CtrlCmd` publisher — so the
+perception-only demo can reuse it without pulling in the rest of
+`ad_planner`. Wired into `training_free_perception_rviz.launch.py` as a new
+opt-in `enable_drivable_mask` arg (default `false`, replay or live) + a new
+`data_dir` arg (default `$AD_DATA_DIR`), in its own `scoped=True` `GroupAction`
+(safe here — unlike `ad_localization`, `RoadCorridorMaskNode` is a plain
+`rclcpp::Node` with no lifecycle autostart event handling, so the earlier
+scoping pitfall does not apply). RViz gained a new, disabled-by-default
+**Drivable Mask (debug)** `Map` display.
+
+**A second real, independently-discovered launch bug, found and fixed while
+wiring this.** Passing the checked-in `road_corridor_mask.yaml` (which
+declares placeholder-empty `data_dir` / `route_corridor.expected_global_path_
+sha256` under the node's own name) and a real-value override dict as two
+separate `--params-file` arguments to the same node — the exact pattern
+`cut_in_risk.launch.py` and `planner.launch.py`'s
+`_create_road_corridor_mask_node` already use — was found, by direct
+repeated binary invocation with byte-identical params files, to
+**non-deterministically fail to apply the override** for those specific
+keys: `FATAL: set data_dir or AD_DATA_DIR` and
+`expected SHA-256 for 'global_path' is malformed`, reproducing and
+un-reproducing across otherwise-identical runs in a clean single-process
+environment (isolated from all other project code — a genuine
+`rcl_yaml_param_parser` merge race across two files declaring the same keys
+for one node under different specificity, not a project bug). **Fix:**
+`road_corridor_mask.launch.py` reads the checked-in YAML in Python
+(`yaml.safe_load`) and overlays the override dict on top of it *before*
+launch, so the node process is given exactly one parameter source per key —
+verified clean (0 FATAL) across many repeated launches after the fix,
+reproducibly crashing (FATAL every time) before it. **The node's own C++
+parameter-declaration code is untouched.** `cut_in_risk.launch.py` and
+`planner.launch.py` still use the vulnerable two-file pattern — fixing those
+is out of scope here (different owners, much larger blast radius, deserves
+its own dedicated validation) and is called out as a follow-up.
+
+**Live result** (same bag as v2, `morai_cam4_20260813_163222`,
+`enable_localization:=true enable_drivable_mask:=true`, replay rate `0.15`):
+17/17 processes start, 0 crashes, 0 FATAL. `/ad/planning/drivable_mask`
+published at ~1.0-1.1 Hz with **real, non-trivial, non-fabricated content**
+— one sampled frame: 10,405 of 208,000 cells `0` (drivable), the rest `100`
+— the real GPS-derived ego position in this recording happens to intersect
+the real committed competition route corridor for at least part of this
+replay (not guaranteed or engineered; empirically observed). With the mask
+flowing: `/ad/perception/occupancy/static` published (~1.2-1.3 Hz) with a
+real graduated inflation-cost distribution (`0` free through intermediate
+costs to `100` occupied, consistent with real LiDAR obstacles);
+`/ad/perception/occupancy/combined` published (observed, intermittent);
+`/ad/perception/occupancy/dynamic` published (~0.4 Hz) but was mostly empty
+(`0` everywhere) in sampled frames — a **direct, expected** consequence of
+v2's already-documented tracker/prediction exact-stamp TF race on this
+recording, explicitly **not** re-tuned or worked around in this task
+(Phase 21 of the task: "Do NOT solve those in this task... Do not weaken
+tracker TF safety" — honored).
+
+**This is execution/runtime evidence only — no occupancy-grid accuracy
+claim, no planner-safety claim.** CenterPoint and KalmanNet were not
+started; no learned-model dependency was needed.
+
+**Tests:** `test_road_corridor_mask_standalone_launch.py` (new, 7 tests:
+committed defaults, single-merged-parameter-dict construction with a real
+SHA-256, missing-argument rejection, missing-global-path rejection, and a
+malformed-config-section rejection). `test_training_free_perception_rviz_
+launch.py` gained
+`test_drivable_mask_producer_is_opt_in_and_reuses_the_existing_node` (off by
+default; when on, asserts the mask group is a separate `scoped=True` group
+carrying the real `data_dir` through) plus an RViz-config assertion for the
+new Drivable Mask display (disabled by default). **138/138 pass** across
+`test_road_corridor_mask_launch.py` + `test_road_corridor_mask_standalone_
+launch.py` + `test_training_free_perception_rviz_launch.py` +
+`test_lidar_bag_replay_launch.py` + `test_perception_visualization_launch.py`
++ `test_lidar_perception_launch.py`. `colcon build --packages-select
+ad_lidar_perception ad_planner` clean.
+
+**Files:** `ad_planner/launch/road_corridor_mask.launch.py` (new),
+`ad_planner/test/test_road_corridor_mask_standalone_launch.py` (new),
+`ad_planner/CMakeLists.txt` (+1 `ament_add_pytest_test` registration),
+`ad_lidar_perception/launch/training_free_perception_rviz.launch.py`,
+`ad_lidar_perception/rviz/training_free_perception_camera.rviz`,
+`ad_lidar_perception/test/test_training_free_perception_rviz_launch.py`,
+`docs/perception/training_free_rviz_demo_v1.md`, this file. No detector/
+association/estimator/prediction/occupancy-math/planner-command-generation/
+CenterPoint/KalmanNet algorithm file changed; `road_gate` never disabled;
+no production launch default changed (this demo's own defaults for
+`enable_drivable_mask`/`data_dir` are opt-in `false`/empty, matching every
+other flag on this launch).
+
+**Recommended next task:** Real-Vehicle / Existing-Bag Data Capture
+Readiness v1 — prepare and validate a single reproducible recording workflow
+for LiDAR + camera + localization + TF on the actual vehicle or any
+available non-MORAI source, so future CenterPoint and KalmanNet work can use
+real sensor-domain data without depending on MORAI.
+
 ## Training-Free Full-Chain RViz Runtime v2 — VALIDATED (chain; OGM/throughput caveats)
 
 Training-free LiDAR detection -> tracking -> prediction runtime chain

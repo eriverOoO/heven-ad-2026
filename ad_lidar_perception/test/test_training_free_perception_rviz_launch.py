@@ -38,6 +38,8 @@ def launch_context(**overrides):
         "enable_camera_perception": "false",
         "enable_dynamic_object_risk": "true",
         "enable_localization": "false",
+        "enable_drivable_mask": "false",
+        "data_dir": "",
         "start_rviz": "true",
         "rviz_config": str(RVIZ),
     }
@@ -93,6 +95,8 @@ def test_declares_opt_in_defaults(monkeypatch):
         "enable_camera_perception",
         "enable_dynamic_object_risk",
         "enable_localization",
+        "enable_drivable_mask",
+        "data_dir",
         "start_rviz",
         "rviz_config",
     }
@@ -211,6 +215,51 @@ def test_camera_perception_overlay_is_opt_in(monkeypatch):
     )
 
 
+def test_drivable_mask_producer_is_opt_in_and_reuses_the_existing_node(
+    monkeypatch,
+):
+    # Regression coverage for Training-Free Dynamic OGM Completion v1: the
+    # existing, already-tested ad_road_corridor_mask_node (ad_planner) is
+    # reused unmodified, never a new mask implementation, and stays off by
+    # default so it never changes the demo's existing behaviour.
+    module = load_launch_module()
+
+    off = record_setup(module, monkeypatch, launch_context())
+    assert not any(
+        item.args and item.args[0] == "road_corridor_mask.launch.py"
+        for item in off
+    )
+
+    on = record_setup(
+        module,
+        monkeypatch,
+        launch_context(enable_drivable_mask="true", data_dir="/abs/ad_data"),
+    )
+    mask_group = next(
+        item
+        for item in on
+        if item.kwargs.get("actions")
+        and any(
+            getattr(action, "args", None)
+            and action.args[0] == "road_corridor_mask.launch.py"
+            for action in item.kwargs["actions"]
+        )
+    )
+    # Its own scoped group, not nested inside the perception/replay group -
+    # a plain rclcpp::Node (no lifecycle autostart), so scoping is safe here,
+    # unlike the ad_localization case this same launch file already fixed.
+    assert mask_group.kwargs["scoped"] is True
+    mask_include = next(
+        action
+        for action in mask_group.kwargs["actions"]
+        if getattr(action, "args", None)
+        and action.args[0] == "road_corridor_mask.launch.py"
+    )
+    assert dict(mask_include.kwargs["launch_arguments"])["data_dir"] == (
+        "/abs/ad_data"
+    )
+
+
 def test_launch_never_wires_a_learned_model_backend(monkeypatch):
     # The executable body (docstring excluded) must not name a learned
     # detector/estimator backend or a weights file in any mode.
@@ -276,6 +325,16 @@ def test_demo_rviz_config_shows_lidar_camera_objects_and_occupancy():
     assert displays["Combined Occupancy"]["Topic"]["Value"] == (
         "/ad/perception/occupancy/combined"
     )
+
+    assert displays["Drivable Mask (debug)"]["Class"] == (
+        "rviz_default_plugins/Map"
+    )
+    assert displays["Drivable Mask (debug)"]["Topic"]["Value"] == (
+        "/ad/planning/drivable_mask"
+    )
+    # Toggleable but off by default: enable_drivable_mask itself defaults to
+    # false, so this display should not silently imply the mask is running.
+    assert displays["Drivable Mask (debug)"]["Enabled"] is False
 
     names = {display["Name"] for display in manager["Displays"]}
     assert not any("CenterPoint" in name for name in names)

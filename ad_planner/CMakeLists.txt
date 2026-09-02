@@ -695,6 +695,9 @@ if(BUILD_TESTING)
     test_road_corridor_mask_launch
     test/test_road_corridor_mask_launch.py)
   ament_add_pytest_test(
+    test_road_corridor_mask_standalone_launch
+    test/test_road_corridor_mask_standalone_launch.py)
+  ament_add_pytest_test(
     test_mppi_nav2_launch
     test/test_mppi_nav2_launch.py)
   ament_add_pytest_test(

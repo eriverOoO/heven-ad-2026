@@ -35,7 +35,7 @@ from launch.actions import (
     OpaqueFunction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import SetParameter
 
 
@@ -91,6 +91,9 @@ def _launch_setup(context):
     )
     enable_localization = _parse_bool(
         "enable_localization", _perform(context, "enable_localization")
+    )
+    enable_drivable_mask = _parse_bool(
+        "enable_drivable_mask", _perform(context, "enable_drivable_mask")
     )
     start_rviz = _parse_bool("start_rviz", _perform(context, "start_rviz"))
 
@@ -182,6 +185,34 @@ def _launch_setup(context):
             }.items(),
         )
     )
+
+    if enable_drivable_mask:
+        # Opt-in, read-only drivable-mask producer for the existing
+        # road_gate-gated dynamic/static occupancy grids. Reuses the
+        # already-existing, already-tested ad_road_corridor_mask_node
+        # (ad_planner) unmodified - it rasterizes the committed,
+        # checksum-verified competition route corridor
+        # (ad_data/map/route_corridor.json) into the exact base_link-frame
+        # grid contract the OGM nodes' road_gate already requires. No
+        # planner, controller, or CtrlCmd publisher is started; this reads
+        # LiDAR/prediction timing + TF only. Scoped so its use_sim_time
+        # matches replay/live without leaking into any other node.
+        actions.append(
+            GroupAction(
+                scoped=True,
+                actions=[
+                    SetParameter(name="use_sim_time", value=replay),
+                    IncludeLaunchDescription(
+                        _launch_file(
+                            "ad_planner", "road_corridor_mask.launch.py"
+                        ),
+                        launch_arguments={
+                            "data_dir": _perform(context, "data_dir"),
+                        }.items(),
+                    ),
+                ],
+            )
+        )
 
     if enable_camera_perception:
         # Optional camera perception overlay. Needs ultralytics/torch and the
@@ -275,6 +306,30 @@ def generate_launch_description():
                     "/ad/vehicle/status and start ad_localization's "
                     "gnss_imu backend for a bag that has raw ego sensors "
                     "but no recorded /ad/localization/odometry"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "enable_drivable_mask",
+                default_value="false",
+                description=(
+                    "Also start ad_planner's existing "
+                    "ad_road_corridor_mask_node so the already-gated "
+                    "dynamic/static occupancy grids (road_gate.enabled: "
+                    "true) can publish. Rasterizes the committed "
+                    "ad_data/map/route_corridor.json - never a fabricated "
+                    "all-drivable mask. No planner/controller/CtrlCmd node "
+                    "is started."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "data_dir",
+                default_value=EnvironmentVariable(
+                    "AD_DATA_DIR", default_value=""
+                ),
+                description=(
+                    "Directory containing the committed competition route "
+                    "corridor + global path; only read when "
+                    "enable_drivable_mask:=true"
                 ),
             ),
             DeclareLaunchArgument(
