@@ -24,8 +24,11 @@ using ad_lidar_perception::tracking::adapt_tracked_objects;
 using ad_lidar_perception::tracking::AutowarePredictionAdapterConfig;
 using ad_lidar_perception::tracking::ImmUpdateReason;
 using ad_lidar_perception::tracking::prediction_output_qos;
+using ad_lidar_perception::tracking::parse_yaw_rate_source;
+using ad_lidar_perception::tracking::PredictionAdaptation;
 using ad_lidar_perception::tracking::rejected_prediction_diagnostics;
 using ad_lidar_perception::tracking::StatefulImmPredictionAdapter;
+using ad_lidar_perception::tracking::YawRateSource;
 using autoware_perception_msgs::msg::ObjectClassification;
 using autoware_perception_msgs::msg::Shape;
 using autoware_perception_msgs::msg::TrackedObjects;
@@ -524,12 +527,15 @@ TEST(AutowarePredictionAdapter, MovingUnknownReachesImmAndReportsModelState) {
   const auto & status = cycle.diagnostics.status.front();
   EXPECT_EQ(status.name, "0a0b0c0d0e0f10111213141516171819");
   const auto values = diagnostic_values(status);
-  EXPECT_EQ(values.size(), 5U);
+  EXPECT_EQ(values.size(), 7U);
   EXPECT_NE(values.at("stationary_probability"), "");
   EXPECT_NE(values.at("constant_velocity_probability"), "");
   EXPECT_NE(values.at("coordinated_turn_probability"), "");
   EXPECT_EQ(values.at("selected_mode"), "constant_velocity");
   EXPECT_EQ(values.at("reset_or_gating_reason"), "track_initialized");
+  // Curve-Aware Prediction v1: default config keeps the tracker yaw-rate.
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "tracker");
+  EXPECT_NE(values.at("yaw_rate_radps"), "");
 }
 
 TEST(AutowarePredictionAdapter, ImmDiagnosticsBindReasonsToEachUuid) {
@@ -866,6 +872,274 @@ TEST(AutowarePredictionAdapter, Ab3dmotOrientationUnavailableDoesNotForceCoordin
       twist.covariance.begin(), twist.covariance.end(),
       [](const double value) {return std::isfinite(value);}));
   EXPECT_GT(std::hypot(twist.twist.linear.x, twist.twist.linear.y), 0.1);
+}
+
+// --- Curve-Aware Prediction v1: motion-history yaw-rate estimator -------------
+// AB3DMOT publishes twist.angular.z == 0 (no angular-velocity state), so the IMM
+// coordinated-turn model never sees curvature. In motion_history mode the
+// adapter derives a robust turn rate from the recent world-velocity heading and
+// overrides the IMM yaw-rate measurement. These tests drive the adapter (the
+// estimator itself is file-local) and read the derived rate from the diagnostic
+// KeyValue plus the resulting predicted-trajectory curvature.
+
+double quaternion_yaw(const geometry_msgs::msg::Quaternion & q)
+{
+  return 2.0 * std::atan2(q.z, q.w);
+}
+
+AutowarePredictionAdapterConfig motion_history_config()
+{
+  auto config = valid_config();
+  config.imm_prediction.horizons_s = config.prediction.horizons_s;  // {0.5, 1.0}
+  config.yaw_rate_source = YawRateSource::kMotionHistory;
+  return config;  // motion_history defaults: 4 samples, 2.0 m/s, 1.5 rad/s, 0.10
+}
+
+// Identity-quaternion tracked object whose WORLD velocity heading is `heading`
+// at `speed`, positioned at (x, y). Mirrors the AB3DMOT contract.
+TrackedObjects world_velocity_input(
+  const std::int64_t stamp_ns, const double speed, const double heading,
+  const double x, const double y)
+{
+  auto input = ab3dmot_style_input(
+    stamp_ns, speed * std::cos(heading), speed * std::sin(heading));
+  auto & kinematics = input.objects.back().kinematics;
+  kinematics.pose_with_covariance.pose.position.x = x;
+  kinematics.pose_with_covariance.pose.position.y = y;
+  // Real AB3DMOT leaves the yaw-rate variance slot at 0 (no angular state);
+  // valid_input()'s 77.0 sentinel would otherwise dominate the tracker-mode
+  // IMM likelihood and mask the motion_history comparison.
+  kinematics.twist_with_covariance.covariance[35] = 0.0;
+  return input;
+}
+
+// Feeds `frames` frames at `dt` spacing, world-velocity heading advancing by
+// `omega * dt` per frame from `heading0`, integrating position. Returns the
+// final adapt_with_diagnostics cycle.
+PredictionAdaptation feed_arc(
+  StatefulImmPredictionAdapter & adapter, const int frames, const double speed,
+  const double heading0, const double omega, const double dt = 0.1)
+{
+  const std::int64_t base = 10 * kSecondNs;
+  const auto dt_ns = static_cast<std::int64_t>(dt * 1.0e9);
+  double x = 0.0;
+  double y = 0.0;
+  double heading = heading0;
+  PredictionAdaptation cycle;
+  for (int step = 0; step < frames; ++step) {
+    const std::int64_t stamp = base + step * dt_ns;
+    const std::optional<std::int64_t> last =
+      step == 0 ? std::nullopt
+      : std::optional<std::int64_t>(base + (step - 1) * dt_ns);
+    cycle = adapter.adapt_with_diagnostics(
+      world_velocity_input(stamp, speed, heading, x, y), stamp + 50000000LL,
+      last);
+    x += speed * std::cos(heading) * dt;
+    y += speed * std::sin(heading) * dt;
+    heading += omega * dt;
+  }
+  return cycle;
+}
+
+std::map<std::string, std::string> final_diagnostic(
+  const PredictionAdaptation & cycle)
+{
+  EXPECT_EQ(cycle.diagnostics.status.size(), 1U);
+  return diagnostic_values(cycle.diagnostics.status.front());
+}
+
+double predicted_heading_change(const ad_interfaces::msg::PredictedObject & object)
+{
+  EXPECT_GE(object.states.size(), 2U);
+  return quaternion_yaw(object.states.back().pose.pose.orientation) -
+         quaternion_yaw(object.states.front().pose.pose.orientation);
+}
+
+double predicted_heading_change(const PredictionAdaptation & cycle)
+{
+  return predicted_heading_change(cycle.predictions.objects.front());
+}
+
+// A. Straight motion -> omega ~ 0, constant-velocity, no curvature.
+TEST(CurveAwarePrediction, StraightMotionYieldsZeroRateAndNoCurve) {
+  StatefulImmPredictionAdapter adapter(motion_history_config());
+  const auto cycle = feed_arc(adapter, 8, 6.0, 0.30, 0.0);
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "motion_history");
+  EXPECT_NEAR(std::stod(values.at("yaw_rate_radps")), 0.0, 1.0e-9);
+  EXPECT_NE(values.at("selected_mode"), "coordinated_turn");
+  EXPECT_NEAR(predicted_heading_change(cycle), 0.0, 1.0e-6);
+}
+
+// A'. motion_history must not materially perturb a straight object relative to
+// tracker mode. (Not bit-identical: the reported yaw-rate variance changes by
+// design, so the IMM likelihood term shifts microscopically.)
+TEST(CurveAwarePrediction, StraightMotionTracksTrackerModePrediction) {
+  auto tracker_config = valid_config();
+  tracker_config.imm_prediction.horizons_s = tracker_config.prediction.horizons_s;
+  StatefulImmPredictionAdapter tracker_adapter(tracker_config);
+  StatefulImmPredictionAdapter history_adapter(motion_history_config());
+
+  const auto tracker_cycle = feed_arc(tracker_adapter, 8, 5.0, -0.4, 0.0);
+  const auto history_cycle = feed_arc(history_adapter, 8, 5.0, -0.4, 0.0);
+
+  const auto & tracker_object = tracker_cycle.predictions.objects.front();
+  const auto & history_object = history_cycle.predictions.objects.front();
+  ASSERT_EQ(history_object.states.size(), tracker_object.states.size());
+  for (std::size_t i = 0; i < history_object.states.size(); ++i) {
+    EXPECT_NEAR(
+      history_object.states[i].pose.pose.position.x,
+      tracker_object.states[i].pose.pose.position.x, 1.0e-3);
+    EXPECT_NEAR(
+      history_object.states[i].pose.pose.position.y,
+      tracker_object.states[i].pose.pose.position.y, 1.0e-3);
+  }
+  EXPECT_NEAR(predicted_heading_change(history_object), 0.0, 1.0e-6);
+}
+
+// B. Constant left turn -> positive derived rate, CT contributes, curve bends
+// the predicted trajectory left. Proves the existing IMM logic responds to a
+// valid non-zero yaw-rate (no imm_predictor.cpp change needed).
+TEST(CurveAwarePrediction, ConstantLeftTurnBendsPredictionAndReachesCt) {
+  StatefulImmPredictionAdapter adapter(motion_history_config());
+  const auto cycle = feed_arc(adapter, 12, 6.0, 0.0, 0.30);
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "motion_history");
+  const double derived = std::stod(values.at("yaw_rate_radps"));
+  EXPECT_NEAR(derived, 0.30, 0.05);
+
+  // Magnitude, not just sign: the fused yaw-rate must reach a meaningful
+  // fraction of the derived rate and the predicted heading must bend left.
+  // (Measured: derived 0.30 -> CT prob ~0.88, fused wz ~0.27.)
+  const double fused_rate =
+    cycle.predictions.objects.front().initial_twist.twist.angular.z;
+  EXPECT_GT(fused_rate, 0.10);
+  EXPECT_EQ(values.at("selected_mode"), "coordinated_turn");
+  EXPECT_GT(std::stod(values.at("coordinated_turn_probability")), 0.50);
+  EXPECT_GT(predicted_heading_change(cycle), 0.10);
+}
+
+// C. Constant right turn -> negative derived rate, prediction bends right.
+TEST(CurveAwarePrediction, ConstantRightTurnBendsPredictionOppositeWay) {
+  StatefulImmPredictionAdapter adapter(motion_history_config());
+  const auto cycle = feed_arc(adapter, 12, 6.0, 0.0, -0.30);
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "motion_history");
+  EXPECT_NEAR(std::stod(values.at("yaw_rate_radps")), -0.30, 0.05);
+  EXPECT_LT(
+    cycle.predictions.objects.front().initial_twist.twist.angular.z, -0.10);
+  EXPECT_LT(predicted_heading_change(cycle), -0.10);
+}
+
+// D. Insufficient history -> tracker fallback, no curvature.
+TEST(CurveAwarePrediction, InsufficientHistoryFallsBackToTracker) {
+  StatefulImmPredictionAdapter adapter(motion_history_config());
+  const auto cycle = feed_arc(adapter, 3, 6.0, 0.0, 0.30);  // < history_samples
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "tracker_fallback");
+  EXPECT_NEAR(std::stod(values.at("yaw_rate_radps")), 0.0, 1.0e-12);
+  EXPECT_NE(values.at("selected_mode"), "coordinated_turn");
+}
+
+// E. Below the speed gate -> tracker fallback even though the heading rotates.
+TEST(CurveAwarePrediction, LowSpeedFallsBackDespiteRotatingHeading) {
+  StatefulImmPredictionAdapter adapter(motion_history_config());
+  const auto cycle = feed_arc(adapter, 8, 1.0, 0.0, 0.60);  // 1.0 < min 2.0
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "tracker_fallback");
+  EXPECT_NEAR(std::stod(values.at("yaw_rate_radps")), 0.0, 1.0e-12);
+  EXPECT_NEAR(predicted_heading_change(cycle), 0.0, 1.0e-6);
+}
+
+// F. Heading wraparound (+/-pi crossing) must not inject a 2*pi/dt spike. A
+// median of >= 3 slopes is structurally robust to one bad pair, so this uses
+// history_samples == 3 (two slopes) - the tightest guard on the unwrap.
+TEST(CurveAwarePrediction, HeadingWraparoundProducesNoSpike) {
+  auto config = motion_history_config();
+  config.motion_history.history_samples = 3U;
+  StatefulImmPredictionAdapter adapter(config);
+
+  const double deg = kPi / 180.0;
+  // Velocity headings 175 deg -> -175 deg -> -170 deg at 0.1 s spacing.
+  // True rate: +10 deg then +5 deg -> ~ +1.31 rad/s. A missing unwrap turns the
+  // 175 -> -175 step into -350 deg and flips the median sign.
+  const std::array<double, 3> headings{175.0 * deg, -175.0 * deg, -170.0 * deg};
+  PredictionAdaptation cycle;
+  for (std::size_t step = 0; step < headings.size(); ++step) {
+    const std::int64_t stamp = 10 * kSecondNs + static_cast<std::int64_t>(step) *
+      100000000LL;
+    const std::optional<std::int64_t> last = step == 0 ? std::nullopt
+      : std::optional<std::int64_t>(
+      10 * kSecondNs + static_cast<std::int64_t>(step - 1) * 100000000LL);
+    cycle = adapter.adapt_with_diagnostics(
+      world_velocity_input(
+        stamp, 6.0, headings[step], 0.2 * static_cast<double>(step), 0.0),
+      stamp + 50000000LL, last);
+  }
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "motion_history");
+  const double derived = std::stod(values.at("yaw_rate_radps"));
+  EXPECT_GT(derived, 0.5);            // correct unwrap: ~ +1.31 rad/s
+  EXPECT_LT(derived, 1.5);            // not clamped -> no wrap spike
+}
+
+// G. Estimates beyond the clamp are limited to max_yaw_rate_radps.
+TEST(CurveAwarePrediction, LargeEstimateIsClampedToConfiguredCeiling) {
+  auto config = motion_history_config();
+  StatefulImmPredictionAdapter adapter(config);
+  // ~12 rad/s heading rate, well past the 1.5 rad/s ceiling.
+  const auto cycle = feed_arc(adapter, 8, 6.0, 0.0, 12.0);
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "motion_history");
+  EXPECT_NEAR(
+    std::stod(values.at("yaw_rate_radps")),
+    config.motion_history.max_yaw_rate_radps, 1.0e-9);
+}
+
+// H. Tracker mode (the default) is byte-compatible with the previous path: the
+// tracker twist.angular.z (0 for AB3DMOT) is used verbatim and turning input
+// never bends the prediction.
+TEST(CurveAwarePrediction, TrackerModeReproducesPreviousBehaviour) {
+  auto config = valid_config();
+  config.imm_prediction.horizons_s = config.prediction.horizons_s;
+  ASSERT_EQ(config.yaw_rate_source, YawRateSource::kTracker);
+  StatefulImmPredictionAdapter adapter(config);
+
+  const auto cycle = feed_arc(adapter, 12, 6.0, 0.0, 0.30);
+
+  const auto values = final_diagnostic(cycle);
+  EXPECT_EQ(values.size(), 7U);
+  EXPECT_EQ(values.at("yaw_rate_source_used"), "tracker");
+  EXPECT_NEAR(std::stod(values.at("yaw_rate_radps")), 0.0, 1.0e-12);
+  EXPECT_NE(values.at("selected_mode"), "coordinated_turn");
+  EXPECT_NEAR(
+    cycle.predictions.objects.front().initial_twist.twist.angular.z, 0.0,
+    1.0e-9);
+  EXPECT_NEAR(predicted_heading_change(cycle), 0.0, 1.0e-6);
+}
+
+TEST(CurveAwarePrediction, ParsesYawRateSourceStrings) {
+  EXPECT_EQ(parse_yaw_rate_source("tracker"), YawRateSource::kTracker);
+  EXPECT_EQ(
+    parse_yaw_rate_source("motion_history"), YawRateSource::kMotionHistory);
+  EXPECT_THROW(parse_yaw_rate_source("gyro"), std::invalid_argument);
+}
+
+TEST(CurveAwarePrediction, RejectsDegenerateMotionHistoryConfig) {
+  auto config = motion_history_config();
+  config.motion_history.history_samples = 2U;
+  EXPECT_THROW(StatefulImmPredictionAdapter{config}, std::invalid_argument);
+
+  config = motion_history_config();
+  config.motion_history.max_yaw_rate_radps = 0.0;
+  EXPECT_THROW(StatefulImmPredictionAdapter{config}, std::invalid_argument);
 }
 
 } // namespace

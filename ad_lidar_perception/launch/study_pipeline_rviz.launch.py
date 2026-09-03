@@ -107,6 +107,9 @@ def _launch_setup(context):
             "device": _perform(context, "centerpoint_device"),
             "openpcdet_root": openpcdet_root,
             "ab3dmot_state_estimator": estimator,
+            "prediction_yaw_rate_source": _perform(
+                context, "prediction_yaw_rate_source"
+            ),
             "ab3dmot_kalmannet_checkpoint": kalmannet_checkpoint,
             "ab3dmot_kalmannet_device": _perform(context, "kalmannet_device"),
             "ab3dmot_root": _perform(context, "ab3dmot_root"),
@@ -194,6 +197,15 @@ def generate_launch_description():
         DeclareLaunchArgument("centerpoint_device", default_value="cuda:0"),
         DeclareLaunchArgument("kalmannet_checkpoint", default_value=""),
         DeclareLaunchArgument("kalmannet_device", default_value="cpu"),
+        DeclareLaunchArgument(
+            "prediction_yaw_rate_source",
+            default_value="tracker",
+            description=(
+                "Curve-Aware Prediction v1: 'tracker' (default) or "
+                "'motion_history' to derive the IMM turn rate from tracked "
+                "velocity history."
+            ),
+        ),
         DeclareLaunchArgument("ab3dmot_root", default_value=""),
         DeclareLaunchArgument("metrics_output", default_value=""),
         DeclareLaunchArgument("metrics_duration_sec", default_value="60.0"),

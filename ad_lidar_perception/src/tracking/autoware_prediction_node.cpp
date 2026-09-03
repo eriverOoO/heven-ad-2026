@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <map>
 #include <memory>
@@ -33,6 +34,16 @@ namespace
 
 constexpr std::int64_t kNanosecondsPerSecond = 1000000000LL;
 constexpr double kQuaternionNormTolerance = 1.0e-6;
+constexpr double kPi = 3.14159265358979323846;
+
+// One world-frame velocity observation retained for the Curve-Aware
+// Prediction v1 motion-history turn-rate estimator.
+struct MotionHistorySample
+{
+  std::int64_t stamp_ns;
+  double vx_world_mps;
+  double vy_world_mps;
+};
 
 struct ConvertedObject
 {
@@ -107,6 +118,26 @@ void validate_adapter_config(const AutowarePredictionAdapterConfig & config)
   }
   (void)maximum_age_ns(config.maximum_input_age_sec);
   (void)predict_tracks({}, config.prediction);
+
+  const auto & motion_history = config.motion_history;
+  if (motion_history.history_samples < 3U) {
+    throw std::invalid_argument(
+            "motion_history.history_samples must be at least 3");
+  }
+  const std::array<double, 3> positive_motion_history_params{
+    motion_history.min_speed_mps,
+    motion_history.max_yaw_rate_radps,
+    motion_history.yaw_rate_variance_rad2ps2};
+  if (!std::all_of(
+      positive_motion_history_params.begin(),
+      positive_motion_history_params.end(),
+      [](const double value) {
+        return std::isfinite(value) && value > 0.0;
+      }))
+  {
+    throw std::invalid_argument(
+            "motion_history parameters must be finite and positive");
+  }
 }
 
 geometry_msgs::msg::Quaternion normalized_orientation(
@@ -393,6 +424,90 @@ void validate_imm_measurement(const TrackMeasurement2D & measurement)
   }
 }
 
+// Curve-Aware Prediction v1. Robust turn-rate estimate (rad/s) from a bounded
+// window of world-frame velocity samples, or std::nullopt when a conservative
+// validity gate rejects the window (-> caller keeps the tracker yaw-rate, i.e.
+// CV behaviour). Never throws.
+//
+// Estimator: unwrap heading_i = atan2(vy_i, vx_i) across +/-pi, take the median
+// of the history_samples-1 adjacent (delta-heading / delta-t) slopes (robust to
+// a single bad sample once history_samples >= 4), then clamp to
+// +/- max_yaw_rate_radps.
+//
+// Gates: window shorter than history_samples; any sample speed below
+// min_speed_mps; any non-positive or larger-than-max_gap_s inter-sample dt
+// (duplicate / non-monotonic / discontinuous history); any non-finite input or
+// result.
+std::optional<double> estimate_yaw_rate_from_motion_history(
+  const std::deque<MotionHistorySample> & history,
+  const MotionHistoryYawRateConfig & config,
+  const double max_gap_s)
+{
+  if (config.history_samples < 3U || history.size() < config.history_samples) {
+    return std::nullopt;
+  }
+  if (!std::isfinite(max_gap_s) || max_gap_s <= 0.0) {
+    return std::nullopt;
+  }
+  const std::int64_t max_gap_ns = static_cast<std::int64_t>(
+    std::llround(max_gap_s * static_cast<double>(kNanosecondsPerSecond)));
+
+  // Each slope is wrap(heading_i - heading_{i-1}) / dt_i. Wrapping the pairwise
+  // difference into (-pi, pi] is the full unwrap the median-of-slopes estimate
+  // needs (no accumulated angle to track); +/-179 -> -/+178 never spikes.
+  std::vector<double> slopes;
+  slopes.reserve(history.size() - 1U);
+  bool have_previous = false;
+  double previous_heading = 0.0;
+  std::int64_t previous_stamp_ns = 0;
+  for (const auto & sample : history) {
+    if (!std::isfinite(sample.vx_world_mps) ||
+      !std::isfinite(sample.vy_world_mps))
+    {
+      return std::nullopt;
+    }
+    const double speed = std::hypot(sample.vx_world_mps, sample.vy_world_mps);
+    if (!std::isfinite(speed) || speed < config.min_speed_mps) {
+      return std::nullopt;
+    }
+    const double heading =
+      std::atan2(sample.vy_world_mps, sample.vx_world_mps);
+    if (have_previous) {
+      const std::int64_t dt_ns = sample.stamp_ns - previous_stamp_ns;
+      if (dt_ns <= 0 || dt_ns > max_gap_ns) {
+        return std::nullopt;
+      }
+      double delta = heading - previous_heading;
+      while (delta > kPi) {delta -= 2.0 * kPi;}
+      while (delta < -kPi) {delta += 2.0 * kPi;}
+      const double dt_s =
+        static_cast<double>(dt_ns) / static_cast<double>(kNanosecondsPerSecond);
+      const double slope = delta / dt_s;
+      if (!std::isfinite(slope)) {
+        return std::nullopt;
+      }
+      slopes.push_back(slope);
+    }
+    have_previous = true;
+    previous_heading = heading;
+    previous_stamp_ns = sample.stamp_ns;
+  }
+  if (slopes.empty()) {
+    return std::nullopt;
+  }
+
+  std::sort(slopes.begin(), slopes.end());
+  const std::size_t middle = slopes.size() / 2U;
+  const double omega = (slopes.size() % 2U == 0U) ?
+    0.5 * (slopes[middle - 1U] + slopes[middle]) :
+    slopes[middle];
+  if (!std::isfinite(omega)) {
+    return std::nullopt;
+  }
+  return std::clamp(
+    omega, -config.max_yaw_rate_radps, config.max_yaw_rate_radps);
+}
+
 ad_interfaces::msg::PredictedObject
 map_imm_prediction(
   const autoware_perception_msgs::msg::TrackedObject & source,
@@ -487,7 +602,9 @@ diagnostic_msgs::msg::KeyValue key_value(
 diagnostic_msgs::msg::DiagnosticStatus prediction_diagnostic(
   const std::array<std::uint8_t, 16> & uuid,
   const ImmResult & prediction,
-  const ImmUpdateReason reason)
+  const ImmUpdateReason reason,
+  const char * yaw_rate_source_used,
+  const double yaw_rate_used_radps)
 {
   const auto selected = static_cast<std::size_t>(std::distance(
       prediction.model_probabilities.begin(),
@@ -526,7 +643,9 @@ diagnostic_msgs::msg::DiagnosticStatus prediction_diagnostic(
             return "update_interval_clamped";
         }
         return "unknown_update_reason";
-      }())};
+      }()),
+    key_value("yaw_rate_source_used", yaw_rate_source_used),
+    key_value("yaw_rate_radps", probability_text(yaw_rate_used_radps))};
   return status;
 }
 
@@ -570,6 +689,18 @@ diagnostic_msgs::msg::DiagnosticStatus rejection_status(
 }
 
 } // namespace
+
+YawRateSource parse_yaw_rate_source(const std::string & value)
+{
+  if (value == "tracker") {
+    return YawRateSource::kTracker;
+  }
+  if (value == "motion_history") {
+    return YawRateSource::kMotionHistory;
+  }
+  throw std::invalid_argument(
+          "yaw_rate_source must be 'tracker' or 'motion_history'");
+}
 
 diagnostic_msgs::msg::DiagnosticArray rejected_prediction_diagnostics(
   const autoware_perception_msgs::msg::TrackedObjects & input,
@@ -742,6 +873,44 @@ public:
       }
       auto [entry, inserted] =
         staged_tracks.try_emplace(key, config_.imm_prediction, input_stamp_ns);
+
+      // Curve-Aware Prediction v1: maintain the bounded per-track world-velocity
+      // history and, in motion_history mode, override the IMM yaw-rate
+      // measurement with a robust history-derived estimate when the validity
+      // gates pass. Any failure keeps the tracker value (CV behaviour).
+      auto & velocity_history = entry->second.velocity_history;
+      velocity_history.push_back(
+        MotionHistorySample{
+          input_stamp_ns,
+          converted[index].track.vx_world_mps,
+          converted[index].track.vy_world_mps});
+      while (velocity_history.size() >
+        config_.motion_history.history_samples)
+      {
+        velocity_history.pop_front();
+      }
+      const char * yaw_rate_source_used = "tracker";
+      double yaw_rate_used_radps = measurements[index].yaw_rate_radps;
+      if (config_.yaw_rate_source == YawRateSource::kMotionHistory) {
+        const auto estimate = estimate_yaw_rate_from_motion_history(
+          velocity_history, config_.motion_history,
+          config_.imm_prediction.maximum_update_interval_s);
+        if (estimate.has_value()) {
+          measurements[index].yaw_rate_radps = *estimate;
+          measurements[index].yaw_rate_variance_rad2ps2 =
+            config_.motion_history.yaw_rate_variance_rad2ps2;
+          try {
+            validate_imm_measurement(measurements[index]);
+          } catch (const std::invalid_argument & error) {
+            throw PredictionInputError(error.what(), key);
+          }
+          yaw_rate_source_used = "motion_history";
+          yaw_rate_used_radps = *estimate;
+        } else {
+          yaw_rate_source_used = "tracker_fallback";
+        }
+      }
+
       ImmUpdateReason reason = ImmUpdateReason::kMeasurementAccepted;
       if (inserted) {
         if (pending_reset_reason_.has_value() &&
@@ -778,7 +947,9 @@ public:
         map_imm_prediction(
           input.objects[index], converted[index], prediction));
       output.diagnostics.status.push_back(
-        prediction_diagnostic(key, prediction, reason));
+        prediction_diagnostic(
+          key, prediction, reason, yaw_rate_source_used,
+          yaw_rate_used_radps));
     }
     prune_expiry_tombstones(
       staged_expiry_tombstones, input_stamp_ns, retention_ns);
@@ -841,6 +1012,10 @@ private:
 
     ImmPredictor predictor;
     std::int64_t last_seen_stamp_ns;
+    // Curve-Aware Prediction v1: bounded world-frame velocity history, capped at
+    // config_.motion_history.history_samples. Committed / expired / reset with
+    // the owning track (staged_tracks copy in adapt_with_diagnostics).
+    std::deque<MotionHistorySample> velocity_history;
   };
 
   AutowarePredictionAdapterConfig config_;
@@ -919,6 +1094,24 @@ AutowarePredictionNode::AutowarePredictionNode(
     declare_parameter<double>("imm.process_variance.coordinated_turn", 0.35);
   config_.imm_track_retention_sec =
     declare_parameter<double>("imm.track_retention_sec", 1.0);
+  config_.yaw_rate_source = parse_yaw_rate_source(
+    declare_parameter<std::string>("yaw_rate_source", "tracker"));
+  {
+    const auto history_samples = declare_parameter<std::int64_t>(
+      "motion_history.history_samples", 4);
+    if (history_samples < 3) {
+      throw std::invalid_argument(
+              "motion_history.history_samples must be at least 3");
+    }
+    config_.motion_history.history_samples =
+      static_cast<std::size_t>(history_samples);
+  }
+  config_.motion_history.min_speed_mps =
+    declare_parameter<double>("motion_history.min_speed_mps", 2.0);
+  config_.motion_history.max_yaw_rate_radps =
+    declare_parameter<double>("motion_history.max_yaw_rate_radps", 1.5);
+  config_.motion_history.yaw_rate_variance_rad2ps2 =
+    declare_parameter<double>("motion_history.yaw_rate_variance", 0.10);
   const auto runtime_summary_interval =
     declare_parameter<std::int64_t>("runtime_summary_interval_frames", 0);
   if (runtime_summary_interval < 0) {
