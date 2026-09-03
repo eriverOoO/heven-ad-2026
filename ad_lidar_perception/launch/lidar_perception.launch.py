@@ -79,6 +79,15 @@ def _launch_setup(context):
         raise RuntimeError(
             "ab3dmot_state_estimator must be linear_kf or kalmannet"
         )
+    prediction_yaw_rate_source = (
+        LaunchConfiguration("prediction_yaw_rate_source", default="tracker")
+        .perform(context)
+        .strip()
+    )
+    if prediction_yaw_rate_source not in {"tracker", "motion_history"}:
+        raise RuntimeError(
+            "prediction_yaw_rate_source must be tracker or motion_history"
+        )
     if selection.detector.build_only:
         raise RuntimeError(
             "build_only selection cannot activate the runtime composition"
@@ -246,7 +255,10 @@ def _launch_setup(context):
                     "tracking.launch.py",
                     {"selection_config": str(composition_path)},
                 ),
-                _include("prediction.launch.py"),
+                _include(
+                    "prediction.launch.py",
+                    {"yaw_rate_source": prediction_yaw_rate_source},
+                ),
             ]
         )
     elif tracker_backend == "ab3dmot":
@@ -290,7 +302,10 @@ def _launch_setup(context):
                 ),
                 _include(
                     "prediction.launch.py",
-                    {"runtime_summary_interval_frames": "180"},
+                    {
+                        "runtime_summary_interval_frames": "180",
+                        "yaw_rate_source": prediction_yaw_rate_source,
+                    },
                 ),
             ]
         )
@@ -412,6 +427,17 @@ def generate_launch_description():
                 description=(
                     "Opt-in AB3DMOT estimator selector; the study launch "
                     "uses only linear_kf or the checkpoint-required kalmannet"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "prediction_yaw_rate_source",
+                default_value="tracker",
+                description=(
+                    "Curve-Aware Prediction v1: IMM yaw-rate source, forwarded "
+                    "to prediction.launch.py for both tracker backends. "
+                    "'tracker' (default) reproduces prior behaviour; "
+                    "'motion_history' derives the turn rate from tracked "
+                    "velocity history."
                 ),
             ),
             DeclareLaunchArgument(

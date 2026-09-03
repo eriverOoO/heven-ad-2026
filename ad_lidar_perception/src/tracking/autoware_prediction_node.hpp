@@ -20,6 +20,41 @@
 namespace ad_lidar_perception::tracking
 {
 
+// Source of the yaw-rate measurement fed into the IMM coordinated-turn model.
+//   kTracker        - use tracked_objects.twist.twist.angular.z verbatim
+//                     (reproduces the pre-Curve-Aware-Prediction behaviour;
+//                     AB3DMOT has no angular-velocity state so this is 0).
+//   kMotionHistory  - derive a robust turn rate from recent world-frame
+//                     velocity history; fall back to the tracker value when
+//                     the conservative validity gates reject the window.
+enum class YawRateSource
+{
+  kTracker,
+  kMotionHistory,
+};
+
+// Curve-Aware Prediction v1: bounded per-track velocity-history turn-rate
+// estimator. Parameter surface deliberately minimal. Defaults chosen from the
+// morai_cam4_20260813_163222 prediction audit
+// (docs/perception/curve_aware_prediction_v1.md).
+struct MotionHistoryYawRateConfig
+{
+  // Consecutive world-velocity samples required before an estimate is produced.
+  // history_samples - 1 adjacent heading slopes are then reduced by a median.
+  // Must be >= 3 (a 2-slope median is not outlier-robust).
+  std::size_t history_samples{4U};
+  // Samples slower than this carry pure KF velocity noise in atan2(vy, vx);
+  // any sub-threshold sample in the window rejects the estimate (-> CV).
+  double min_speed_mps{2.0};
+  // Hard clamp on |omega_est|. Safety ceiling, not a tuning target.
+  double max_yaw_rate_radps{1.5};
+  // Fixed variance reported for the derived rate. NOT a measured angular
+  // velocity: a finite difference over ~history_samples/tracking_rate seconds of
+  // noisy KF velocity. Intentionally larger than the 0.04 tracker-twist
+  // fallback.
+  double yaw_rate_variance_rad2ps2{0.10};
+};
+
 struct AutowarePredictionAdapterConfig
 {
   std::string expected_frame_id{"odom"};
@@ -27,7 +62,13 @@ struct AutowarePredictionAdapterConfig
   CvPredictionConfig prediction;
   ImmConfig imm_prediction;
   double imm_track_retention_sec{1.0};
+  YawRateSource yaw_rate_source{YawRateSource::kTracker};
+  MotionHistoryYawRateConfig motion_history;
 };
+
+// Parses the yaw_rate_source parameter string ("tracker" | "motion_history").
+// Throws std::invalid_argument on an unrecognised value.
+YawRateSource parse_yaw_rate_source(const std::string & value);
 
 ad_interfaces::msg::PredictedObjectArray adapt_tracked_objects(
   const autoware_perception_msgs::msg::TrackedObjects & input,

@@ -1,5 +1,110 @@
 # STATUS
 
+## Curve-Aware Prediction v1 — motion-history yaw rate — VALIDATED
+
+Branch `feat/prediction-motion-history-yaw-rate-v1`, from merged PR #40 `8f07096`
+(`feat: study multi-pipeline demo v1`, verified `MERGED` via `gh pr view 40`
+before branching). **Opt-in, default-off. One change in the prediction
+adapter/runtime layer only (`autoware_prediction_node.{hpp,cpp}`). No new
+predictor, no lane/map-aware prediction, `imm_predictor.cpp` untouched (a focused
+test proved the existing IMM responds correctly to a valid non-zero yaw-rate),
+no Dynamic Occupancy Grid change, no detector/AB3DMOT change.**
+
+**Problem (from the `morai_cam4_20260813_163222` audit).** IMM
+coordinated-turn (CT) is the only curvature model and its only input is
+`TrackMeasurement2D::yaw_rate_radps`, filled from
+`tracked_objects.twist.twist.angular.z`. AB3DMOT's 10-state Linear KF has no
+angular-velocity state -> `twist.angular.z == 0` every frame; CenterPoint yaw is
+discarded upstream (`yaw_measurement_mode="unobserved"`). The IMM sees
+`omega == 0` forever, `update_model()` penalises CT every cycle
+(`turn_evidence < 0.03`), `propagate()` takes the straight branch. Audit: 0/1704
+CT selections, predicted heading change exactly 0.0 on 1981 predictions, while
+consecutive tracked-velocity headings turned at median 0.078 / p95 1.26 rad/s.
+
+**Fix.** New `AutowarePredictionAdapterConfig::yaw_rate_source`
+(`tracker` default | `motion_history`) + `MotionHistoryYawRateConfig`
+(`history_samples` 4, `min_speed_mps` 2.0, `max_yaw_rate_radps` 1.5,
+`yaw_rate_variance_rad2ps2` 0.10). `tracker` = byte-for-byte prior behaviour.
+`motion_history` maintains a bounded `std::deque<MotionHistorySample>` in the
+existing per-UUID `TrackHistory` (staged/committed/expired/`reset()` with the
+track), and `estimate_yaw_rate_from_motion_history()` derives the rate:
+per-adjacent-pair `wrap(atan2(vy_i,vx_i) - atan2(vy_{i-1},vx_{i-1})) / dt_i`
+(difference wrapped into `(-pi,pi]`), **median** of the `history_samples-1`
+slopes, clamp to `+/-max_yaw_rate_radps`. Conservative gates -> `std::nullopt` ->
+keep tracker rate (CV): short history, any sample `< min_speed_mps`, `dt <= 0`
+or `dt > imm.maximum_update_interval_s` (2 s), non-finite. On success it
+overrides `measurement.yaw_rate_radps` + `.yaw_rate_variance_rad2ps2` and
+re-validates. `history_samples` default is **4** not ~5: audit median tracked
+lifetime ~2 frames at 8.7 Hz; 5 left <13 % of moving frames eligible. Diagnostic
+topic gains `yaw_rate_source_used` (`tracker`/`motion_history`/`tracker_fallback`)
+and `yaw_rate_radps` per track.
+
+**Launch:** `prediction.launch.py yaw_rate_source:=…`, threaded as
+`prediction_yaw_rate_source:=…` through `lidar_perception.launch.py` (both
+tracker backends), `lidar_bag_replay.launch.py`, `study_pipeline_rviz.launch.py`.
+
+**Tests.** 11 new `CurveAwarePrediction` cases in
+`test_autoware_prediction_adapter.cpp` (straight / left turn / right turn /
+short history / low speed / +-pi wraparound / clamp / tracker-mode parity /
+straight-object parity / param parse / degenerate-config reject). `test_imm_
+predictor.cpp` unchanged. **73/73** C++ ctests pass
+(`autoware_prediction_adapter` 35, `imm_predictor` 6, `cv_predictor` 7,
+`dynamic_grid_builder` + others). Launch pytest **131/131**
+(`test_lidar_perception_launch`, `test_lidar_bag_replay_launch`,
+`test_study_pipeline_rviz_launch`, `test_tracking_launch`,
+`test_training_free_perception_rviz_launch`) after updating the three affected
+exact-arg / declared-arg / diagnostic-size assertions.
+`colcon build --packages-select ad_lidar_perception` clean; `git diff --check`
+clean. Focused unit probe: fed omega 0.30 -> derived 0.30, CT prob 0.88, fused
+yaw-rate 0.27, predicted heading bends +0.66 rad over 3 s -> **no
+`imm_predictor.cpp` change needed**.
+
+**Bag A/B** (`morai_cam4_20260813_163222`, captured `/ad/perception/objects/
+tracked` — 1262 msgs / 149.6 s — replayed twice through a standalone
+`ad_autoware_prediction_node`, `:=tracker` vs `:=motion_history`, identical
+input, 0 rejected either arm):
+
+| metric | BEFORE `tracker` | AFTER `motion_history` |
+| --- | --- | --- |
+| `yaw_rate_source_used` | tracker 14650 | motion_history **2406** (16.4 %), else tracker_fallback |
+| IMM selected_mode stat/CV/**CT** | 9261 / 5271 / **118** | 9182 / 4115 / **1354** (11.5x) |
+| CT probability median / p95 / max | 0.006 / 0.084 / 0.964 | 0.006 / **0.815** / 1.000 |
+| predicted \|heading change over 6 s\| median / p95 / max | 0 / 0 / **0** rad | 0 / **0.578** / **3.61** rad |
+| heading-rate err \|omega_pred-omega_obs\| H=1 median / p95 | 0.112 / 1.131 | **0.047** / **0.779** |
+| … H=2 / H=3 median | 0.112 / 0.112 | 0.047 / 0.047 |
+| **TURN-MISS RATE** (\|omega_obs\|>0.10 & \|omega_pred(H=1)\|<0.02) | **1131/1131 = 100 %** | **114/1131 = 10.1 %** |
+
+`omega_obs` derived independently from the recorded tracked twist (identical in
+both arms), `omega_pred` from published predicted-state yaw. All numbers are
+message counts / throughput / heading-rate consistency — **no
+tracking-accuracy claim**. Straight objects unchanged (median predicted heading
+change stays 0 in both arms; only the turning tail bends). Structural check
+(study pipeline, `prediction_yaw_rate_source:=motion_history`): 12 predicted
+keyframes every frame, 0 non-finite points, max polyline 147.8 m (a real ~24 m/s
+highway vehicle over 6 s, not a spiral), predicted-object marker count
+unchanged, 0 node crashes. Representative track: a ~4.3 m/s roundabout
+circulator, fused yaw-rate +0.485 rad/s, predicted keyframes now trace a clean
+~9 m-radius arc (`v/omega`) instead of a straight line.
+
+**RViz screenshot:** not captured (no screen-capture tool on this host —
+documented limitation across prior sessions); the predicted-trajectory content
+RViz renders was validated directly from the message stream.
+
+**Files:** `ad_lidar_perception/src/tracking/autoware_prediction_node.{hpp,cpp}`,
+`ad_lidar_perception/test/test_autoware_prediction_adapter.cpp`,
+`ad_lidar_perception/config/tracking/prediction.yaml`,
+`ad_lidar_perception/launch/{prediction,lidar_perception,lidar_bag_replay,
+study_pipeline_rviz}.launch.py`,
+`ad_lidar_perception/test/{test_lidar_perception_launch,
+test_lidar_bag_replay_launch}.py`,
+`docs/perception/curve_aware_prediction_v1.md` (new), this file. No
+`imm_predictor.cpp` / detector / AB3DMOT / occupancy / planner change.
+
+**Recommended next task:** Dynamic OGM future-sweep integration — wire the
+now-curved predicted-trajectory keyframes into `ad_dynamic_occupancy_grid`'s
+swept future occupancy (`interpolate_dynamic_trajectory()` exists but is not fed
+real prediction keyframes). Not lane-aware learned prediction.
+
 ## AB3DMOT Exact-Stamp TF Deferred Processing v1 — VALIDATED
 
 Branch `fix/ab3dmot-tf-deferred-processing-v1`, from merged PR #38 `d5453a8`

@@ -23,3 +23,24 @@ ad_autoware_prediction:
         stationary: 0.02
         constant_velocity: 0.20
         coordinated_turn: 0.35
+
+    # Curve-Aware Prediction v1. Yaw-rate measurement source for the IMM
+    # coordinated-turn model.
+    #   tracker         - tracked_objects.twist.twist.angular.z verbatim
+    #                     (default; AB3DMOT has no angular-velocity state so
+    #                     this is 0 and turns never bend the prediction).
+    #   motion_history  - robust turn rate from recent world-velocity history,
+    #                     with a tracker/zero fallback on any gate failure.
+    yaw_rate_source: tracker
+    motion_history:
+      # Audit (morai_cam4_20260813_163222): median tracked-object lifetime is
+      # ~2 frames at ~8.7 Hz. history_samples=5 left <13 % of moving
+      # track-frames eligible; 4 (a median of 3 slopes, outlier-robust) is the
+      # chosen default. See docs/perception/curve_aware_prediction_v1.md.
+      history_samples: 4
+      min_speed_mps: 2.0
+      # Safety clamp on |omega_est|; audited 4-sample estimates stayed <= 0.76.
+      max_yaw_rate_radps: 1.5
+      # Fixed reported variance. NOT a measured rate: a finite difference over
+      # ~0.4 s of noisy KF velocity. Deliberately > the 0.04 tracker fallback.
+      yaw_rate_variance: 0.10

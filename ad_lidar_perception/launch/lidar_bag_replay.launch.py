@@ -326,6 +326,9 @@ def _launch_setup(context):
             "ab3dmot_state_estimator": LaunchConfiguration(
                 "ab3dmot_state_estimator", default="linear_kf"
             ).perform(context),
+            "prediction_yaw_rate_source": LaunchConfiguration(
+                "prediction_yaw_rate_source", default="tracker"
+            ).perform(context),
             "ab3dmot_kalmannet_checkpoint": LaunchConfiguration(
                 "ab3dmot_kalmannet_checkpoint", default=""
             ).perform(context),
@@ -500,6 +503,9 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "ab3dmot_state_estimator", default_value="linear_kf"
+            ),
+            DeclareLaunchArgument(
+                "prediction_yaw_rate_source", default_value="tracker"
             ),
             DeclareLaunchArgument(
                 "ab3dmot_kalmannet_checkpoint", default_value=""

@@ -27,6 +27,16 @@ def generate_launch_description():
                 "runtime_summary_interval_frames",
                 default_value="0",
             ),
+            DeclareLaunchArgument(
+                "yaw_rate_source",
+                default_value="tracker",
+                description=(
+                    "IMM yaw-rate source: 'tracker' (default, reproduces the "
+                    "pre-Curve-Aware-Prediction behaviour) or 'motion_history' "
+                    "(derive turn rate from recent velocity history). "
+                    "Authoritative over the config file's yaw_rate_source key."
+                ),
+            ),
             Node(
                 package="ad_lidar_perception",
                 executable="ad_autoware_prediction_node",
@@ -40,7 +50,10 @@ def generate_launch_description():
                                 "runtime_summary_interval_frames"
                             ),
                             value_type=int,
-                        )
+                        ),
+                        "yaw_rate_source": LaunchConfiguration(
+                            "yaw_rate_source"
+                        ),
                     },
                 ],
             ),

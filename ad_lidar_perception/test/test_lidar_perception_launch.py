@@ -319,7 +319,7 @@ def test_optional_branches_forward_only_their_owned_inputs(
             "selection_config": str(config),
         },
         "tracking.launch.py": {"selection_config": str(config)},
-        "prediction.launch.py": {},
+        "prediction.launch.py": {"yaw_rate_source": "tracker"},
         "dynamic_occupancy_grid.launch.py": {},
         "combined_occupancy_grid.launch.py": {},
     }
@@ -511,6 +511,7 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "ab3dmot_max_tf_wait_ms",
         "ab3dmot_max_pending_detections",
         "ab3dmot_state_estimator",
+        "prediction_yaw_rate_source",
         "ab3dmot_kalmannet_checkpoint",
         "ab3dmot_kalmannet_device",
         "ab3dmot_root",
@@ -677,6 +678,7 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
     )
     assert dict(prediction.kwargs["launch_arguments"]) == {
         "runtime_summary_interval_frames": "180",
+        "yaw_rate_source": "tracker",
     }
 
 
