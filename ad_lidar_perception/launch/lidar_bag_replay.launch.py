@@ -323,6 +323,18 @@ def _launch_setup(context):
             "ab3dmot_max_pending_detections": _perform(
                 context, "ab3dmot_max_pending_detections"
             ),
+            "ab3dmot_state_estimator": LaunchConfiguration(
+                "ab3dmot_state_estimator", default="linear_kf"
+            ).perform(context),
+            "ab3dmot_kalmannet_checkpoint": LaunchConfiguration(
+                "ab3dmot_kalmannet_checkpoint", default=""
+            ).perform(context),
+            "ab3dmot_kalmannet_device": LaunchConfiguration(
+                "ab3dmot_kalmannet_device", default="cpu"
+            ).perform(context),
+            "ab3dmot_root": LaunchConfiguration(
+                "ab3dmot_root", default=""
+            ).perform(context),
             # Keep replay input ownership separate from visualization.  These
             # must be explicit because an enclosing launch can otherwise leak
             # identically named start_* configurations into this include.
@@ -486,6 +498,16 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "ab3dmot_max_pending_detections", default_value="8"
             ),
+            DeclareLaunchArgument(
+                "ab3dmot_state_estimator", default_value="linear_kf"
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_kalmannet_checkpoint", default_value=""
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_kalmannet_device", default_value="cpu"
+            ),
+            DeclareLaunchArgument("ab3dmot_root", default_value=""),
             DeclareLaunchArgument("checkpoint_path", default_value=""),
             DeclareLaunchArgument("device", default_value="cuda:0"),
             DeclareLaunchArgument("openpcdet_root", default_value=""),

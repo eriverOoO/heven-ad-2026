@@ -7862,3 +7862,36 @@ interfering, and (c) latency/runtime cost is measured (per AGENTS.md
 "Measure runtime/latency for competition-critical modules") — still no
 RViz wiring change and no accuracy/performance claim beyond execution
 evidence, per AGENTS.md "execution success is not performance validation."
+# Study multi-pipeline demo v1 — 2026-09-03
+
+Opt-in `study_pipeline_rviz.launch.py` now selects A Euclidean+Linear KF, B
+CenterPoint+Linear KF, C Euclidean+KalmanNet, or optional D CenterPoint+
+KalmanNet while holding AB3DMOT BEV Euclidean 3.0 m/Hungarian association,
+lifecycle, prediction, OGM, camera replay, localization, and RViz constant.
+Production defaults and control are unchanged. The launch enforces the frozen
+CenterPoint and KalmanNet artifact SHA-256 values and adds a visual pipeline
+label plus a small GT-free fixed-source-window JSON/Markdown recorder.
+
+Runtime validation used the same `morai_cam4_20260813_163222` bag at 0.5x.
+A/B/C completed the exact source interval 1786606342.500–1786606402.500; D
+completed a prior 60 s bounded run and is explicitly optional. RViz-on stayed
+active and camera endpoint QoS was verified Best-Effort/Volatile. Focused build
+of `ad_lidar_perception` passed. Full commands, artifact provenance, runtime
+table, frozen historical tables, recording instructions, limitations, and
+qualitative checklist: `docs/perception/study_multi_pipeline_demo_v1.md`.
+
+Work done on the isolated worktree `/tmp/heven-study-demo-v1` (branch
+`feat/study-multi-pipeline-demo-v1`) because the original checkout carries
+~1900 user-owned CRLF-only modifications; the study overlay is built at
+`/tmp/heven-study-demo-v1/install` (chains `/opt/ros/humble` + the main
+`heven-ad-2026/install`). Tonight's exact env block, the corrected launch
+overlay path, and the local `~/ros-local-debs/extracted` xacro workaround
+(no sudo) are the "Tonight: run and record these three" section at the top of
+the doc. Focused launch/interface tests: 135 passed
+(`test_study_pipeline_rviz_launch`, `test_lidar_bag_replay_launch`,
+`test_lidar_perception_launch`, `test_training_free_perception_rviz_launch`,
+`test_perception_visualization_launch`, `test_tracking_launch`,
+`test_occupancy_layer_launch`). The broader CenterPoint Python suite still
+fails at collection on a pre-existing SciPy/NumPy ABI mismatch in the venv —
+unrelated to and not blocking the completed B/D runtime runs. No checkpoint,
+bag, or runtime JSON committed; PR opened, not merged.

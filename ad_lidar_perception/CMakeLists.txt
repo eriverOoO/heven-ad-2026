@@ -391,6 +391,14 @@ install(PROGRAMS
   ad_lidar_perception/camera_lidar_fusion_node.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME ad_camera_lidar_fusion)
+install(PROGRAMS
+  ad_lidar_perception/study_pipeline_label_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_study_pipeline_label)
+install(PROGRAMS
+  ad_lidar_perception/study_runtime_recorder_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ad_study_runtime_recorder)
 install(DIRECTORY
   ../tools/centerpoint_offline/
   DESTINATION share/${PROJECT_NAME}/centerpoint_offline
@@ -543,6 +551,9 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_training_free_perception_rviz_launch
     test/test_training_free_perception_rviz_launch.py)
+  ament_add_pytest_test(
+    test_study_pipeline_rviz_launch
+    test/test_study_pipeline_rviz_launch.py)
   ament_add_pytest_test(
     test_check_autoware_perception
     "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/tests/test_check_autoware_perception.py"

@@ -72,6 +72,13 @@ def _launch_setup(context):
             "tracker_backend must be empty, autoware, or ab3dmot"
         )
     tracker_backend = tracker_backend_override or selection.tracker.backend
+    ab3dmot_state_estimator = LaunchConfiguration(
+        "ab3dmot_state_estimator", default="linear_kf"
+    ).perform(context).strip()
+    if ab3dmot_state_estimator not in {"linear_kf", "kalmannet"}:
+        raise RuntimeError(
+            "ab3dmot_state_estimator must be linear_kf or kalmannet"
+        )
     if selection.detector.build_only:
         raise RuntimeError(
             "build_only selection cannot activate the runtime composition"
@@ -243,10 +250,6 @@ def _launch_setup(context):
             ]
         )
     elif tracker_backend == "ab3dmot":
-        if heven_centerpoint or selection.detector.backend != "euclidean_cluster":
-            raise RuntimeError(
-                "COMPETITION_MOT_BASELINE_V1 requires the adaptive Euclidean detector"
-            )
         actions.extend(
             [
                 _include(
@@ -259,11 +262,20 @@ def _launch_setup(context):
                         "config_path": _tracking_config(
                             "competition_mot_baseline_v1.yaml"
                         ),
+                        "ab3dmot_root": LaunchConfiguration(
+                            "ab3dmot_root"
+                        ),
                         "association_metric": "euclidean",
                         "euclidean_gate_m": "3.0",
                         "matcher": "hungarian",
-                        "state_estimator": "linear_kf",
+                        "state_estimator": ab3dmot_state_estimator,
                         "yaw_measurement_mode": "unobserved",
+                        "kalmannet_checkpoint": LaunchConfiguration(
+                            "ab3dmot_kalmannet_checkpoint", default=""
+                        ).perform(context),
+                        "kalmannet_device": LaunchConfiguration(
+                            "ab3dmot_kalmannet_device", default="cpu"
+                        ).perform(context),
                         "velocity_audit_enabled": "true",
                         "defer_until_tf_ready": _perform(
                             context, "ab3dmot_defer_until_tf_ready"
@@ -394,6 +406,21 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "ab3dmot_max_pending_detections", default_value="8"
             ),
+            DeclareLaunchArgument(
+                "ab3dmot_state_estimator",
+                default_value="linear_kf",
+                description=(
+                    "Opt-in AB3DMOT estimator selector; the study launch "
+                    "uses only linear_kf or the checkpoint-required kalmannet"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_kalmannet_checkpoint", default_value=""
+            ),
+            DeclareLaunchArgument(
+                "ab3dmot_kalmannet_device", default_value="cpu"
+            ),
+            DeclareLaunchArgument("ab3dmot_root", default_value=""),
             DeclareLaunchArgument(
                 "dynamic_object_risk",
                 default_value="false",
