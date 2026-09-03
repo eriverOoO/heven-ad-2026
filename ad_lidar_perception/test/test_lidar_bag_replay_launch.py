@@ -86,6 +86,10 @@ def launch_context(bag, **overrides):
         "ab3dmot_defer_until_tf_ready": "true",
         "ab3dmot_max_tf_wait_ms": "500",
         "ab3dmot_max_pending_detections": "8",
+        "ab3dmot_state_estimator": "linear_kf",
+        "ab3dmot_kalmannet_checkpoint": "",
+        "ab3dmot_kalmannet_device": "cpu",
+        "ab3dmot_root": "",
     }
     values.update({name: str(value) for name, value in overrides.items()})
     context = LaunchContext()
@@ -155,6 +159,10 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "ab3dmot_defer_until_tf_ready",
         "ab3dmot_max_tf_wait_ms",
         "ab3dmot_max_pending_detections",
+        "ab3dmot_state_estimator",
+        "ab3dmot_kalmannet_checkpoint",
+        "ab3dmot_kalmannet_device",
+        "ab3dmot_root",
     }
     assert arguments["bag_path"] is None
     context = LaunchContext()
@@ -197,6 +205,10 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "ab3dmot_defer_until_tf_ready": "true",
         "ab3dmot_max_tf_wait_ms": "500",
         "ab3dmot_max_pending_detections": "8",
+        "ab3dmot_state_estimator": "linear_kf",
+        "ab3dmot_kalmannet_checkpoint": "",
+        "ab3dmot_kalmannet_device": "cpu",
+        "ab3dmot_root": "",
     }
 
 
@@ -407,6 +419,10 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
         "ab3dmot_defer_until_tf_ready": "true",
         "ab3dmot_max_tf_wait_ms": "500",
         "ab3dmot_max_pending_detections": "8",
+        "ab3dmot_state_estimator": "linear_kf",
+        "ab3dmot_kalmannet_checkpoint": "",
+        "ab3dmot_kalmannet_device": "cpu",
+        "ab3dmot_root": "",
     }
 
     timer = scoped[3]

@@ -510,6 +510,10 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "ab3dmot_defer_until_tf_ready",
         "ab3dmot_max_tf_wait_ms",
         "ab3dmot_max_pending_detections",
+        "ab3dmot_state_estimator",
+        "ab3dmot_kalmannet_checkpoint",
+        "ab3dmot_kalmannet_device",
+        "ab3dmot_root",
     }
     default_context = LaunchContext()
     assert perform_substitutions(
@@ -658,6 +662,9 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
         "defer_until_tf_ready": "true",
         "max_tf_wait_ms": "500",
         "max_pending_detections": "8",
+        "kalmannet_checkpoint": "",
+        "kalmannet_device": "cpu",
+        "ab3dmot_root": arguments["ab3dmot_root"],
     }
     assert arguments["config_path"].endswith(
         "config/tracking/competition_mot_baseline_v1.yaml"
@@ -696,13 +703,19 @@ def test_dynamic_object_risk_is_opt_in_and_backend_agnostic(tmp_path, monkeypatc
         )
 
 
-def test_ab3dmot_override_rejects_non_euclidean_detector(tmp_path, monkeypatch):
+def test_ab3dmot_override_supports_centerpoint_on_the_same_canonical_contract(tmp_path, monkeypatch):
     config = write_composition(
         tmp_path,
         composition_text(detector="centerpoint", tracker="autoware"),
     )
-    with pytest.raises(RuntimeError, match="adaptive Euclidean"):
-        record_setup(monkeypatch, config, tracker_backend="ab3dmot")
+    _module, actions = record_setup(
+        monkeypatch, config, tracker_backend="ab3dmot",
+        detector_backend="centerpoint", start_ground_segmentation="false",
+    )
+    names = [action.source for action in actions]
+    assert "centerpoint_detector.launch.py" in names
+    assert names.count("ab3dmot_tracker.launch.py") == 1
+    assert names.count("prediction.launch.py") == 1
 
 
 def test_euclidean_cluster_leaf_receives_optional_stage_toggles(
