@@ -48,8 +48,17 @@ constexpr std::size_t kMaximumSweepSamplesPerObject = 2048U;
 // Per-frame diagnostics for the optional predicted-trajectory sweep.
 struct FutureSweepStats
 {
+  // Physical predicted objects whose full future sweep was rasterized.
   std::size_t objects_with_future{0U};
+  // Physical predicted objects whose future sweep could not be expanded into a
+  // bounded interpolation (degenerate spacing / sample budget / overflow) and
+  // fell back to their current footprint.
   std::size_t objects_skipped{0U};
+  // Physical predicted objects whose future sweep was dropped by the per-object
+  // cell budget (an individual swept footprint over maximum_cells_per_object, or
+  // the group's total grid-clipped candidate-cell work over one full grid) and
+  // fell back to their (in-budget) current footprint.
+  std::size_t budget_capped{0U};
   std::int64_t max_horizon_ns{0};
 };
 
@@ -460,40 +469,49 @@ private:
         last_swept_horizon = horizon;
       }
 
-      // OccupancyGrid has no time axis. With the sweep disabled the object
-      // contributes only its current footprint; the planner consumes the
-      // original time-indexed prediction for swept collision checks. With the
-      // sweep enabled the current + in-horizon predicted footprints are
-      // expanded into a gap-free swept region.
+      // OccupancyGrid has no time axis. Sweep disabled or no in-horizon future
+      // state: the object contributes only its current footprint, byte-identical
+      // to the pre-sweep path (the planner consumes the original time-indexed
+      // prediction for swept collision checks).
       if (!future_sweep_enabled_ || footprints.size() == 1U) {
         boxes.push_back(std::move(footprints.front()));
         continue;
       }
 
-      try {
-        auto swept = sweep_object_footprints(
-          footprints, geometry_.resolution_m, kMaximumSweepSamplesPerObject);
-        if (swept.size() > boxes.max_size() - boxes.size()) {
-          throw std::length_error("swept footprint set is not representable");
+      // Otherwise budget this object's whole future sweep as one group. The
+      // result is either the full gap-free sweep or -- when the object is
+      // oversized, its expansion is unbounded, or the swept group exceeds the
+      // per-object cell budget -- just the current footprint. Never a
+      // partial sweep, so build_dynamic_grid's per-object skip counter stays
+      // one-per-physical-object.
+      SweepOutcome outcome = SweepOutcome::kFullSweep;
+      auto group = budget_object_sweep(
+        geometry_, footprints, config_, kMaximumSweepSamplesPerObject,
+        &outcome);
+      if (group.size() > boxes.max_size() - boxes.size()) {
+        throw std::length_error("swept footprint set is not representable");
+      }
+      if (sweep_stats != nullptr) {
+        switch (outcome) {
+          case SweepOutcome::kFullSweep:
+            ++sweep_stats->objects_with_future;
+            sweep_stats->max_horizon_ns =
+              std::max(sweep_stats->max_horizon_ns, last_swept_horizon);
+            break;
+          case SweepOutcome::kBudgetCapped:
+            ++sweep_stats->budget_capped;
+            break;
+          case SweepOutcome::kExpansionFailed:
+            ++sweep_stats->objects_skipped;
+            break;
+          case SweepOutcome::kCurrentOversized:
+            // build_dynamic_grid skip-counts this object's single current
+            // footprint; no separate future-sweep counter.
+            break;
         }
-        if (sweep_stats != nullptr) {
-          ++sweep_stats->objects_with_future;
-          sweep_stats->max_horizon_ns =
-            std::max(sweep_stats->max_horizon_ns, last_swept_horizon);
-        }
-        for (auto & swept_box : swept) {
-          boxes.push_back(std::move(swept_box));
-        }
-      } catch (const std::exception &) {
-        // The predicted trajectory could not be expanded into a bounded sweep
-        // (degenerate spacing, sample budget, interpolation overflow): fall
-        // back to this object's current footprint, leaving the rest of the
-        // frame unaffected. Malformed message content already threw above and
-        // remains the caller's fail-safe-clear concern.
-        boxes.push_back(std::move(footprints.front()));
-        if (sweep_stats != nullptr) {
-          ++sweep_stats->objects_skipped;
-        }
+      }
+      for (auto & grouped_box : group) {
+        boxes.push_back(std::move(grouped_box));
       }
     }
     return boxes;
@@ -629,14 +647,17 @@ private:
       const auto boxes = boxes_from_message(input, transform, &sweep_stats);
       objects_with_future_sweep_ += sweep_stats.objects_with_future;
       future_sweep_object_skips_ += sweep_stats.objects_skipped;
+      future_sweep_budget_capped_ += sweep_stats.budget_capped;
       max_future_sweep_horizon_ns_ =
         std::max(max_future_sweep_horizon_ns_, sweep_stats.max_horizon_ns);
-      if (sweep_stats.objects_skipped > 0U) {
+      if (sweep_stats.objects_skipped > 0U || sweep_stats.budget_capped > 0U) {
         RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 2000,
-          "%zu predicted object(s) this frame fell back to their current "
-          "footprint: future-sweep expansion exceeded its bounds",
-          sweep_stats.objects_skipped);
+          "%zu predicted object(s) this frame kept only their current "
+          "footprint: %zu future-sweep expansion failure(s), %zu over the "
+          "per-object sweep cell budget",
+          sweep_stats.objects_skipped + sweep_stats.budget_capped,
+          sweep_stats.objects_skipped, sweep_stats.budget_capped);
       }
       std::vector<std::int8_t> data;
       std::size_t oversized_skipped = 0U;
@@ -704,12 +725,13 @@ private:
       "empty_grids=%zu nonempty_grids=%zu oversized_objects_skipped=%zu "
       "frames_with_oversized_skip=%zu future_sweep=%s "
       "future_sweep_objects=%zu future_sweep_skips=%zu "
+      "future_sweep_budget_capped=%zu "
       "max_future_sweep_horizon_ms=%.1f median_step_ms=%.6f "
       "p95_step_ms=%.6f max_step_ms=%.6f",
       count, predicted_objects_, empty_grids_, nonempty_grids_,
       oversized_objects_skipped_, frames_with_oversized_skip_,
       future_sweep_enabled_ ? "on" : "off", objects_with_future_sweep_,
-      future_sweep_object_skips_,
+      future_sweep_object_skips_, future_sweep_budget_capped_,
       static_cast<double>(max_future_sweep_horizon_ns_) / 1.0e6, median,
       ordered[p95_index], ordered.back());
   }
@@ -805,6 +827,7 @@ private:
   std::int64_t future_sweep_horizon_ns_{0};
   std::size_t objects_with_future_sweep_{0U};
   std::size_t future_sweep_object_skips_{0U};
+  std::size_t future_sweep_budget_capped_{0U};
   std::int64_t max_future_sweep_horizon_ns_{0};
   std::vector<double> step_latency_ms_;
 };

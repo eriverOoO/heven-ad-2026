@@ -180,7 +180,117 @@ std::size_t clipped_max_index(
     static_cast<std::size_t>(std::floor((coordinate - grid_min) / resolution)));
 }
 
+// The grid-clipped inflated bounding box of one footprint plus the rotation
+// terms the SAT rasterization needs. off_grid is set when the footprint lies
+// entirely outside the grid; the index fields are then unspecified.
+struct FootprintExtent
+{
+  bool off_grid{true};
+  double cosine{1.0};
+  double sine{0.0};
+  double half_length{0.0};
+  double half_width{0.0};
+  std::size_t minimum_x{0U};
+  std::size_t maximum_x{0U};
+  std::size_t minimum_y{0U};
+  std::size_t maximum_y{0U};
+};
+
+FootprintExtent footprint_extent(
+  const GridGeometry & geometry, const DynamicBox & object,
+  const DynamicGridConfig & config)
+{
+  validate_object(object);
+  const double maximum_eigenvalue = maximum_covariance_eigenvalue(object);
+  const double covariance_inflation =
+    config.covariance_sigma * std::sqrt(maximum_eigenvalue);
+  if (!std::isfinite(covariance_inflation)) {
+    throw std::invalid_argument("dynamic-object covariance inflation overflowed");
+  }
+  const double inflation =
+    std::max(config.minimum_inflation_m, covariance_inflation);
+
+  FootprintExtent extent;
+  extent.half_length = object.length_m * 0.5 + inflation;
+  extent.half_width = object.width_m * 0.5 + inflation;
+  extent.cosine = std::cos(object.yaw_rad);
+  extent.sine = std::sin(object.yaw_rad);
+  const double extent_x =
+    std::abs(extent.cosine) * extent.half_length +
+    std::abs(extent.sine) * extent.half_width;
+  const double extent_y =
+    std::abs(extent.sine) * extent.half_length +
+    std::abs(extent.cosine) * extent.half_width;
+  if (!std::isfinite(extent.half_length) || !std::isfinite(extent.half_width) ||
+    !std::isfinite(extent_x) || !std::isfinite(extent_y))
+  {
+    throw std::invalid_argument("dynamic-object footprint overflowed");
+  }
+
+  const double grid_x_max = geometry.x_min_m +
+    geometry.resolution_m * static_cast<double>(geometry.width);
+  const double grid_y_max = geometry.y_min_m +
+    geometry.resolution_m * static_cast<double>(geometry.height);
+  const double object_x_min = object.x_m - extent_x;
+  const double object_x_max = object.x_m + extent_x;
+  const double object_y_min = object.y_m - extent_y;
+  const double object_y_max = object.y_m + extent_y;
+  if (!std::isfinite(object_x_min) || !std::isfinite(object_x_max) ||
+    !std::isfinite(object_y_min) || !std::isfinite(object_y_max))
+  {
+    throw std::invalid_argument("dynamic-object bounds overflowed");
+  }
+  if (object_x_max < geometry.x_min_m || object_x_min > grid_x_max ||
+    object_y_max < geometry.y_min_m || object_y_min > grid_y_max)
+  {
+    return extent;
+  }
+
+  extent.off_grid = false;
+  extent.minimum_x = clipped_min_index(
+    object_x_min, geometry.x_min_m, grid_x_max,
+    geometry.resolution_m, geometry.width);
+  extent.maximum_x = clipped_max_index(
+    object_x_max, geometry.x_min_m, grid_x_max,
+    geometry.resolution_m, geometry.width);
+  extent.minimum_y = clipped_min_index(
+    object_y_min, geometry.y_min_m, grid_y_max,
+    geometry.resolution_m, geometry.height);
+  extent.maximum_y = clipped_max_index(
+    object_y_max, geometry.y_min_m, grid_y_max,
+    geometry.resolution_m, geometry.height);
+  return extent;
+}
+
+// Grid-clipped candidate cell count for an on-grid footprint extent, saturating
+// to size_t max on overflow so a budget comparison still rejects it (this
+// reproduces the builder's original width > budget/height overflow guard).
+std::size_t candidate_cell_count(const FootprintExtent & extent)
+{
+  const std::size_t candidate_width = extent.maximum_x - extent.minimum_x + 1U;
+  const std::size_t candidate_height = extent.maximum_y - extent.minimum_y + 1U;
+  if (candidate_width >
+    std::numeric_limits<std::size_t>::max() / candidate_height)
+  {
+    return std::numeric_limits<std::size_t>::max();
+  }
+  return candidate_width * candidate_height;
+}
+
 }  // namespace
+
+std::size_t footprint_candidate_cells(
+  const GridGeometry & geometry, const DynamicBox & footprint,
+  const DynamicGridConfig & config)
+{
+  validate_geometry(geometry);
+  validate_config(config);
+  const auto extent = footprint_extent(geometry, footprint, config);
+  if (extent.off_grid) {
+    return 0U;
+  }
+  return candidate_cell_count(extent);
+}
 
 std::vector<DynamicBox> interpolate_dynamic_trajectory(
   const std::vector<DynamicBox> & keyframes,
@@ -314,6 +424,75 @@ std::vector<DynamicBox> sweep_object_footprints(
     footprints, spacing, maximum_output_samples);
 }
 
+std::vector<DynamicBox> budget_object_sweep(
+  const GridGeometry & geometry,
+  const std::vector<DynamicBox> & footprints,
+  const DynamicGridConfig & config,
+  const std::size_t maximum_sweep_samples,
+  SweepOutcome * const outcome)
+{
+  validate_geometry(geometry);
+  validate_config(config);
+  if (footprints.size() < 2U) {
+    throw std::invalid_argument(
+            "budget_object_sweep needs a current footprint and >= 1 keyframe");
+  }
+  const auto set_outcome = [outcome](const SweepOutcome value) {
+      if (outcome != nullptr) {
+        *outcome = value;
+      }
+      return value;
+    };
+
+  std::vector<DynamicBox> current_only{footprints.front()};
+
+  // The current footprint is kept verbatim. When its own inflated bounding box
+  // already exceeds the per-object budget the object is oversized in the
+  // pre-sweep sense: keep only that footprint (build_dynamic_grid skip-counts
+  // it once) and never expand an already-pathological footprint.
+  if (footprint_candidate_cells(geometry, footprints.front(), config) >
+    config.maximum_cells_per_object)
+  {
+    set_outcome(SweepOutcome::kCurrentOversized);
+    return current_only;
+  }
+
+  std::vector<DynamicBox> swept;
+  try {
+    swept = sweep_object_footprints(
+      footprints, geometry.resolution_m, maximum_sweep_samples);
+  } catch (const std::exception &) {
+    // Degenerate spacing / sample budget / interpolation overflow / a malformed
+    // future keyframe: drop the future expansion, keep the current footprint.
+    set_outcome(SweepOutcome::kExpansionFailed);
+    return current_only;
+  }
+
+  // Budget the swept group as one object: no individual swept footprint may
+  // exceed the per-object cell budget (so build_dynamic_grid never skip-counts
+  // a sweep footprint), and the group's total grid-clipped candidate-cell
+  // rasterization work may not exceed one full grid. Failing either check drops
+  // the whole future expansion -- deterministic and all-or-nothing.
+  const std::size_t grid_cell_budget = geometry.width * geometry.height;
+  std::size_t group_candidate_cells = 0U;
+  for (const auto & swept_box : swept) {
+    const std::size_t cells =
+      footprint_candidate_cells(geometry, swept_box, config);
+    if (cells > config.maximum_cells_per_object) {
+      set_outcome(SweepOutcome::kBudgetCapped);
+      return current_only;
+    }
+    group_candidate_cells += cells;
+    if (group_candidate_cells > grid_cell_budget) {
+      set_outcome(SweepOutcome::kBudgetCapped);
+      return current_only;
+    }
+  }
+
+  set_outcome(SweepOutcome::kFullSweep);
+  return swept;
+}
+
 std::vector<std::int8_t> build_dynamic_grid_impl(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,
@@ -342,75 +521,32 @@ std::vector<std::int8_t> build_dynamic_grid_impl(
   }
 
   std::vector<std::int8_t> grid(cell_count, 0);
-  const double grid_x_max =
-    geometry.x_min_m + geometry.resolution_m * static_cast<double>(geometry.width);
-  const double grid_y_max =
-    geometry.y_min_m + geometry.resolution_m * static_cast<double>(geometry.height);
   const double cell_half = geometry.resolution_m * 0.5;
 
   for (const auto & object : objects) {
-    validate_object(object);
-    const double maximum_eigenvalue = maximum_covariance_eigenvalue(object);
-    const double covariance_inflation =
-      config.covariance_sigma * std::sqrt(maximum_eigenvalue);
-    if (!std::isfinite(covariance_inflation)) {
-      throw std::invalid_argument("dynamic-object covariance inflation overflowed");
-    }
-    const double inflation =
-      std::max(config.minimum_inflation_m, covariance_inflation);
-    const double half_length = object.length_m * 0.5 + inflation;
-    const double half_width = object.width_m * 0.5 + inflation;
-    const double cosine = std::cos(object.yaw_rad);
-    const double sine = std::sin(object.yaw_rad);
-    const double extent_x =
-      std::abs(cosine) * half_length + std::abs(sine) * half_width;
-    const double extent_y =
-      std::abs(sine) * half_length + std::abs(cosine) * half_width;
-    if (!std::isfinite(half_length) || !std::isfinite(half_width) ||
-      !std::isfinite(extent_x) || !std::isfinite(extent_y))
-    {
-      throw std::invalid_argument("dynamic-object footprint overflowed");
-    }
-
-    const double object_x_min = object.x_m - extent_x;
-    const double object_x_max = object.x_m + extent_x;
-    const double object_y_min = object.y_m - extent_y;
-    const double object_y_max = object.y_m + extent_y;
-    if (!std::isfinite(object_x_min) || !std::isfinite(object_x_max) ||
-      !std::isfinite(object_y_min) || !std::isfinite(object_y_max))
-    {
-      throw std::invalid_argument("dynamic-object bounds overflowed");
-    }
-    if (object_x_max < geometry.x_min_m || object_x_min > grid_x_max ||
-      object_y_max < geometry.y_min_m || object_y_min > grid_y_max)
-    {
+    const auto extent = footprint_extent(geometry, object, config);
+    if (extent.off_grid) {
       continue;
     }
-
-    const std::size_t minimum_x = clipped_min_index(
-      object_x_min, geometry.x_min_m, grid_x_max,
-      geometry.resolution_m, geometry.width);
-    const std::size_t maximum_x = clipped_max_index(
-      object_x_max, geometry.x_min_m, grid_x_max,
-      geometry.resolution_m, geometry.width);
-    const std::size_t minimum_y = clipped_min_index(
-      object_y_min, geometry.y_min_m, grid_y_max,
-      geometry.resolution_m, geometry.height);
-    const std::size_t maximum_y = clipped_max_index(
-      object_y_max, geometry.y_min_m, grid_y_max,
-      geometry.resolution_m, geometry.height);
+    const double cosine = extent.cosine;
+    const double sine = extent.sine;
+    const double half_length = extent.half_length;
+    const double half_width = extent.half_width;
+    const std::size_t minimum_x = extent.minimum_x;
+    const std::size_t maximum_x = extent.maximum_x;
+    const std::size_t minimum_y = extent.minimum_y;
+    const std::size_t maximum_y = extent.maximum_y;
     // A single object whose grid-clipped inflated footprint would exceed the
     // per-object cell budget is skipped, not fatal: one pathologically
     // uncertain or coarse object must not erase every other valid object in
     // the frame. Per-object rasterization work stays bounded by this same
-    // budget, so total per-frame work is unchanged.
-    const std::size_t candidate_width = maximum_x - minimum_x + 1U;
-    const std::size_t candidate_height = maximum_y - minimum_y + 1U;
-    const bool exceeds_row_budget = candidate_width >
-      config.maximum_cells_per_object / candidate_height;
-    if (exceeds_row_budget ||
-      candidate_width * candidate_height > config.maximum_cells_per_object)
-    {
+    // budget, so total per-frame work is unchanged. After Future Sweep v1 the
+    // dynamic-occupancy node budgets a predicted object's whole swept
+    // footprint group up front (using footprint_candidate_cells) so anything
+    // reaching this loop from the sweep path already fits; the only footprints
+    // this guard now skips are the single current footprint of a genuinely
+    // oversized predicted object, keeping the counter one-per-object.
+    if (candidate_cell_count(extent) > config.maximum_cells_per_object) {
       if (oversized_objects_skipped != nullptr) {
         ++*oversized_objects_skipped;
       }

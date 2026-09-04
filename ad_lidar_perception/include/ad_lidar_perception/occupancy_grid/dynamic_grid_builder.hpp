@@ -59,6 +59,60 @@ std::vector<DynamicBox> sweep_object_footprints(
   double grid_resolution_m,
   std::size_t maximum_output_samples);
 
+// Why one physical predicted object's future sweep was or was not rasterized in
+// full. Reported by budget_object_sweep so the caller can keep per-object
+// diagnostics (oversized_objects_skipped stays one-per-object, not
+// one-per-temporal-footprint).
+enum class SweepOutcome
+{
+  // The full gap-free interpolated sweep is returned.
+  kFullSweep,
+  // The current footprint's own inflated bounding box already exceeds
+  // config.maximum_cells_per_object; only it is returned and build_dynamic_grid
+  // skip-counts it exactly once, exactly as in the pre-sweep path.
+  kCurrentOversized,
+  // A single swept footprint exceeds config.maximum_cells_per_object, or the
+  // swept group's total grid-clipped candidate-cell work exceeds one full grid.
+  // Only the (in-budget) current footprint is returned; the future expansion is
+  // dropped whole.
+  kBudgetCapped,
+  // sweep_object_footprints could not expand the trajectory into a bounded
+  // interpolation. Only the current footprint is returned.
+  kExpansionFailed,
+};
+
+// Budget one predicted object's future sweep as a single group. footprints[0]
+// is the object's current footprint; footprints[1..] are its in-horizon
+// predicted keyframes, already transformed into the grid frame and already
+// clipped to the caller's forward horizon (>= 2 entries). Returns the footprint
+// list to rasterize for this one object: the gap-free interpolated sweep when
+// it fits, otherwise just the current footprint. Never returns a
+// partially-rasterized sweep. *outcome, when not null, receives which case
+// applied. Throws exactly as footprint_candidate_cells / sweep_object_footprints
+// do on a malformed current footprint (the caller's fail-safe-clear concern);
+// a malformed *future* keyframe instead yields kExpansionFailed.
+std::vector<DynamicBox> budget_object_sweep(
+  const GridGeometry & geometry,
+  const std::vector<DynamicBox> & footprints,
+  const DynamicGridConfig & config,
+  std::size_t maximum_sweep_samples,
+  SweepOutcome * outcome = nullptr);
+
+// The grid-clipped, uncertainty-inflated bounding-box cell count of one
+// footprint -- the quantity config.maximum_cells_per_object is checked against.
+// Returns 0 when the inflated footprint lies entirely outside the grid (the
+// builder skips such a footprint before the budget check), and
+// std::numeric_limits<std::size_t>::max() when the clipped width x height would
+// overflow. Throws exactly as the builder's per-object prologue does on a
+// malformed footprint (non-finite fields, non-positive dimensions,
+// non-positive-semidefinite covariance, overflowed inflation/extent). The
+// dynamic-occupancy node uses this to budget a predicted object's whole future
+// sweep as one group before flattening it into individual footprints.
+std::size_t footprint_candidate_cells(
+  const GridGeometry & geometry,
+  const DynamicBox & footprint,
+  const DynamicGridConfig & config);
+
 // A single predicted object whose grid-clipped, uncertainty-inflated footprint
 // would exceed config.maximum_cells_per_object is skipped (not rasterized)
 // rather than aborting the whole grid. When oversized_objects_skipped is not
