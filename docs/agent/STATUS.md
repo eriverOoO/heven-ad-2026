@@ -1,5 +1,105 @@
 # STATUS
 
+## Prediction yaw-rate source launch propagation — FIXED (plumbing + regression + integration)
+
+Branch `fix/prediction-yaw-rate-launch-propagation`, from `origin/main` `bcb2e6b`
+(merge of PR #42 `feat(occupancy): sweep predicted object trajectories`).
+**Launch-wiring + tests only. No change to the prediction estimator, IMM,
+motion-history yaw-rate math, probabilities, horizons, AB3DMOT, KalmanNet,
+CenterPoint, Hungarian, lifecycle, Dynamic OGM geometry, or any production
+default. `config/tracking/prediction.yaml` is byte-unchanged.**
+
+**Bug (reproduced at the `rcl` level before any edit).**
+`study_pipeline_rviz` → `lidar_bag_replay` → `lidar_perception` →
+`prediction.launch.py` with `prediction_yaw_rate_source:=motion_history` left
+the prediction node running on `yaw_rate_source = tracker`
+(AB3DMOT `twist.angular.z ≡ 0` → IMM yaw rate 0 → straight predictions).
+`prediction.launch.py` passed `parameters=[prediction.yaml, {override_dict}]`
+as two `--params-file` arguments. Standalone this is fine (later file wins).
+But `lidar_bag_replay.launch.py` wraps its perception include in a
+`GroupAction(scoped=True, [SetParameter(name="use_sim_time", …), …])`, and
+`launch_ros` emits that `SetParameter` as a **leading `-p use_sim_time:=True`**
+on the node command line. Direct `ros2 run` probes:
+`--params-file A(ad_autoware_prediction: tracker) --params-file B(/**: motion_history)`
+→ `motion_history` (correct); prepend `-p use_sim_time:=True` → `tracker`.
+With any `-p` present, `rcl` lets the more-specific node-name YAML section beat
+the later `/**` wildcard override. `runtime_summary_interval_frames` (not in the
+YAML) was unaffected, which is why the bug hid behind the interface-forwarding
+tests. Not scoping, not `SetParameter` semantics — an `rcl` arg-ordering quirk.
+
+**Fix.** `prediction.launch.py` now reads `prediction.yaml` in Python
+(`OpaqueFunction`), overlays the two launch-controlled keys (`yaw_rate_source`,
+`runtime_summary_interval_frames`), and passes ONE merged dict to `Node`. Same
+pattern, and same rationale, as `ad_planner/launch/road_corridor_mask.launch.py`
+(documented there as an `rcl_yaml_param_parser` two-file merge race). The node's
+`declare_parameter("yaw_rate_source", "tracker")` default is untouched; the
+launch `DeclareLaunchArgument` default stays `tracker`. Full `ros2 param dump`
+of the merged path is byte-identical to the old two-file path for the default
+(all 20 params incl. nested `imm.*`, `motion_history.*`, `horizons_s`).
+
+**Source of truth (coherent, post-fix):** `prediction.yaml` keeps
+`yaw_rate_source: tracker` as the documented default alongside its
+tracker-vs-motion_history comment and the `motion_history:` sub-tree; the launch
+merge makes the launch argument authoritative over it at run time, with no
+competing second params file at the node.
+
+**Regression tests.** New `test/test_prediction_launch.py` (`add_launch_test`,
+`ROS_DOMAIN_ID=95`) launches 4 real prediction nodes and reads the **runtime**
+parameter (`ros2 param get`): (A) plain include default → `tracker`; (B) plain
+include `yaw_rate_source:=motion_history` → `motion_history`; (C) `SetParameter`
++ `scoped=True` group, default → `tracker`; (D) same group + override →
+`motion_history` (the exact pre-fix failure); (E) nested `imm.*` /
+`motion_history.*` / `expected_frame_id` / `runtime_summary_interval_frames`
+all survive the Python merge. Interface-level forwarding of a `motion_history`
+override added to `test_lidar_perception_launch.py` (autoware + ab3dmot),
+`test_lidar_bag_replay_launch.py`, `test_study_pipeline_rviz_launch.py`.
+**Launch pytest 121 → 123 pass; `test_prediction_launch` 6/6
+(5 runtime + shutdown); `test_imm_predictor` / `test_autoware_prediction_adapter`
+unchanged. `colcon build --packages-select ad_lidar_perception` clean;
+`git diff --check` clean; `pyflakes`/`py_compile` clean on the new files.**
+
+**Full-pipeline integration (`morai_cam4_20260813_163222`, Pipeline A,
+`study_pipeline_rviz` … `prediction_yaw_rate_source:=motion_history
+use_predicted_future_sweep:=true future_sweep_horizon_s:=3.0`, `rate:=0.5`,
+~120 s window, 17 processes, 0 crashes / 0 NaN / 0 died).**
+
+| check | result |
+| --- | --- |
+| A. prediction node runtime param (parameter service) | `yaw_rate_source = motion_history` (was `tracker`) |
+| B. `prediction_debug` `yaw_rate_source_used` | `motion_history` 1978 / `tracker` **0** / `tracker_fallback` 6459 (n=8437 object-frames) — zero `tracker` = node is in motion-history mode |
+| C. IMM `selected_mode` | stationary 4639 / constant_velocity 2669 / **coordinated_turn 1129**; CT probability p90 0.68 / p99 0.99 / max 1.00 |
+| D. predicted-trajectory curvature | `nonzero_wz` 2078 / 8434 obj-frames; `curved` 1518; heading-change over horizon p90 0.35 rad / p99 3.9 rad |
+| E. Dynamic OGM | `future_sweep=on future_sweep_objects=9011 future_sweep_skips=0 max_future_sweep_horizon_ms=3000.0` |
+| F. curved states consumed by OGM | `future_sweep_objects == predicted_objects` every summary; per-state predicted orientation is what `boxes_from_message` sweeps (code path + unit tests C/D) |
+
+Representative **curved** track: speed 6.63 m/s, `wz` −0.60 rad/s (IMM CT,
+monotone), signed predicted heading change −3.73 rad over the 12-state (6 s)
+horizon (−214°); a slower one clamps at `wz` ≈ −1.35 (the audited `max_yaw_rate_radps` 1.5).
+Representative **straight** track: speed 23.5 m/s, `wz` 0.000 rad/s, signed
+predicted heading change 0.000 rad — the fix does **not** push straight objects
+into CT. Prediction step latency median 0.34 ms / p95 0.70 ms, `rejected=0`.
+`oversized_objects_skipped` is high (the **PR #42** per-`DynamicBox`
+`maximum_cells_per_object` interaction — explicitly out of scope here,
+`future_sweep_skips=0` throughout); OGM step latency stayed well under the
+0.5 s `prediction_timeout_sec`. RViz not opened (no screenshot capability,
+documented precedent) — verified from message + log content.
+
+**Files:** `ad_lidar_perception/launch/prediction.launch.py`,
+`ad_lidar_perception/CMakeLists.txt`,
+`ad_lidar_perception/test/{test_prediction_launch.py (new),
+test_lidar_perception_launch.py,test_lidar_bag_replay_launch.py,
+test_study_pipeline_rviz_launch.py}`,
+`docs/perception/dynamic_ogm_future_sweep_v1.md` (bug section updated), this
+file. No `.cpp`/`.hpp`/`.yaml` change.
+
+**Recommended next task:** now that the integrated chain (motion-history yaw
+rate → curved IMM prediction → curved swept Dynamic OGM) is proven end-to-end
+through the real nested launch, evaluate/tune `future_sweep_horizon_s` against
+real planner interaction — feed the swept dynamic layer into a planner scenario
+and measure the extra longitudinal caution the 2–3 s curved tail induces vs.
+the current-footprint layer, and whether the per-`DynamicBox`
+`maximum_cells_per_object` budget should become per-object for swept groups.
+
 ## Dynamic OGM Future Sweep v1 — swept predicted-object occupancy — VALIDATED
 
 Branch `feat/dynamic-ogm-future-sweep-v1`, from merged PR #41 `f97ace0`
@@ -128,15 +228,12 @@ test_study_pipeline_rviz_launch.py}`,
 detector/association/estimator/prediction-algorithm/occupancy-math/planner/
 CenterPoint/KalmanNet file changed; no production launch default changed.
 
-**Follow-up carried out of this task (not done here):** fix the PR #41
-`prediction.yaml` `yaw_rate_source: tracker` plumbing bug so
-`prediction_yaw_rate_source:=motion_history` actually reaches the prediction
-node through the nested launches (repro:
-`study_pipeline_rviz.launch.py prediction_yaw_rate_source:=motion_history` →
-every `/ad/perception/objects/predicted` `initial_twist.twist.angular.z == 0`;
-direct `prediction.launch.py yaw_rate_source:=motion_history` works). Needs its
-own PR + a launch regression test; it changes a merged, separately-validated
-feature's behaviour.
+**Follow-up carried out of this task — DONE** in
+`fix/prediction-yaw-rate-launch-propagation` (see the entry above): the
+`prediction_yaw_rate_source` nested-launch propagation bug is fixed
+(Python-merge in `prediction.launch.py`, `test_prediction_launch.py` locks the
+runtime parameter), and the motion-history → curved-prediction → curved-swept-OGM
+chain is now proven end-to-end through the real `study_pipeline_rviz` launch.
 
 **Recommended next task:** either (A) evaluate/tune the future-sweep horizon
 against real planner interaction — feed the swept dynamic layer into a

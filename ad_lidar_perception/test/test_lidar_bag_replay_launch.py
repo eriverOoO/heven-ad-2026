@@ -466,6 +466,31 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
     )
 
 
+def test_prediction_yaw_rate_source_override_reaches_perception_include(
+    tmp_path, monkeypatch
+):
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    actions = record_setup(
+        module,
+        monkeypatch,
+        launch_context(bag, prediction_yaw_rate_source="motion_history"),
+    )
+    scoped = actions[0].kwargs["actions"]
+    perception = next(
+        a
+        for a in scoped
+        if getattr(a, "args", ())
+        == ("ad_lidar_perception/lidar_perception.launch.py",)
+    )
+    assert (
+        dict(perception.kwargs["launch_arguments"])[
+            "prediction_yaw_rate_source"
+        ]
+        == "motion_history"
+    )
+
+
 def test_centerpoint_replay_uses_cropped_only_detector_contract(
     tmp_path, monkeypatch
 ):

@@ -687,6 +687,31 @@ def test_explicit_ab3dmot_selection_is_single_canonical_tracker(
     }
 
 
+@pytest.mark.parametrize("backend", ["autoware", "ab3dmot"])
+def test_prediction_yaw_rate_source_override_is_forwarded(
+    tmp_path, monkeypatch, backend
+):
+    config = write_composition(
+        tmp_path,
+        composition_text(
+            detector="euclidean_cluster", tracker="autoware", dynamic=True
+        ),
+    )
+    _module, actions = record_setup(
+        monkeypatch,
+        config,
+        tracker_backend=backend,
+        prediction_yaw_rate_source="motion_history",
+    )
+    prediction = next(
+        action for action in actions if action.source == "prediction.launch.py"
+    )
+    assert (
+        dict(prediction.kwargs["launch_arguments"])["yaw_rate_source"]
+        == "motion_history"
+    )
+
+
 def test_dynamic_object_risk_is_opt_in_and_backend_agnostic(tmp_path, monkeypatch):
     config = write_composition(
         tmp_path,

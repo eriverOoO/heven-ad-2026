@@ -524,6 +524,15 @@ if(BUILD_TESTING)
       "RCUTILS_LOGGING_BUFFERED_STREAM=1"
       "ROS_DOMAIN_ID=94"
       "ROS_LOCALHOST_ONLY=1")
+  add_launch_test(
+    test/test_prediction_launch.py
+    TARGET test_prediction_launch
+    TIMEOUT 150
+    ENV
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1"
+      "RCUTILS_LOGGING_BUFFERED_STREAM=1"
+      "ROS_DOMAIN_ID=95"
+      "ROS_LOCALHOST_ONLY=1")
   ament_add_pytest_test(
     test_lidar_bag_replay_launch test/test_lidar_bag_replay_launch.py)
   ament_add_pytest_test(
