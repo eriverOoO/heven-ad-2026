@@ -567,7 +567,20 @@ def apply_coordinate_transform(
     *first* sample -- never a mean/centroid over the whole segment, so no
     future information leaks into any timestep, including the first
     (``origin == gt_state[0, :2]`` by construction). ``origin_xy`` is
-    stored so the transform is always reversible."""
+    stored so the transform is always reversible.
+
+    **Transforms ``clean_position`` by the identical offset, not just
+    ``gt_state``.** ``clean_position`` and ``gt_state[:, :2]`` represent
+    the same physical position pre-transform (``Av2Segment.clean_arrays``
+    sets ``clean_position = pos_xy.copy()``); leaving ``clean_position``
+    untransformed here would silently put the exported ``measurement``
+    (built from ``clean_position`` by ``clean_measurement_arrays``) into
+    a DIFFERENT coordinate frame than ``gt_state`` -- found and fixed
+    during the KalmanNet training-entry-point task, when a real training
+    sequence's ``z_meas[0]`` was observed at the segment's own absolute
+    origin offset instead of ``[0, 0]``. Confirmed directly against a
+    real exported shard before this fix (``state_data[0] == [0, 0, ...]``
+    but ``measurement_data[0] == origin_xy``, not ``[0, 0]``)."""
 
     config.validate()
     out = dict(arrays)
@@ -577,6 +590,11 @@ def apply_coordinate_transform(
     gt_state[:, 1] -= origin_xy[1]
     out["gt_state"] = gt_state
     out["origin_xy"] = origin_xy
+    if "clean_position" in arrays:
+        clean_position = arrays["clean_position"].copy()
+        clean_position[:, 0] -= origin_xy[0]
+        clean_position[:, 1] -= origin_xy[1]
+        out["clean_position"] = clean_position
     return out
 
 
