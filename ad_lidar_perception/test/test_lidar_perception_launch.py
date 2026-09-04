@@ -320,7 +320,10 @@ def test_optional_branches_forward_only_their_owned_inputs(
         },
         "tracking.launch.py": {"selection_config": str(config)},
         "prediction.launch.py": {"yaw_rate_source": "tracker"},
-        "dynamic_occupancy_grid.launch.py": {},
+        "dynamic_occupancy_grid.launch.py": {
+            "use_predicted_future_sweep": "false",
+            "future_sweep_horizon_s": "3.0",
+        },
         "combined_occupancy_grid.launch.py": {},
     }
 
@@ -512,6 +515,8 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "ab3dmot_max_pending_detections",
         "ab3dmot_state_estimator",
         "prediction_yaw_rate_source",
+        "use_predicted_future_sweep",
+        "future_sweep_horizon_s",
         "ab3dmot_kalmannet_checkpoint",
         "ab3dmot_kalmannet_device",
         "ab3dmot_root",

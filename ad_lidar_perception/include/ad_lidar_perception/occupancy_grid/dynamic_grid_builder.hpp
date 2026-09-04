@@ -42,6 +42,23 @@ std::vector<DynamicBox> interpolate_dynamic_trajectory(
   double maximum_center_spacing_m,
   std::size_t maximum_output_samples);
 
+// Expand an ordered footprint sequence -- [current_footprint, future_footprint,
+// ...], already transformed into the grid frame and already clipped to the
+// caller's forward horizon -- into a gap-free sweep of footprints covering the
+// space the object is predicted to occupy up to that horizon. The centre
+// spacing is derived from the first footprint's own dimensions so a fast object
+// with sparse predicted keyframes still yields contiguous occupancy at the
+// given grid resolution; it never re-predicts motion. A single-footprint input
+// (stationary object, or no in-horizon future state) is returned unchanged, so
+// a stationary object can never sweep a larger area than its current footprint.
+// Delegates the actual interpolation to interpolate_dynamic_trajectory; throws
+// the same exceptions on non-finite geometry or on exceeding
+// maximum_output_samples, which the caller treats as a per-object fallback.
+std::vector<DynamicBox> sweep_object_footprints(
+  const std::vector<DynamicBox> & footprints,
+  double grid_resolution_m,
+  std::size_t maximum_output_samples);
+
 // A single predicted object whose grid-clipped, uncertainty-inflated footprint
 // would exceed config.maximum_cells_per_object is skipped (not rasterized)
 // rather than aborting the whole grid. When oversized_objects_skipped is not

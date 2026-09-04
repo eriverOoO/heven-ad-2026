@@ -25,6 +25,24 @@ def generate_launch_description():
                 "runtime_summary_interval_frames",
                 default_value="0",
             ),
+            DeclareLaunchArgument(
+                "use_predicted_future_sweep",
+                default_value="false",
+                description=(
+                    "Dynamic OGM Future Sweep v1: when true, the current plus "
+                    "in-horizon predicted footprints are swept into the "
+                    "dynamic grid. Default false reproduces prior behaviour."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "future_sweep_horizon_s",
+                default_value="3.0",
+                description=(
+                    "Forward horizon of the predicted-trajectory sweep in "
+                    "seconds; 0.0 also reproduces current-footprint-only "
+                    "behaviour."
+                ),
+            ),
             Node(
                 package="ad_lidar_perception",
                 executable="ad_dynamic_occupancy_grid_node",
@@ -42,6 +60,14 @@ def generate_launch_description():
                                 "runtime_summary_interval_frames"
                             ),
                             value_type=int,
+                        ),
+                        "use_predicted_future_sweep": ParameterValue(
+                            LaunchConfiguration("use_predicted_future_sweep"),
+                            value_type=bool,
+                        ),
+                        "future_sweep_horizon_s": ParameterValue(
+                            LaunchConfiguration("future_sweep_horizon_s"),
+                            value_type=float,
                         ),
                     },
                 ],

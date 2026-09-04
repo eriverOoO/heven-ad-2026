@@ -329,6 +329,12 @@ def _launch_setup(context):
             "prediction_yaw_rate_source": LaunchConfiguration(
                 "prediction_yaw_rate_source", default="tracker"
             ).perform(context),
+            "use_predicted_future_sweep": LaunchConfiguration(
+                "use_predicted_future_sweep", default="false"
+            ).perform(context),
+            "future_sweep_horizon_s": LaunchConfiguration(
+                "future_sweep_horizon_s", default="3.0"
+            ).perform(context),
             "ab3dmot_kalmannet_checkpoint": LaunchConfiguration(
                 "ab3dmot_kalmannet_checkpoint", default=""
             ).perform(context),
@@ -506,6 +512,12 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "prediction_yaw_rate_source", default_value="tracker"
+            ),
+            DeclareLaunchArgument(
+                "use_predicted_future_sweep", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "future_sweep_horizon_s", default_value="3.0"
             ),
             DeclareLaunchArgument(
                 "ab3dmot_kalmannet_checkpoint", default_value=""

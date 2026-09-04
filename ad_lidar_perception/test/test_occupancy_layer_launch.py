@@ -226,6 +226,8 @@ def _assert_leaf_launch_contracts():
     assert dynamic["parameters"][1].keys() == {
         "topics.drivable_mask",
         "runtime_summary_interval_frames",
+        "use_predicted_future_sweep",
+        "future_sweep_horizon_s",
     }
 
     combined = _record_leaf("combined_occupancy_grid.launch.py")
@@ -1000,6 +1002,47 @@ class TestOccupancyLayers(unittest.TestCase):
             nonintegral.stdout + nonintegral.stderr,
         )
 
+        # Dynamic OGM Future Sweep v1: an out-of-range horizon is rejected at
+        # construction; a valid opt-in configuration starts cleanly.
+        bad_horizon = subprocess.run(
+            [
+                str(executable),
+                "--ros-args",
+                "-p",
+                "use_predicted_future_sweep:=true",
+                "-p",
+                "future_sweep_horizon_s:=-1.0",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+        self.assertNotEqual(bad_horizon.returncode, 0)
+        self.assertIn(
+            "future_sweep_horizon_s must be in [0, 10]",
+            bad_horizon.stdout + bad_horizon.stderr,
+        )
+        try:
+            subprocess.run(
+                [
+                    str(executable),
+                    "--ros-args",
+                    "-p",
+                    "use_predicted_future_sweep:=true",
+                    "-p",
+                    "future_sweep_horizon_s:=3.0",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2.0,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+        else:
+            self.fail("future-sweep opt-in configuration failed to start")
+
         valid_stamp = driver.get_clock().now().nanoseconds
         driver.publish_transform(valid_stamp)
         driver.prediction_publisher.publish(_predicted_array(valid_stamp))
@@ -1025,6 +1068,9 @@ class TestOccupancyLayers(unittest.TestCase):
             if _stamp_ns(message) == valid_stamp
             and any(cell == 100 for cell in message.data)
         )
+        # Feature-disabled contract (Dynamic OGM Future Sweep v1, default off):
+        # future predicted states at x=3.0 / x=4.0 contribute no occupancy; only
+        # the current footprint at x=2.0 is rasterized.
         for x, expected_cost in ((2.0, 100), (3.0, 0), (4.0, 0)):
             grid_x = int(math.floor((x + 4.0) / 0.1))
             grid_y = int(math.floor(10.0 / 0.1))
