@@ -1,0 +1,12 @@
+# AV2 Motion Forecasting -> HEVEN KalmanNet adapter shard-size policy
+# (schema av2_kalmannet_shard_v1). Deterministic: the same set of scenario
+# ids + this config always produces the same shard grouping, regardless
+# of the order scenarios were listed/downloaded in.
+
+# Scenarios per shard. A shard never splits one scenario across two files.
+# 200 is derived from a REAL measurement of the Stage-0 sharded re-export
+# (41,559,248 bytes for 120 real scenarios in one shard -> ~366.7 KB/
+# scenario) -> 200 scenarios/shard lands each shard around ~73 MB, inside
+# the requested 50-100 MB target. Re-derive this if a future dataset's
+# per-scenario track density differs materially.
+scenarios_per_shard: 200

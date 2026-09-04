@@ -28,15 +28,20 @@ from ad_morai_bridge_dev.dataset.av2_motion_forecasting_adapter import (
     KNET_MEAS_DIM,
     KNET_STATE_DIM,
     NPZ_ARRAY_NAMES,
+    SHARD_FORMAT_VERSION,
+    Av2KalmanNetExporter,
     Av2ObjectStateRecord,
     Av2ScenarioRecord,
     Av2TrackRecord,
     CoordinateConfig,
     CorruptionConfig,
     SegmentConfig,
+    ShardConfig,
     apply_coordinate_transform,
     apply_corruption,
+    assign_scenarios_to_shards,
     check_scenario_split_leakage,
+    clean_measurement_arrays,
     coarse_object_type,
     extract_segments,
     npz_export_arrays,
@@ -681,12 +686,23 @@ def test_deterministic_export_fingerprint_and_real_exporter_flow(tmp_path, monke
     report = validate_export(tmp_path / "out1")
     assert report.ok, report.errors
     assert report.checked_segments == 2
+    assert report.checked_shards == 1
 
-    # a config change must change the fingerprint
+    # The canonical export is CLEAN-ONLY -- changing corruption_config must
+    # NOT change a single byte written to disk (corruption is a load-time
+    # transform, never materialized). Confirmed directly: identical
+    # fingerprint despite a materially different corruption_config.
     exporter3 = build_exporter(tmp_path / "out3")
     exporter3.corruption_config = CorruptionConfig(gaussian_noise_std_m=0.2, seed=123)
     result3 = exporter3.export()
-    assert result3.content_fingerprint != result1.content_fingerprint
+    assert result3.content_fingerprint == result1.content_fingerprint
+    assert result3.manifest["corruption_materialized"] is False
+
+    # A structural config change (segment policy) DOES change the fingerprint.
+    exporter4 = build_exporter(tmp_path / "out4")
+    exporter4.segment_config = SegmentConfig(min_gt_samples=2)
+    result4 = exporter4.export()
+    assert result4.content_fingerprint != result1.content_fingerprint
 
 
 def test_export_fails_closed_on_missing_marker(tmp_path):
@@ -695,6 +711,203 @@ def test_export_fails_closed_on_missing_marker(tmp_path):
     report = validate_export(empty_dir)
     assert not report.ok
     assert any("marker absent" in e for e in report.errors)
+
+
+# ==========================================================================
+# Sharding fix (fix/av2-kalmannet-sharding-v1): shard assignment, packing,
+# offsets, scenario manifest, validator failure modes.
+# ==========================================================================
+def _fixture_exporter(tmp_path, scenario_ids, monkeypatch, tracks_per_scenario=2, states_per_track=10, **kwargs):
+    """Builds a real Av2KalmanNetExporter wired to fixture scenarios via
+    monkeypatching load_av2_scenario_parquet (matches the existing fixture
+    pattern; uses pytest's ``monkeypatch`` so the override is automatically
+    reverted at the end of the test -- a plain module-attribute assignment
+    would leak across tests and poison the real-Stage-0 tests that run
+    later in the same session) -- returns (exporter, scenarios dict)."""
+    import ad_morai_bridge_dev.dataset.av2_motion_forecasting_adapter as adapter_mod
+
+    scenarios = {}
+    for sid in scenario_ids:
+        tracks = [
+            _straight_track(track_id=f"{sid}-t{i}", n=states_per_track, x0=float(i) * 50.0)
+            for i in range(tracks_per_scenario)
+        ]
+        scenarios[sid] = _scenario(tracks, scenario_id=sid)
+
+    def fake_loader(path: Path):
+        return scenarios[path.parent.name]
+
+    monkeypatch.setattr(adapter_mod, "load_av2_scenario_parquet", fake_loader)
+
+    raw_root = tmp_path / "raw"
+    for sid in scenario_ids:
+        d = raw_root / "train" / sid
+        d.mkdir(parents=True)
+        (d / f"scenario_{sid}.parquet").write_bytes(b"fixture")
+
+    defaults = dict(
+        input_root=raw_root, split="train", scenario_ids=list(scenario_ids),
+        segment_config=SegmentConfig(), coordinate_config=CoordinateConfig(),
+        corruption_config=CorruptionConfig(),
+        adapter_commit="test", scenario_manifest_provenance={"dataset_source": "argoverse2_motion_forecasting"},
+    )
+    defaults.update(kwargs)
+    exporter = Av2KalmanNetExporter(output_root=tmp_path / "out", **defaults)
+    return exporter, scenarios
+
+
+# A. multiple segments packed in one shard
+def test_A_multiple_segments_packed_in_one_shard(tmp_path, monkeypatch):
+    scenario_ids = [f"s{i:02d}" for i in range(6)]
+    exporter, _ = _fixture_exporter(tmp_path, scenario_ids, monkeypatch, tracks_per_scenario=3,
+                                     shard_config=ShardConfig(scenarios_per_shard=6))
+    result = exporter.export()
+    assert result.manifest["shard_count"] == 1  # all 6 scenarios (18 segments) fit in one shard
+    assert result.manifest["counts"]["segments_exported"] == 18
+    with np.load(tmp_path / "out" / "shards" / "shard_00000.npz", allow_pickle=False) as data:
+        assert len(data["segment_id"]) == 18
+
+
+# B. segment offsets
+def test_B_segment_offsets_are_monotonic_and_span_the_shard(tmp_path, monkeypatch):
+    scenario_ids = [f"s{i:02d}" for i in range(4)]
+    exporter, _ = _fixture_exporter(tmp_path, scenario_ids, monkeypatch, tracks_per_scenario=2, states_per_track=7,
+                                     shard_config=ShardConfig(scenarios_per_shard=4))
+    exporter.export()
+    with np.load(tmp_path / "out" / "shards" / "shard_00000.npz", allow_pickle=False) as data:
+        offsets = data["segment_offsets"]
+        assert offsets[0] == 0
+        assert offsets[-1] == data["timestamps_ns"].shape[0]
+        assert np.all(np.diff(offsets) == 7)  # every fixture segment has exactly 7 samples
+        assert len(offsets) == len(data["segment_id"]) + 1
+
+
+# E. scenario manifest records which scenarios are in which shard
+def test_E_shard_manifest_records_scenario_membership(tmp_path, monkeypatch):
+    scenario_ids = [f"s{i:02d}" for i in range(5)]
+    exporter, _ = _fixture_exporter(tmp_path, scenario_ids, monkeypatch, shard_config=ShardConfig(scenarios_per_shard=2))
+    exporter.export()
+    shard_manifest = json.loads((tmp_path / "out" / "shard_manifest.json").read_text("utf-8"))
+    assert shard_manifest["shard_count"] == 3  # ceil(5/2)
+    all_scenario_ids_seen = set()
+    for row in shard_manifest["shards"]:
+        all_scenario_ids_seen.update(row["scenario_ids"])
+        assert row["scenario_count"] == len(row["scenario_ids"])
+    assert all_scenario_ids_seen == set(scenario_ids)
+
+
+# F / H. deterministic shard assignment, independent of input traversal order
+def test_F_H_shard_assignment_is_deterministic_and_order_independent():
+    scenario_ids = [f"s{i:03d}" for i in range(37)]
+    config = ShardConfig(scenarios_per_shard=10)
+
+    groups_sorted_input = assign_scenarios_to_shards(sorted(scenario_ids), config)
+    groups_reversed_input = assign_scenarios_to_shards(list(reversed(scenario_ids)), config)
+    import random
+
+    shuffled = list(scenario_ids)
+    random.Random(7).shuffle(shuffled)
+    groups_shuffled_input = assign_scenarios_to_shards(shuffled, config)
+
+    assert groups_sorted_input == groups_reversed_input == groups_shuffled_input
+    assert sum(len(g) for g in groups_sorted_input) == len(scenario_ids)
+    # no scenario split across groups, no scenario duplicated
+    flat = [sid for g in groups_sorted_input for sid in g]
+    assert sorted(flat) == sorted(scenario_ids)
+    assert len(flat) == len(set(flat))
+
+
+def test_shard_assignment_rejects_duplicate_scenario_ids():
+    with pytest.raises(AdapterError):
+        assign_scenarios_to_shards(["a", "b", "a"], ShardConfig())
+
+
+# G. deterministic hashes (content fingerprint), independent of traversal order
+def test_G_deterministic_hashes_regardless_of_scenario_id_input_order(tmp_path, monkeypatch):
+    scenario_ids = [f"s{i:02d}" for i in range(6)]
+
+    exporter_a, _ = _fixture_exporter(tmp_path / "a", scenario_ids, monkeypatch,
+                                       shard_config=ShardConfig(scenarios_per_shard=3))
+    result_a = exporter_a.export()
+
+    exporter_b, _ = _fixture_exporter(tmp_path / "b", list(reversed(scenario_ids)), monkeypatch,
+                                       shard_config=ShardConfig(scenarios_per_shard=3))
+    result_b = exporter_b.export()
+
+    assert result_a.content_fingerprint == result_b.content_fingerprint
+
+
+# N. validator catches malformed offsets
+def test_N_validator_catches_malformed_offsets(tmp_path, monkeypatch):
+    exporter, _ = _fixture_exporter(tmp_path, ["s00", "s01"], monkeypatch, shard_config=ShardConfig(scenarios_per_shard=2))
+    exporter.export()
+
+    shard_path = tmp_path / "out" / "shards" / "shard_00000.npz"
+    with np.load(shard_path, allow_pickle=False) as data:
+        arrays = {name: np.array(data[name]) for name in data.files}
+    arrays["segment_offsets"][1] = arrays["segment_offsets"][0]  # corrupt: no longer strictly increasing
+    np.savez(shard_path, **arrays)
+
+    report = validate_export(tmp_path / "out")
+    assert not report.ok
+    assert any("not strictly increasing" in e for e in report.errors)
+
+
+# O. validator catches duplicate segments
+def test_O_validator_catches_duplicate_segment_ids(tmp_path, monkeypatch):
+    exporter, _ = _fixture_exporter(tmp_path, ["s00", "s01"], monkeypatch, shard_config=ShardConfig(scenarios_per_shard=2))
+    exporter.export()
+
+    index_path = tmp_path / "out" / "shard_index.jsonl"
+    lines = [ln for ln in index_path.read_text("utf-8").splitlines() if ln.strip()]
+    lines.append(lines[0])  # inject a duplicate row
+    index_path.write_text("".join(f"{ln}\n" for ln in lines), encoding="utf-8")
+
+    report = validate_export(tmp_path / "out")
+    assert not report.ok
+    assert any("duplicate segment_id" in e for e in report.errors)
+
+
+# P. validator catches scenario split leakage
+def test_P_validator_catches_scenario_split_leakage(tmp_path, monkeypatch):
+    exporter, _ = _fixture_exporter(tmp_path, ["s00", "s01"], monkeypatch, shard_config=ShardConfig(scenarios_per_shard=2))
+    exporter.export()
+
+    shard_manifest_path = tmp_path / "out" / "shard_manifest.json"
+    shard_manifest = json.loads(shard_manifest_path.read_text("utf-8"))
+    # inject a bogus second shard entry claiming to also own s00 -- exactly
+    # the leakage shape the validator must catch (a real bug, not the
+    # normal export path, which never produces this).
+    shard_manifest["shards"].append(
+        {"shard_file": "shards/shard_00099.npz", "shard_index": 99, "num_segments": 0,
+         "num_samples": 0, "byte_size": 0, "scenario_ids": ["s00"], "scenario_count": 1}
+    )
+    shard_manifest["shard_count"] = len(shard_manifest["shards"])
+    shard_manifest_path.write_text(json.dumps(shard_manifest, indent=2, sort_keys=True), encoding="utf-8")
+
+    report = validate_export(tmp_path / "out")
+    assert not report.ok
+    assert any("appears in both shard" in e for e in report.errors)
+
+
+def test_shard_format_version_recorded_in_manifest(tmp_path, monkeypatch):
+    exporter, _ = _fixture_exporter(tmp_path, ["s00"], monkeypatch)
+    result = exporter.export()
+    assert result.manifest["shard_format_version"] == SHARD_FORMAT_VERSION
+    metadata = json.loads((tmp_path / "out" / "metadata.json").read_text("utf-8"))
+    assert metadata["output_format"] == "sharded_npz_v1"
+    assert metadata["measurement_data_is_clean_only"] is True
+    assert metadata["corruption_applied_at_load_time_only"] is True
+
+
+def test_clean_measurement_arrays_never_corrupts():
+    scenario = _scenario([_straight_track(n=9)])
+    segments, _ = extract_segments(scenario, SegmentConfig())
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    clean = clean_measurement_arrays(transformed)
+    assert np.array_equal(clean["measurement_data"], transformed["clean_position"])
+    assert np.all(clean["measurement_valid"])
 
 
 # ==========================================================================
@@ -736,3 +949,69 @@ def test_real_stage0_smoke():
     import shutil as _shutil
 
     _shutil.rmtree(exporter.output_root, ignore_errors=True)
+
+
+# M. Stage-0 old-vs-new logical equivalence, on REAL Stage-0 scenarios.
+# "Old" = the pure logical construction (extract_segments ->
+# apply_coordinate_transform -> clean_measurement_arrays), independent of
+# any on-disk format -- this is exactly what the pre-sharding per-segment
+# NPZ exporter wrote per segment. "New" = the same real scenarios, written
+# to real shards and read back through av2_kalmannet_shard_loader. If
+# sharding ever silently altered a value, this test would catch it.
+def test_M_real_stage0_old_vs_new_logical_equivalence(tmp_path):
+    pytest.importorskip("av2", reason="requires the optional 'av2' pip package + a real Stage-0 download")
+    manifest_path = Path.home() / "datasets" / "av2" / "manifests" / "stage0_scenarios.json"
+    raw_root = Path.home() / "datasets" / "av2" / "raw_staging"
+    if not manifest_path.is_file() or not raw_root.is_dir():
+        pytest.skip("no real Stage-0 download present on this machine")
+
+    from ad_morai_bridge_dev.dataset.av2_kalmannet_shard_loader import get_segment, load_shard_index
+    from ad_morai_bridge_dev.dataset.av2_motion_forecasting_adapter import load_av2_scenario_parquet
+
+    manifest = json.loads(manifest_path.read_text("utf-8"))
+    # A deterministic sweep across several real scenarios (not just one).
+    scenario_ids = sorted(e["scenario_id"] for e in manifest["scenarios"])[:10]
+
+    segment_config = SegmentConfig()
+    coordinate_config = CoordinateConfig()
+    exporter = Av2KalmanNetExporter(
+        input_root=raw_root, output_root=tmp_path / "sharded_out", split="train",
+        scenario_ids=scenario_ids, segment_config=segment_config, coordinate_config=coordinate_config,
+        corruption_config=CorruptionConfig(), adapter_commit="test-M",
+        scenario_manifest_provenance={"dataset_source": manifest.get("dataset_source")},
+        shard_config=ShardConfig(scenarios_per_shard=4), overwrite=True,
+    )
+    exporter.export()
+    shard_index = load_shard_index(tmp_path / "sharded_out")
+    assert len(shard_index) > 0
+
+    compared = 0
+    for scenario_id in scenario_ids:
+        path = raw_root / "train" / scenario_id / f"scenario_{scenario_id}.parquet"
+        scenario = load_av2_scenario_parquet(path)
+        timestamps_ns_by_timestep = {i: ns for i, ns in enumerate(scenario.timestamps_ns)}
+        logical_segments, _ = extract_segments(scenario, segment_config)
+
+        for logical in logical_segments:
+            new_segment = get_segment(tmp_path / "sharded_out", logical.segment_id, shard_index=shard_index)
+
+            clean_arrays = logical.clean_arrays(timestamps_ns_by_timestep)
+            transformed = apply_coordinate_transform(clean_arrays, coordinate_config)
+            old_clean = clean_measurement_arrays(transformed)
+
+            assert np.array_equal(new_segment.timestamps_ns, old_clean["timestamps_ns"])
+            np.testing.assert_array_equal(new_segment.dt_s[1:], old_clean["dt_s"][1:])
+            assert math.isnan(float(new_segment.dt_s[0])) and math.isnan(float(old_clean["dt_s"][0]))
+            assert np.allclose(new_segment.gt_state, old_clean["gt_state"], atol=1e-9)
+            assert np.allclose(new_segment.clean_measurement, old_clean["measurement_data"], atol=1e-9)
+            assert np.array_equal(new_segment.source_measurement_valid, old_clean["measurement_valid"])
+            assert new_segment.av2_object_type == logical.av2_object_type
+            assert new_segment.coarse_object_type == logical.coarse_object_type
+            assert new_segment.track_category == logical.track_category
+            assert new_segment.city_name == logical.city_name
+            assert math.isclose(new_segment.origin_x, float(old_clean["origin_xy"][0]), abs_tol=1e-9)
+            assert math.isclose(new_segment.origin_y, float(old_clean["origin_xy"][1]), abs_tol=1e-9)
+            compared += 1
+
+    assert compared > 0
+    print(f"\n[test_M] compared {compared} real segments across {len(scenario_ids)} real scenarios: identical", file=sys.stderr)

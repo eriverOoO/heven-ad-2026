@@ -1,5 +1,211 @@
 # STATUS
 
+## AV2 KalmanNet Adapter — Sharding Scalability Fix — COMPLETE (still no training)
+
+Branch `fix/av2-kalmannet-sharding-v1`, from `origin/main` `780ac66`
+(merge of PR #45, `feat/av2-kalmannet-adapter-v1`, verified via `gh pr
+view 45` before any edit). Fixes exactly the ONE scalability issue PR
+#45's own real Stage-0 measurement exposed: **one-NPZ-file-per-actor-
+segment does not scale** (120 real scenarios → 7,358 individual files;
+extrapolated Stage 1 at 10k-20k scenarios → 600k-1.2M files — precisely
+the "hundreds of thousands of tiny files" this project's own storage
+policy rules out). **Still no KalmanNet architecture change
+(`kalmannet_core.py`/`kalmannet_arch2_core.py` untouched), still no
+training entry point, still no training run.**
+
+**Design: deterministic multi-segment shards.** `Av2KalmanNetExporter`
+now concatenates every segment's per-frame arrays (`timestamps_ns`,
+`dt_s`, `state_data [T,4]`, `measurement_data [T,2]`,
+`measurement_valid`, `av2_timestep`, `av2_observed`) into one shard-level
+NPZ per group of scenarios, addressed by `segment_offsets
+[num_segments+1]`; per-segment metadata (`segment_id`, `scenario_id`,
+`track_id`, `segment_index`, `av2_object_type`, `coarse_object_type`,
+`track_category`, `city_name`, `origin_x`, `origin_y`, `sample_count`,
+`valid_for_kalmannet_gt`) lives in parallel **fixed-width unicode/numeric
+arrays** (`<U200`/`<U64`/`<U32`/int64/float64/bool) — never a pickled
+object array (`allow_pickle=False` stays safe throughout). New
+`ShardConfig(scenarios_per_shard)` + `assign_scenarios_to_shards()`:
+sorts the *set* of scenario ids (never input traversal order) and chunks
+into groups, so shard assignment is a pure function of (manifest content,
+config) alone — confirmed identical output for sorted / reversed /
+`random.Random(7).shuffle`d input
+(`test_F_H_shard_assignment_is_deterministic_and_order_independent`).
+One scenario's segments are never split across two shards
+(`split_manifest.json` declares `scenario_never_split_across_shards:
+true`; the validator independently re-derives scenario→shard ownership
+from the real on-disk shards, not just the declared manifest).
+
+**Default `scenarios_per_shard=200`, corrected from an initial 500 after
+measuring real data** (not guessed twice): the real Stage-0 sharded
+re-export (120 real scenarios, one shard) is **41,559,248 bytes** →
+~366.7 KB/scenario → 200/shard lands ~73 MB/shard, inside the requested
+50-100 MB target. A `scenarios_per_shard=40` demonstration run on the
+same real 120 scenarios produced 3 real shards (~13-14.7 MB each),
+confirming the multi-shard path on real data, not only fixtures.
+
+**Corruption is now a load-time transform, never a materialized
+dataset.** The canonical shard stores the **clean** AV2 measurement only
+(`measurement_data == clean_position`, `measurement_valid` = source
+finiteness — `clean_measurement_arrays()`, new). New module
+`av2_kalmannet_shard_loader.py`: `get_segment()` (random access) /
+`iter_segments()` (streams shard-by-shard, opens each shard file exactly
+once, never once per segment) both return a `SegmentArrays` object whose
+`.to_kalmannet_sequence(corruption_config, global_seed)` reuses
+`apply_corruption()` (byte-for-byte unchanged from PR #45) at read time,
+producing the identical `{"actor_id","frames","dt","x_true","z_meas"}`
+dict shape every KalmanNet training script already consumes —
+`z_meas[t] = None` wherever invalid, **never `[0, 0]`, never a repeated
+previous value**, feeding the existing, untouched prediction-only
+KalmanNet behavior with zero architecture change. PR #45's own two full
+physical datasets (66 MB clean + 66 MB Gaussian/dropout example, same
+120 scenarios duplicated) are no longer the pattern — one clean shard
+set now serves every corruption configuration.
+
+**Corruption reproducibility (unchanged mechanism, now load-time):** each
+segment's corruption stream is seeded from `SHA-256(f"{global_seed}:
+{segment_id}")` (`segment_id` already encodes scenario_id + track_id +
+segment_index) — never Python's process-randomized `hash()`. Verified by
+test, on real exported data: same sample + same seed/config → identical
+corruption; every pair of distinct segments in a real 5-track export →
+independently different streams; the *same* real segment exported into
+two differently-shard-grouped datasets (`scenarios_per_shard=5` vs. `=2`,
+reversed scenario order) → **byte-identical** corrupted sequence
+regardless of which shard or grouping it ended up in.
+
+**Optional, explicitly non-canonical debug materialization.**
+`materialize_corrupted_debug_copy()` (CLI:
+`--materialize-corruption-debug-root`) reads an already-exported clean
+shard set and writes a second, clearly-labeled corrupted copy for manual
+inspection only — its own manifest carries `"warning"` +
+`corruption_materialized: true`. Documented explicitly as **not** the
+recommended Stage-1 workflow.
+
+**Validator rewritten for the sharded format**
+(`av2_motion_forecasting_adapter_validate.py`): format/shard-format
+version, shard-index ↔ shard-file agreement, segment-offset validity
+(monotonic strictly-increasing, starts at 0, ends at the shard's real
+per-frame row count, in-bounds), per-segment tensor shapes, per-segment
+finiteness, **per-segment-slice** monotonic timestamps / positive dt
+(never checked across a whole concatenated shard), scenario uniqueness
+across shards, segment uniqueness, scenario-level split leakage, content-
+fingerprint presence, and full manifest↔on-disk-shard byte-size
+agreement. Fails closed — verified directly by injecting each of 3 real
+corruption classes into a real export and confirming the validator
+catches all three: corrupted `segment_offsets` (non-monotonic) →
+"not strictly increasing"; a duplicated `shard_index.jsonl` row →
+"duplicate segment_id"; a fabricated cross-shard scenario-ownership
+conflict → "appears in both shard ...".
+
+**Real Stage-0 re-export** (reusing the already-downloaded 120-scenario
+raw data — no new download): 7,358 tracks → 7,358 segments packed into
+**1 shard** (default config; 120 scenarios < 200/shard), 0 rejected,
+382,867 total GT samples, **41.6 MB** shard bytes (44 MB on-disk incl.
+manifests, **smaller** than the old 66 MB — no more per-file NPZ
+container overhead), **7 total files** on disk (was 7,361), ~5.1 s wall
+time (was ~10 s). Validator: 0 errors, 0 warnings, 1 shard / 7,358
+segments checked.
+
+**Round-trip equivalence, verified on real data, not just fixtures.**
+`test_M_real_stage0_old_vs_new_logical_equivalence`: for a deterministic
+sweep of 10 real Stage-0 scenarios, every segment's pure logical
+construction (`extract_segments` → `apply_coordinate_transform` →
+`clean_measurement_arrays`, independent of any on-disk format) is
+compared against the same segment recovered from the real sharded export
+via `get_segment()` — timestamps, dt, clean state, clean measurement,
+validity, object type, track category, city name, and coordinate origin
+metadata are identical for every compared real segment (`np.allclose`
+atol=1e-9 on floats, exact equality on integers/strings/bools). Passes.
+
+**Backward compatibility preserved exactly as required:** state
+dimension 4 / measurement dimension 2 (`KNET_STATE_DIM`/`KNET_MEAS_DIM`,
+still imported from `kalmannet_trajectory_adapter.py`, never redefined);
+variable-dt behavior unchanged (`dt_s` still real, per-segment,
+`dt_s[0]=nan`); prediction-only missing-measurement handling unchanged
+(the loader's `z_meas[t]=None` convention feeds the exact same existing
+KalmanNet path PR #45 already validated); coordinate mode semantics
+unchanged (`first_state_relative`, origin = segment's own first sample,
+still translation-equivariance-tested).
+
+**Real bug found and fixed during this task, not shipped:** the new
+sharding test helpers initially replaced
+`adapter_mod.load_av2_scenario_parquet` with a **plain module-attribute
+assignment** instead of pytest's `monkeypatch.setattr` — this correctly
+worked within each test but silently leaked across the rest of the test
+*session*, so the two real-Stage-0-download tests
+(`test_real_stage0_smoke`, `test_M_...`) failed with a `KeyError` when
+run after the fixture-based sharding tests, because they inherited the
+prior test's fake loader instead of the real `av2` package function.
+Fixed by switching every such helper (`_fixture_exporter` in the main
+test file, `_build_export` in the new loader test file) to
+`monkeypatch.setattr`, which pytest automatically reverts per-test — full
+suite (including both real-data tests) now passes regardless of run
+order.
+
+**Tests: 76/76 pass** (was 46/46 after PR #45) — `test_av2_motion_forecasting_adapter.py`
+grew from 34 to 45 (10 new sharding tests A/B/E/F+H/G/N/O/P plus a
+shard-format-metadata check and a `clean_measurement_arrays` unit test;
+`test_real_stage0_smoke` + the new `test_M_real_stage0_old_vs_new_logical_equivalence`
+both ran for real against the on-disk Stage-0 download this session);
+new `test_av2_kalmannet_shard_loader.py` (22, covering every required
+loader/corruption item: C/D round-trip, L invalid-measurement→None
+(both no-corruption-valid and full-dropout-invalid cases), I per-sample
+determinism, J reorder-invariance (real cross-shard-grouping comparison),
+K independent-per-segment streams (real pairwise comparison across 5
+real segments), plus `get_segment`/`iter_segments` correctness and a
+global-seed-only variant). Regression: `test_kalmannet_trajectory_adapter.py`
+27 + `test_kalmannet_measurement_attachment.py` 27 +
+`test_centerpoint_adapter.py` 23 + `test_dataset_factory.py` 27 —
+**104/104 pass unchanged**; `tools/av2_dataset_prep/test_fetch_av2_stage0.py`
+12/12 pass unchanged (download tool untouched by this task). `pyflakes`
+clean on every changed/new file; `py_compile` clean; `git diff --check`
+clean.
+
+**Disk (this session):** raw Stage-0 unchanged (20 MB, reused, not
+re-downloaded). New sharded export 44 MB. Old PR #45 per-segment exports
+(66 MB clean + 66 MB corrupted-example, 7,358 files each) left on disk,
+**not deleted**, per instruction — see "safe to delete" recommendation in
+this session's own final report to the user. `~/datasets/av2/` total
+grew to ~194 MB this session (well under the ~100 GB soft AV2 budget).
+
+**Not done, unchanged from PR #45's own scope boundary:** no training
+entry point added, no model trained, no AV2-vs-KF/AV2-vs-DENSE-KALMANNET-v2
+comparison run. The audit-found gap (no in-repo KalmanNet training script)
+remains open, deliberately — this task's own explicit instruction was to
+fix the storage format, not start training.
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter.py` (rewritten export/shard/corruption-
+at-load internals; `NPZ_SHARD_ARRAY_NAMES`/`SHARD_FORMAT_VERSION`/
+`ShardConfig`/`assign_scenarios_to_shards`/`clean_measurement_arrays`/
+`materialize_corrupted_debug_copy` new; `NPZ_ARRAY_NAMES`/
+`npz_export_arrays` retained, now debug-materialization-only);
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/av2_kalmannet_shard_loader.py`
+(new); `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter_{cli,validate}.py` (rewritten for the
+sharded format; CLI gained `--shard-config`/`--materialize-corruption-debug-root`);
+`ad_morai_bridge_dev/config/dataset_factory/av2_motion_forecasting_adapter/
+shard_config.yaml` (new); `ad_morai_bridge_dev/test/test_av2_motion_forecasting_adapter.py`
+(extended), `ad_morai_bridge_dev/test/test_av2_kalmannet_shard_loader.py`
+(new); `docs/perception/av2_kalmannet_adapter_v1.md` (new "Sharding"
+section + updated Corruption/Storage/Real-Stage-0-run sections), this
+file. No `kalmannet_core.py`/`kalmannet_arch2_core.py`/AB3DMOT/
+CenterPoint/planner/prediction/occupancy-grid file touched;
+`tools/av2_dataset_prep/fetch_av2_stage0.py` untouched (download tool,
+out of this task's scope).
+
+**Recommended next task (unchanged from PR #45):** bring a reproducible
+KalmanNet training entry point into the repository (closing the real gap
+every prior session found — no historical training run was ever
+committed) and run the first small AV2-pretraining sanity experiment
+against the Tuned Linear KF / DENSE-KALMANNET-v2 baselines, now reading
+the sharded dataset via `av2_kalmannet_shard_loader` with a load-time
+corruption policy rather than a materialized corrupted copy. Not started
+this session.
+
+## AV2 KalmanNet Adapter Sharding Fix result: **COMPLETE**
+
+---
+
 ## AV2 Motion Forecasting → HEVEN KalmanNet Dataset Adapter v1 (Stage 0) — COMPLETE (adapter correctness only, no training)
 
 Branch `feat/av2-kalmannet-adapter-v1`, from `origin/main` `abeb24c`.
