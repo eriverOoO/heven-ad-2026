@@ -1,5 +1,177 @@
 # STATUS
 
+## Reproducible KalmanNet Training Entry Point v1 + AV2 Stage-0 Training Sanity Experiment — COMPLETE
+
+Branch `feat/kalmannet-av2-training-v1`, from merged PR #46
+`bfb3cc0` (`fix(av2): make KalmanNet shard export scale to real Stage-0`,
+verified via `gh pr view 46` before any edit), built in an isolated
+worktree. **Training tooling only. `KalmanNetGRU`/`STATE_DIM`/`MEAS_DIM`/
+`F_matrix`/`Q_matrix`/`H_matrix` in
+`ad_lidar_perception/ad_lidar_perception/kalmannet_core.py` are byte-for-
+byte unchanged. No AB3DMOT/CenterPoint/planner/prediction/occupancy file
+touched. No checkpoint wired into ROS/AB3DMOT — `kalmannet_checkpoint`'s
+default, `state_estimator`'s default, and every production launch file
+are untouched.**
+
+**What it is:** the first reproducible, committed entry point that
+trains the existing KalmanNet architecture on real data, ported
+forensically from the historical (never-committed) scripts that
+originally produced the frozen `dense_kalmannet_v2` checkpoint
+(`~/heven_presentation_assets/kalmannet_training_stability/
+instrumented_train.py`/`phase13_ten_seed.py`, inspected fresh from disk,
+not recalled from memory). New `tools/kalmannet_training/` (`av2_split.py`,
+`kalmannet_sequences.py`, `trainer_core.py`, `checkpoint_utils.py`,
+`train_kalmannet.py`, `evaluate_kalmannet.py`, `calibrate_kf.py` + 5 test
+files, 37 tests). Trains on the already-merged AV2 Stage-0 120-scenario
+sharded dataset (PR #45/#46); no second AV2 loader written --
+`SegmentArrays.to_kalmannet_sequence()` remains the single reused data
+source.
+
+**Loss-policy audit (a real correction of this task's own premise):**
+this task's own spec assumed the historical training used "loss only on
+measurement-update steps." Direct inspection of
+`instrumented_train.py::run_sequence_instrumented` shows the opposite --
+a loss term is appended whenever `dt is not None`, i.e. on **every**
+frame after the first, including missing-measurement predict-only
+frames. `loss_on_predict_only=True` (the trainer's historical-compatible
+default) reproduces this; `--no-loss-on-predict-only` exposes the
+narrower alternative as an explicit, non-default option.
+
+**A real, independently-found bug in already-merged PR #45/#46 code:**
+`apply_coordinate_transform()` transformed `gt_state` into first-state-
+relative coordinates but left `clean_position` untransformed, so the
+exported `measurement`/`measurement_data` (built from `clean_position`)
+silently landed in a **different coordinate frame** than `gt_state` --
+confirmed directly on real data (`state_data[0]==[0,0,...]` but
+`measurement_data[0]==origin_xy`). Neither prior PR's own tests caught it
+because both `measurement` and `clean_position` shared the identical bug
+and were internally self-consistent with each other while both were
+wrong relative to GT. **Fixed** in
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter.py`; new regression test
+(`test_coordinate_transform_keeps_clean_position_and_gt_state_in_the_same_frame`)
+checks against `gt_state[:,:2]` directly, not just internal
+self-consistency. The real Stage-0 shard dataset was **re-exported**
+after the fix (same 120 scenarios/7,358 segments, corrected coordinates
+only). Full `ad_morai_bridge_dev` regression: **161/161 pass**
+(`test_av2_motion_forecasting_adapter`, `test_av2_kalmannet_shard_loader`,
+`test_kalmannet_trajectory_adapter`, `test_kalmannet_measurement_attachment`,
+`test_centerpoint_adapter`, `test_dataset_factory`).
+
+**Split:** scenario-level (`av2_split.py`), sorted-then-seeded-shuffle,
+`80/10/10`, seed `20260905`. Real 120-scenario result: **96 train / 12
+val / 12 test**. Not AV2's own official test split -- AV2's withheld
+answer-key files are never read anywhere in this project.
+
+**Two Stage-0 corruption conditions**, both reusing the existing,
+unmodified `CorruptionConfig`/`apply_corruption` (no new corruption type):
+CLEAN (`mode="none"`) and GENERIC-ROBUST (`gaussian_noise_std_m=0.3`,
+`dropout_prob=0.1`, burst dropout `prob=0.02`/`min_len=2`/`max_len=5`,
+seed `20260905`) -- **explicitly not claimed MORAI-realistic**, a generic
+robustness sanity condition only.
+
+**Two runs, seed 0, `hidden_size=32`/`lr=0.001`/`grad_clip=10.0`
+(historical values, unchanged), `--max-epochs 10 --patience 4`
+(reduced from the historical 60/10 for Stage-0 sanity; flagged in every
+checkpoint manifest via `deviation_from_historical_max_epochs: true`):**
+CLEAN (`n_train=5,769 n_val=865`, 10/10 epochs, best epoch **9**, best
+val loss **0.5693**, `nonfinite_step_count=0`, not catastrophic,
+`train_time_s=2244.34`) and GENERIC-ROBUST (`n_train=5,768 n_val=865`,
+10/10 epochs, best epoch **6**, best val loss **0.7202**,
+`nonfinite_step_count=0`, not catastrophic, `train_time_s=1951.18`).
+Checkpoint family `av2_stage0_kalmannet_v1` -- distinct from, never
+overwrites, the historical `dense_kalmannet_v2` family.
+
+**Mid-task device audit (explicit user request, after CLEAN, before
+GENERIC-ROBUST):** 7-point audit found **no silent CPU fallback bug** --
+every `trainer_core.py` call site passes `device=` explicitly; `--device
+cuda` genuinely works end-to-end. A controlled 200-sequence subset
+comparison (identical order/seed) found **CPU ~4.5x faster than CUDA**
+(25.73 vs. 5.68 seq/s) -- `batch_size=1`/Python-loop overhead dominates
+at this scale, reproducing this project's own prior T-9A finding with a
+controlled measurement. Per this task's own stated rule ("if CUDA is not
+materially faster... continue with the faster/simpler device"), **CPU
+was used for GENERIC-ROBUST and all subsequent training**.
+
+**Mid-task fair-KF-baseline audit (second explicit user request, after
+GENERIC-ROBUST training, before finalizing):** new
+`calibrate_kf.py` adds a genuinely AV2-tuned `LinearCVKF` baseline
+(measures `sigma_z` from real AV2 TRAIN residuals, then a 40-candidate
+bounded log-grid search over `sigma_a`/`r_scale`, selected by
+**VALIDATION** RMSE only -- `calibrate_kf_on_av2()`'s own function
+signature has no `test_seqs` parameter, so TEST is structurally
+unreachable). Kept alongside, but never conflated with, the existing
+MORAI-tuned/**transferred**-without-retuning KF baseline (T-9A.1 values,
+relabeled `linear_kf_transferred_from_morai` in the eval report for
+clarity). Selected: `sigma_a=5.0`, `r_std=0.30038` (`train sigma_z`),
+`val_position_rmse=0.3410`. 6 new tests (`test_calibrate_kf.py`, all
+pass).
+
+**Held-out results (GENERIC-ROBUST checkpoint, n=724 TEST sequences/
+condition, overall position RMSE m):**
+
+| condition | KNet | KF transferred | KF AV2-tuned | Dense-v2 (cross-domain) |
+|---|---|---|---|---|
+| A. CLEAN | **0.0347** | 0.0563 | 0.0717 | 0.0456 |
+| B. same corruption family | **0.2935** | 0.3415 | 0.3278 | 0.4377 |
+| C. different corruption seed | **0.2903** | 0.3372 | 0.3246 | 0.4261 |
+
+KNet (trained on this exact distribution) wins every condition, as
+expected. The two KF baselines cleanly separate as designed: transferred
+wins on CLEAN (tuned for MORAI's smaller noise, closer to zero-noise);
+AV2-tuned wins on B/C (calibrated for exactly that noise level) --
+confirming the fair/transferred distinction does real work, not just
+bookkeeping. Dense-v2 (a MORAI checkpoint never trained on AV2) is
+competitive on CLEAN but clearly worse under both noisy conditions --
+consistent with a domain-shift explanation, not a MORAI-vs-AV2
+superiority claim in either direction. Missing-measurement buckets show
+KNet's advantage widening with gap length (gap 6+: KNet 38% better than
+transferred-KF). **0 divergences, 0 non-finite predictions**, every
+condition, every estimator. **No claim that AV2 pretraining improves, or
+will improve, MORAI/HEVEN performance anywhere in this task.**
+
+**Stage-1 sizing (throughput-measured, no data downloaded):** steady-state
+CPU throughput ~29.6-34.1 seq/s (CLEAN slower than GENERIC-ROBUST --
+missing-measurement frames skip the GRU forward/gain call entirely,
+plausibly explaining GENERIC-ROBUST's faster average despite the extra
+corruption computation). Linear extrapolation from Stage-0's
+61.3 segments/scenario: 10,000 scenarios ~= 2.2 days/condition CPU
+wall-clock (~4+ days both conditions) -- this **moderately argues
+against** the task's own stated 10,000-scenario preference.
+**Recommendation: 5,000 scenarios** (~26h/condition, ~52h both
+conditions sequentially) as the more practical Stage-1 size at current
+CPU/`batch_size=1` throughput, unless GPU batching (multiple independent
+sequences per step, structurally already supported by
+`KalmanNetGRU.forward()`'s batch dimension, not implemented here) is
+built first.
+
+**Tests:** `tools/kalmannet_training/` 37/37 pass across 5 files
+(`test_av2_split`, `test_kalmannet_sequences`, `test_trainer_core` [9],
+`test_checkpoint_utils`... see file for exact names,
+`test_calibrate_kf` [6]). `ad_morai_bridge_dev` regression 161/161 pass.
+`pyflakes` clean, `py_compile` clean, `git diff --check` clean.
+
+**Files:** `tools/kalmannet_training/{av2_split.py,kalmannet_sequences.py,
+trainer_core.py,checkpoint_utils.py,train_kalmannet.py,
+evaluate_kalmannet.py,calibrate_kf.py,test_*.py}` (all new),
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter.py` (coordinate-transform bug fix),
+`ad_morai_bridge_dev/test/test_av2_motion_forecasting_adapter.py`
+(+1 regression test), `docs/perception/kalmannet_av2_training_v1.md`
+(new), this file. No `kalmannet_core.py`/AB3DMOT/CenterPoint/planner/
+prediction/occupancy file changed; no production launch default changed;
+no AV2 raw/processed data, checkpoint, or training log committed.
+
+**Recommended next task:** Download and preprocess the recommended
+Stage-1 AV2 scenario set (5,000 scenarios per this task's own throughput-
+based sizing, or 10,000 if GPU batching is implemented first to cut wall-
+clock), then run the first real AV2-pretraining experiment with multiple
+seeds and evaluate it against the Tuned Linear KF and current dense-v2
+KalmanNet on a frozen MORAI-side evaluation stream. Do not implement that
+next task without first re-confirming this recommendation still holds.
+
+---
+
 ## AV2 KalmanNet Adapter — Sharding Scalability Fix — COMPLETE (still no training)
 
 Branch `fix/av2-kalmannet-sharding-v1`, from `origin/main` `780ac66`

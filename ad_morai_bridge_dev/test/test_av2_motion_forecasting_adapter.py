@@ -376,6 +376,28 @@ def test_original_av2_category_never_destroyed_by_coarse_mapping():
 # ==========================================================================
 # J / K / L / M. corruption / missing-measurement representation
 # ==========================================================================
+def test_coordinate_transform_keeps_clean_position_and_gt_state_in_the_same_frame():
+    """Regression test for a real bug found (and fixed) while building the
+    KalmanNet training entry point: ``apply_coordinate_transform`` used to
+    transform ``gt_state`` but leave ``clean_position`` in absolute,
+    untransformed coordinates -- so ``measurement``/``measurement_data``
+    (built from ``clean_position``) silently ended up in a DIFFERENT
+    coordinate frame than ``gt_state``/``x_true``. Confirmed on a real
+    exported shard: ``state_data[0] == [0, 0, ...]`` but
+    ``measurement_data[0] == origin_xy`` (not ``[0, 0]``). The prior
+    self-consistency test (``measurement == clean_position``) could not
+    catch this, since both sides shared the same bug -- this test checks
+    against ``gt_state[:, :2]`` directly instead."""
+    scenario = _scenario([_straight_track(n=11, x0=1234.5, y0=-987.6, vx=3.0, vy=1.0)])
+    segments, _ = extract_segments(scenario, SegmentConfig())
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    assert np.allclose(transformed["clean_position"], transformed["gt_state"][:, :2], atol=1e-9)
+    assert np.allclose(transformed["clean_position"][0], [0.0, 0.0], atol=1e-9)
+    corrupted = apply_corruption(transformed, segments[0].segment_id, CorruptionConfig())
+    assert np.allclose(corrupted["measurement"][0], [0.0, 0.0], atol=1e-9)
+
+
 def test_no_corruption_measurement_matches_clean_position():
     scenario = _scenario([_straight_track(n=11)])
     segments, _ = extract_segments(scenario, SegmentConfig())
