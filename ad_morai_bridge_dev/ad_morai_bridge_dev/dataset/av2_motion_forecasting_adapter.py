@@ -1,11 +1,8 @@
 """AV2 Motion Forecasting -> HEVEN KalmanNet Dataset Adapter v1 (Stage 0).
 
 Deterministically converts downloaded Argoverse 2 (AV2) Motion Forecasting
-scenario parquet files into the same versioned, per-segment trajectory
-representation the MORAI-side adapter already produces
-(``kalmannet_trajectory_adapter.py``'s ``kalmannet_morai_trajectory_v1``
-shape), so both sources feed the *same* downstream KalmanNet training
-convention without a second data format.
+scenario parquet files into a compact, **sharded** trajectory dataset
+consumed by the existing HEVEN KalmanNet training convention.
 
 **This module trains nothing and changes no KalmanNet architecture.** It
 does not import or modify ``kalmannet_core.py`` / ``kalmannet_arch2_core.py``
@@ -36,23 +33,52 @@ scenario at a real, uniform 100 ms step (10 Hz); ``FOCAL_TRACK`` /
 convention, confirmed, not hard-coded from docs alone); every other
 track's ``object_states`` list is a *contiguous* sub-range of
 ``[0, 109]`` (no internal per-track gaps in raw AV2 data -- a "missing
-measurement" in the sense this adapter's corruption layer (``CorruptionConfig``)
+measurement" in the sense the corruption layer (``CorruptionConfig``)
 introduces is a synthetic construct, not something AV2 itself contains);
 0 non-finite states and 0 non-contiguous-timestep tracks were observed
 across all 7,358 tracks in the 120-scenario Stage-0 sample.
 
-Output tree (mirrors ``kalmannet_trajectory_adapter.py``'s layout;
-`` <split>`` is one of AV2's own ``train`` / ``val`` / ``test`` -- this
-adapter never re-splits AV2 data, since AV2's own split is already
-leakage-free by construction across disjoint S3 prefixes)::
+**Sharding (fix/av2-kalmannet-sharding-v1).** Stage 0's initial one-NPZ-
+per-segment format (7,358 files for 120 scenarios) does not scale: Stage 1
+(10k-20k scenarios) would have produced 600k-1.2M individual files --
+exactly the "hundreds of thousands of tiny files" this project's own
+storage policy explicitly rules out. This module now writes
+**deterministic multi-segment shards** (``ShardConfig``,
+``assign_scenarios_to_shards``): every segment's per-frame arrays are
+concatenated into one shard-level NPZ, addressed by ``segment_offsets``;
+per-segment metadata lives in parallel fixed-width-string/numeric arrays
+(never pickled object arrays). Scenario -> shard assignment is a pure
+function of the *sorted* scenario-id set and ``ShardConfig`` alone (never
+of input traversal order), so it is fully deterministic and never splits
+one scenario across shards.
+
+**Corruption is now a load-time transform, not a materialized dataset.**
+The canonical sharded export stores **clean** AV2 measurements only
+(``measurement_data == clean position``, ``measurement_valid`` = source
+finiteness). ``apply_corruption`` (unchanged) is applied by the loader
+(``av2_kalmannet_shard_loader.py``) at read time, using the same
+deterministic per-segment SHA-256 seed derivation as before
+(``global_seed`` + ``scenario_id`` + ``track_id`` + ``segment_index``, via
+``segment_id`` -- never Python's process-randomized ``hash()``), so no
+second full physical dataset is ever materialized per corruption
+configuration. An explicitly opt-in, clearly-labeled debug materialization
+path (``materialize_corrupted_debug_copy``) remains available but is never
+the recommended Stage-1 workflow.
+
+Output tree (`` <split>`` is one of AV2's own ``train`` / ``val`` /
+``test`` -- this adapter never re-splits AV2 data, since AV2's own split
+is already leakage-free by construction across disjoint S3 prefixes)::
 
     <output_root>/<split>/
       .av2_kalmannet_adapter          # marker
-      metadata.json
-      export_manifest.json            # schema, provenance, config, content fingerprint
-      trajectory_index.jsonl          # one row per exported segment
+      metadata.json                   # output_format = "sharded_npz_v1"
+      export_manifest.json            # schema, provenance, config, shard stats, content fingerprint
+      shard_manifest.json             # one row per shard: scenario ids, segment/sample counts, byte size
+      shard_index.jsonl               # one row per segment: shard file + offset range + metadata
       split_manifest.json             # AV2's own split name + scenario-leakage check result
-      trajectories/<segment_id>.npz   # time-major arrays, same array names as the MORAI adapter
+      shards/shard_00000.npz          # concatenated per-frame arrays + segment_offsets + per-segment metadata
+      shards/shard_00001.npz
+      ...
 """
 
 from __future__ import annotations
@@ -80,6 +106,7 @@ from ad_morai_bridge_dev.dataset.kalmannet_trajectory_adapter import (
 )
 
 ADAPTER_SCHEMA_VERSION = "av2_kalmannet_adapter_v1"
+SHARD_FORMAT_VERSION = "av2_kalmannet_shard_v1"
 
 # AV2's own three top-level Motion Forecasting splits (disjoint S3
 # prefixes) -- this adapter never derives a fourth split; it reuses AV2's
@@ -89,7 +116,38 @@ SUPPORTED_AV2_SPLITS = ("train", "val", "test")
 COORDINATE_MODE_FIRST_STATE_RELATIVE = "first_state_relative"
 SUPPORTED_COORDINATE_MODES = (COORDINATE_MODE_FIRST_STATE_RELATIVE,)
 
-# The exact per-frame numeric arrays written into every trajectories/<id>.npz.
+# Per-frame arrays, concatenated across every segment in one shard.
+# Sliced per-segment via segment_offsets[i]:segment_offsets[i + 1].
+NPZ_SHARD_PER_FRAME_ARRAYS = (
+    "timestamps_ns",
+    "dt_s",
+    "state_data",
+    "measurement_data",
+    "measurement_valid",
+    "av2_timestep",
+    "av2_observed",
+)
+# Per-segment metadata arrays, one entry per segment (length num_segments).
+# Fixed-width unicode / numeric dtypes only -- never pickled object arrays.
+NPZ_SHARD_PER_SEGMENT_ARRAYS = (
+    "segment_id",
+    "scenario_id",
+    "track_id",
+    "segment_index",
+    "av2_object_type",
+    "coarse_object_type",
+    "track_category",
+    "city_name",
+    "origin_x",
+    "origin_y",
+    "sample_count",
+    "valid_for_kalmannet_gt",
+)
+NPZ_SHARD_ARRAY_NAMES = ("segment_offsets",) + NPZ_SHARD_PER_FRAME_ARRAYS + NPZ_SHARD_PER_SEGMENT_ARRAYS
+
+# Retained for the optional debug-materialization path (§ below), which
+# still writes one corrupted segment's arrays at a time before folding
+# them back into the same shard layout.
 NPZ_ARRAY_NAMES = (
     "timestamps_ns",
     "dt_s",
@@ -629,8 +687,9 @@ def segment_stats_row(
 
 
 def npz_export_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
-    """Selects + orders exactly ``NPZ_ARRAY_NAMES`` for the on-disk NPZ,
-    matching the array-name discipline of ``kalmannet_trajectory_adapter``."""
+    """Selects + orders exactly ``NPZ_ARRAY_NAMES`` for a single-segment
+    NPZ -- used only by the optional debug-materialization path now, the
+    canonical export writes shards instead (``build_shard_arrays``)."""
     return {name: np.asarray(arrays[name]) for name in NPZ_ARRAY_NAMES}
 
 
@@ -656,6 +715,167 @@ def check_scenario_split_leakage(scenario_to_split: dict[str, str]) -> list[str]
 
 
 # --------------------------------------------------------------------------
+# shard assignment (deterministic, scenario-boundary-preserving)
+# --------------------------------------------------------------------------
+DEFAULT_SCENARIOS_PER_SHARD = 200
+# Derived from a REAL measurement (not the earlier napkin estimate): the
+# actual Stage-0 sharded re-export (120 real scenarios, single shard) is
+# 41,559,248 bytes -> ~366.7 KB/scenario. 200 scenarios/shard therefore
+# lands each shard around ~73 MB, inside the requested 50-100 MB target;
+# re-derive this default if a future dataset's per-scenario track density
+# differs materially (e.g. AV2's own per-scenario track count varies by
+# city/curation, per docs/perception/av2_kalmannet_adapter_v1.md).
+
+
+@dataclass(frozen=True)
+class ShardConfig:
+    scenarios_per_shard: int = DEFAULT_SCENARIOS_PER_SHARD
+
+    def canonical_json(self) -> str:
+        return json.dumps({"scenarios_per_shard": self.scenarios_per_shard}, sort_keys=True)
+
+    def validate(self) -> None:
+        if self.scenarios_per_shard < 1:
+            raise AdapterError("scenarios_per_shard must be >= 1")
+
+
+def load_shard_config(path: Path | None) -> ShardConfig:
+    if path is None:
+        config = ShardConfig()
+        config.validate()
+        return config
+    import yaml
+
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    config = ShardConfig(scenarios_per_shard=int(data.get("scenarios_per_shard", DEFAULT_SCENARIOS_PER_SHARD)))
+    config.validate()
+    return config
+
+
+def assign_scenarios_to_shards(scenario_ids: list[str], config: ShardConfig) -> list[list[str]]:
+    """Deterministic shard assignment: a pure function of the *sorted set*
+    of ``scenario_ids`` and ``config`` alone -- never of input traversal/
+    listing order, so re-running with the same manifest (regardless of
+    the order its rows happen to be read in) always produces the same
+    shard grouping, and one scenario's segments are never split across
+    two shards."""
+    config.validate()
+    unique_sorted = sorted(set(scenario_ids))
+    if len(unique_sorted) != len(scenario_ids):
+        raise AdapterError("duplicate scenario_ids in input - each scenario must appear once")
+    return [
+        unique_sorted[i : i + config.scenarios_per_shard]
+        for i in range(0, len(unique_sorted), config.scenarios_per_shard)
+    ]
+
+
+def clean_measurement_arrays(transformed: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """The canonical, always-clean measurement for the sharded export --
+    NOT corruption. ``measurement_valid`` here reflects source finiteness
+    only (``extract_segments`` already drops non-finite frames, so this is
+    a defensive re-check, not expected to ever find anything on real AV2
+    data). Corruption is applied later, at load time
+    (``av2_kalmannet_shard_loader``), never baked in here."""
+    clean = transformed["clean_position"]
+    valid = np.all(np.isfinite(clean), axis=1)
+    out = dict(transformed)
+    out["measurement_data"] = clean.copy()
+    out["measurement_valid"] = valid
+    return out
+
+
+@dataclass
+class _ShardAccumulator:
+    """In-memory accumulation of one shard's worth of segments, flushed to
+    one NPZ file once its scenario group is fully processed. Bounded
+    memory: never holds more than one shard's data at a time."""
+
+    per_frame: dict[str, list[np.ndarray]]
+    segment_id: list[str]
+    scenario_id: list[str]
+    track_id: list[str]
+    segment_index: list[int]
+    av2_object_type: list[str]
+    coarse_object_type: list[str]
+    track_category: list[str]
+    city_name: list[str]
+    origin_x: list[float]
+    origin_y: list[float]
+    sample_count: list[int]
+    valid_for_kalmannet_gt: list[bool]
+    offsets: list[int]
+
+    @classmethod
+    def empty(cls) -> "_ShardAccumulator":
+        return cls(
+            per_frame={name: [] for name in NPZ_SHARD_PER_FRAME_ARRAYS},
+            segment_id=[], scenario_id=[], track_id=[], segment_index=[],
+            av2_object_type=[], coarse_object_type=[], track_category=[], city_name=[],
+            origin_x=[], origin_y=[], sample_count=[], valid_for_kalmannet_gt=[],
+            offsets=[0],
+        )
+
+    def add_segment(self, segment: Av2Segment, arrays: dict[str, np.ndarray], row: dict[str, Any]) -> None:
+        count = arrays["gt_state"].shape[0]
+        self.per_frame["timestamps_ns"].append(arrays["timestamps_ns"])
+        self.per_frame["dt_s"].append(arrays["dt_s"])
+        self.per_frame["state_data"].append(arrays["gt_state"])
+        self.per_frame["measurement_data"].append(arrays["measurement_data"])
+        self.per_frame["measurement_valid"].append(arrays["measurement_valid"])
+        self.per_frame["av2_timestep"].append(arrays["av2_timestep"])
+        self.per_frame["av2_observed"].append(arrays["av2_observed"])
+
+        self.segment_id.append(segment.segment_id)
+        self.scenario_id.append(segment.scenario_id)
+        self.track_id.append(segment.track_id)
+        self.segment_index.append(segment.segment_index)
+        self.av2_object_type.append(segment.av2_object_type)
+        self.coarse_object_type.append(segment.coarse_object_type)
+        self.track_category.append(segment.track_category)
+        self.city_name.append(segment.city_name)
+        self.origin_x.append(float(arrays["origin_xy"][0]))
+        self.origin_y.append(float(arrays["origin_xy"][1]))
+        self.sample_count.append(count)
+        self.valid_for_kalmannet_gt.append(bool(row["valid_for_kalmannet_gt"]))
+        self.offsets.append(self.offsets[-1] + count)
+
+    @property
+    def num_segments(self) -> int:
+        return len(self.segment_id)
+
+    def build_shard_arrays(self) -> dict[str, np.ndarray]:
+        """Concatenates every accumulated segment into one shard-level
+        array set. Fixed-width unicode dtypes for every string field --
+        never a pickled object array (``allow_pickle=False`` stays safe)."""
+        if self.num_segments == 0:
+            raise AdapterError("cannot build an empty shard")
+        out: dict[str, np.ndarray] = {
+            "segment_offsets": np.asarray(self.offsets, dtype=np.int64),
+        }
+        out["timestamps_ns"] = np.concatenate(self.per_frame["timestamps_ns"]).astype(np.int64)
+        out["dt_s"] = np.concatenate(self.per_frame["dt_s"]).astype(np.float64)
+        out["state_data"] = np.concatenate(self.per_frame["state_data"], axis=0).astype(np.float64)
+        out["measurement_data"] = np.concatenate(self.per_frame["measurement_data"], axis=0).astype(np.float64)
+        out["measurement_valid"] = np.concatenate(self.per_frame["measurement_valid"]).astype(bool)
+        out["av2_timestep"] = np.concatenate(self.per_frame["av2_timestep"]).astype(np.int64)
+        out["av2_observed"] = np.concatenate(self.per_frame["av2_observed"]).astype(bool)
+
+        out["segment_id"] = np.asarray(self.segment_id, dtype="<U200")
+        out["scenario_id"] = np.asarray(self.scenario_id, dtype="<U64")
+        out["track_id"] = np.asarray(self.track_id, dtype="<U64")
+        out["segment_index"] = np.asarray(self.segment_index, dtype=np.int32)
+        out["av2_object_type"] = np.asarray(self.av2_object_type, dtype="<U32")
+        out["coarse_object_type"] = np.asarray(self.coarse_object_type, dtype="<U16")
+        out["track_category"] = np.asarray(self.track_category, dtype="<U32")
+        out["city_name"] = np.asarray(self.city_name, dtype="<U32")
+        out["origin_x"] = np.asarray(self.origin_x, dtype=np.float64)
+        out["origin_y"] = np.asarray(self.origin_y, dtype=np.float64)
+        out["sample_count"] = np.asarray(self.sample_count, dtype=np.int64)
+        out["valid_for_kalmannet_gt"] = np.asarray(self.valid_for_kalmannet_gt, dtype=bool)
+        return out
+
+
+# --------------------------------------------------------------------------
 # export
 # --------------------------------------------------------------------------
 @dataclass
@@ -665,6 +885,13 @@ class ExportResult:
 
 
 class Av2KalmanNetExporter:
+    """Writes the canonical, CLEAN-only sharded dataset. Corruption is a
+    load-time transform (``av2_kalmannet_shard_loader``), never
+    materialized here -- ``corruption_config`` is accepted only so
+    ``export_manifest.json`` can record the *recommended default* load-time
+    policy alongside the data; it never changes a single byte written by
+    this class (see ``clean_measurement_arrays``)."""
+
     MARKER = ".av2_kalmannet_adapter"
 
     def __init__(
@@ -678,6 +905,7 @@ class Av2KalmanNetExporter:
         corruption_config: CorruptionConfig,
         adapter_commit: str,
         scenario_manifest_provenance: dict[str, Any],
+        shard_config: ShardConfig | None = None,
         overwrite: bool = False,
     ) -> None:
         if split not in SUPPORTED_AV2_SPLITS:
@@ -691,6 +919,7 @@ class Av2KalmanNetExporter:
         self.corruption_config = corruption_config
         self.adapter_commit = adapter_commit
         self.scenario_manifest_provenance = scenario_manifest_provenance
+        self.shard_config = shard_config or ShardConfig()
         self.overwrite = overwrite
 
     def _scenario_parquet_path(self, scenario_id: str) -> Path:
@@ -700,6 +929,7 @@ class Av2KalmanNetExporter:
         self.segment_config.validate()
         self.coordinate_config.validate()
         self.corruption_config.validate()
+        self.shard_config.validate()
         if not self.scenario_ids:
             raise AdapterError("no scenario ids to export - nothing to do")
 
@@ -717,10 +947,13 @@ class Av2KalmanNetExporter:
         staging = self.output_root.with_name(self.output_root.name + ".tmp")
         if staging.exists():
             shutil.rmtree(staging)
-        (staging / "trajectories").mkdir(parents=True, exist_ok=True)
-        (staging / self.MARKER).write_text("HEVEN AV2 KalmanNet adapter\n", encoding="utf-8")
+        (staging / "shards").mkdir(parents=True, exist_ok=True)
+        (staging / self.MARKER).write_text("HEVEN AV2 KalmanNet adapter (sharded)\n", encoding="utf-8")
 
-        index_lines: list[str] = []
+        shard_groups = assign_scenarios_to_shards(self.scenario_ids, self.shard_config)
+
+        shard_index_lines: list[str] = []
+        shard_manifest_rows: list[dict[str, Any]] = []
         artifact_hashes: list[str] = []
         scenario_to_split: dict[str, str] = {}
         totals = {
@@ -738,49 +971,95 @@ class Av2KalmanNetExporter:
         coarse_type_counts: dict[str, int] = {}
         track_category_counts: dict[str, int] = {}
 
-        for scenario_id in self.scenario_ids:
-            path = self._scenario_parquet_path(scenario_id)
-            if not path.is_file():
-                raise AdapterError(f"scenario parquet not found: {path}")
-            scenario = load_av2_scenario_parquet(path)
-            if scenario.scenario_id != scenario_id:
-                raise AdapterError(
-                    f"scenario_id mismatch: expected {scenario_id!r}, parquet contains {scenario.scenario_id!r}"
-                )
-            scenario_to_split[scenario_id] = self.split
-            timestamps_ns_by_timestep = {i: ns for i, ns in enumerate(scenario.timestamps_ns)}
+        for shard_idx, shard_scenario_ids in enumerate(shard_groups):
+            shard_name = f"shard_{shard_idx:05d}.npz"
+            accumulator = _ShardAccumulator.empty()
 
-            segments, seg_stats = extract_segments(scenario, self.segment_config)
-            totals["scenarios_processed"] += 1
-            for key in (
-                "tracks_seen", "tracks_fully_rejected_nonfinite", "frames_dropped_nonfinite",
-                "frames_dropped_duplicate_timestep", "frames_dropped_backward_timestep",
-            ):
-                totals[key] += seg_stats[key]
+            for scenario_id in shard_scenario_ids:
+                path = self._scenario_parquet_path(scenario_id)
+                if not path.is_file():
+                    raise AdapterError(f"scenario parquet not found: {path}")
+                scenario = load_av2_scenario_parquet(path)
+                if scenario.scenario_id != scenario_id:
+                    raise AdapterError(
+                        f"scenario_id mismatch: expected {scenario_id!r}, parquet contains {scenario.scenario_id!r}"
+                    )
+                scenario_to_split[scenario_id] = self.split
+                timestamps_ns_by_timestep = {i: ns for i, ns in enumerate(scenario.timestamps_ns)}
 
-            for segment in segments:
-                clean_arrays = segment.clean_arrays(timestamps_ns_by_timestep)
-                transformed = apply_coordinate_transform(clean_arrays, self.coordinate_config)
-                corrupted = apply_corruption(transformed, segment.segment_id, self.corruption_config)
-                export_arrays = npz_export_arrays(corrupted)
-                npz_bytes = _npz_bytes(export_arrays)
-                npz_path = staging / "trajectories" / f"{segment.segment_id}.npz"
-                tmp = npz_path.with_suffix(".npz.tmp")
-                tmp.write_bytes(npz_bytes)
-                tmp.replace(npz_path)
+                segments, seg_stats = extract_segments(scenario, self.segment_config)
+                totals["scenarios_processed"] += 1
+                for key in (
+                    "tracks_seen", "tracks_fully_rejected_nonfinite", "frames_dropped_nonfinite",
+                    "frames_dropped_duplicate_timestep", "frames_dropped_backward_timestep",
+                ):
+                    totals[key] += seg_stats[key]
 
-                row = segment_stats_row(segment, corrupted, self.segment_config)
-                row["npz_path"] = f"trajectories/{segment.segment_id}.npz"
-                index_lines.append(json.dumps(row, sort_keys=True))
-                artifact_hashes.append(_sha256_bytes(npz_bytes))
-                artifact_hashes.append(_sha256_bytes(json.dumps(row, sort_keys=True).encode("utf-8")))
+                for segment in segments:
+                    clean_arrays = segment.clean_arrays(timestamps_ns_by_timestep)
+                    transformed = apply_coordinate_transform(clean_arrays, self.coordinate_config)
+                    clean_measured = clean_measurement_arrays(transformed)
+                    row = segment_stats_row(segment, clean_measured, self.segment_config)
+                    accumulator.add_segment(segment, clean_measured, row)
 
-                totals["segments_exported"] += 1
-                totals["segments_valid_for_kalmannet_gt"] += int(row["valid_for_kalmannet_gt"])
-                totals["gt_samples_total"] += row["sample_count"]
-                av2_type_counts[segment.av2_object_type] = av2_type_counts.get(segment.av2_object_type, 0) + 1
-                coarse_type_counts[segment.coarse_object_type] = coarse_type_counts.get(segment.coarse_object_type, 0) + 1
-                track_category_counts[segment.track_category] = track_category_counts.get(segment.track_category, 0) + 1
+                    totals["segments_exported"] += 1
+                    totals["segments_valid_for_kalmannet_gt"] += int(row["valid_for_kalmannet_gt"])
+                    totals["gt_samples_total"] += row["sample_count"]
+                    av2_type_counts[segment.av2_object_type] = av2_type_counts.get(segment.av2_object_type, 0) + 1
+                    coarse_type_counts[segment.coarse_object_type] = (
+                        coarse_type_counts.get(segment.coarse_object_type, 0) + 1
+                    )
+                    track_category_counts[segment.track_category] = (
+                        track_category_counts.get(segment.track_category, 0) + 1
+                    )
+
+            if accumulator.num_segments == 0:
+                continue  # every scenario in this group produced zero segments
+
+            shard_arrays = accumulator.build_shard_arrays()
+            npz_bytes = _npz_bytes(shard_arrays)
+            npz_path = staging / "shards" / shard_name
+            tmp = npz_path.with_suffix(".npz.tmp")
+            tmp.write_bytes(npz_bytes)
+            tmp.replace(npz_path)
+            artifact_hashes.append(_sha256_bytes(npz_bytes))
+
+            offsets = shard_arrays["segment_offsets"]
+            shard_scenario_id_set = sorted(set(accumulator.scenario_id))
+            for i in range(accumulator.num_segments):
+                index_row = {
+                    "segment_id": accumulator.segment_id[i],
+                    "shard_file": f"shards/{shard_name}",
+                    "shard_index": shard_idx,
+                    "offset_start": int(offsets[i]),
+                    "offset_end": int(offsets[i + 1]),
+                    "scenario_id": accumulator.scenario_id[i],
+                    "track_id": accumulator.track_id[i],
+                    "segment_index": accumulator.segment_index[i],
+                    "av2_object_type": accumulator.av2_object_type[i],
+                    "coarse_object_type": accumulator.coarse_object_type[i],
+                    "track_category": accumulator.track_category[i],
+                    "city_name": accumulator.city_name[i],
+                    "origin_x": accumulator.origin_x[i],
+                    "origin_y": accumulator.origin_y[i],
+                    "sample_count": accumulator.sample_count[i],
+                    "coordinate_mode": COORDINATE_MODE_FIRST_STATE_RELATIVE,
+                    "valid_for_kalmannet_gt": accumulator.valid_for_kalmannet_gt[i],
+                }
+                shard_index_lines.append(json.dumps(index_row, sort_keys=True))
+                artifact_hashes.append(_sha256_bytes(json.dumps(index_row, sort_keys=True).encode("utf-8")))
+
+            shard_manifest_rows.append(
+                {
+                    "shard_file": f"shards/{shard_name}",
+                    "shard_index": shard_idx,
+                    "num_segments": accumulator.num_segments,
+                    "num_samples": int(offsets[-1]),
+                    "byte_size": len(npz_bytes),
+                    "scenario_ids": shard_scenario_id_set,
+                    "scenario_count": len(shard_scenario_id_set),
+                }
+            )
 
         if totals["segments_exported"] == 0:
             shutil.rmtree(staging)
@@ -791,8 +1070,17 @@ class Av2KalmanNetExporter:
             shutil.rmtree(staging)
             raise AdapterError(f"scenario split leakage: {leakage}")
 
-        (staging / "trajectory_index.jsonl").write_text(
-            "".join(f"{line}\n" for line in index_lines), encoding="utf-8"
+        (staging / "shard_index.jsonl").write_text(
+            "".join(f"{line}\n" for line in shard_index_lines), encoding="utf-8"
+        )
+        _atomic_write_json(
+            staging / "shard_manifest.json",
+            {
+                "shard_format_version": SHARD_FORMAT_VERSION,
+                "shard_config": json.loads(self.shard_config.canonical_json()),
+                "shard_count": len(shard_manifest_rows),
+                "shards": shard_manifest_rows,
+            },
         )
 
         split_manifest = {
@@ -803,6 +1091,7 @@ class Av2KalmanNetExporter:
             "scenario_ids": sorted(self.scenario_ids),
             "leakage_free": True,
             "leakage_check": "check_scenario_split_leakage (no scenario_id assigned to >1 split)",
+            "scenario_never_split_across_shards": True,
         }
         _atomic_write_json(staging / "split_manifest.json", split_manifest)
 
@@ -810,15 +1099,20 @@ class Av2KalmanNetExporter:
             staging / "metadata.json",
             {
                 "adapter_schema_version": ADAPTER_SCHEMA_VERSION,
+                "output_format": "sharded_npz_v1",
+                "shard_format_version": SHARD_FORMAT_VERSION,
                 "source": "argoverse2_motion_forecasting",
                 "state_fields": list(KNET_STATE_FIELDS),
                 "state_dim": KNET_STATE_DIM,
                 "measurement_fields": list(KNET_MEAS_FIELDS),
                 "measurement_dim": KNET_MEAS_DIM,
-                "time_layout": "time_major_[T, field]",
-                "dt_s_index0": "nan (no previous step)",
+                "time_layout": "time_major_[T, field], concatenated across segments per shard",
+                "dt_s_index0_per_segment": "nan (no previous step)",
                 "coordinate_mode": self.coordinate_config.mode,
-                "npz_arrays": list(NPZ_ARRAY_NAMES),
+                "shard_per_frame_arrays": list(NPZ_SHARD_PER_FRAME_ARRAYS),
+                "shard_per_segment_arrays": list(NPZ_SHARD_PER_SEGMENT_ARRAYS),
+                "measurement_data_is_clean_only": True,
+                "corruption_applied_at_load_time_only": True,
                 "invalid_measurement_representation": "measurement_valid[t]=False, measurement[t]=[NaN, NaN]; "
                                                         "never [0, 0], never a repeated previous measurement",
                 "class_metadata_only": True,
@@ -830,10 +1124,11 @@ class Av2KalmanNetExporter:
             "|".join(
                 [
                     ADAPTER_SCHEMA_VERSION,
+                    SHARD_FORMAT_VERSION,
                     self.split,
                     self.segment_config.canonical_json(),
                     self.coordinate_config.canonical_json(),
-                    self.corruption_config.canonical_json(),
+                    self.shard_config.canonical_json(),
                     json.dumps(sorted(self.scenario_ids)),
                     json.dumps(split_manifest, sort_keys=True),
                     *sorted(artifact_hashes),
@@ -844,16 +1139,20 @@ class Av2KalmanNetExporter:
         manifest = {
             "status": "complete",
             "adapter_schema_version": ADAPTER_SCHEMA_VERSION,
+            "shard_format_version": SHARD_FORMAT_VERSION,
             "dataset_source": "argoverse2_motion_forecasting",
             "split": self.split,
             "adapter_repository_commit": self.adapter_commit,
             "segment_config": json.loads(self.segment_config.canonical_json()),
             "coordinate_config": json.loads(self.coordinate_config.canonical_json()),
-            "corruption_config": json.loads(self.corruption_config.canonical_json()),
+            "shard_config": json.loads(self.shard_config.canonical_json()),
+            "default_load_time_corruption_config": json.loads(self.corruption_config.canonical_json()),
+            "corruption_materialized": False,
             "scenario_manifest_provenance": self.scenario_manifest_provenance,
             "state_fields": list(KNET_STATE_FIELDS),
             "measurement_fields": list(KNET_MEAS_FIELDS),
             "counts": totals,
+            "shard_count": len(shard_manifest_rows),
             "av2_object_type_counts": dict(sorted(av2_type_counts.items())),
             "coarse_object_type_counts": dict(sorted(coarse_type_counts.items())),
             "track_category_counts": dict(sorted(track_category_counts.items())),
@@ -865,3 +1164,122 @@ class Av2KalmanNetExporter:
 
         staging.replace(self.output_root)
         return ExportResult(manifest, fingerprint)
+
+
+# --------------------------------------------------------------------------
+# optional, explicitly non-canonical debug materialization
+# --------------------------------------------------------------------------
+def materialize_corrupted_debug_copy(
+    clean_output_root: Path,
+    debug_output_root: Path,
+    corruption_config: CorruptionConfig,
+    overwrite: bool = False,
+) -> ExportResult:
+    """Reads an already-exported CLEAN sharded dataset and writes a SECOND,
+    clearly-labeled, corrupted shard set for debugging/inspection only.
+
+    **This is never the recommended Stage-1 storage workflow** (task
+    instruction §5): the canonical dataset stays clean-only; a real
+    training loop should apply ``apply_corruption``/
+    ``av2_kalmannet_shard_loader`` transforms at load time instead of
+    calling this function. Kept opt-in and separate so nobody mistakes it
+    for the default path.
+    """
+    from ad_morai_bridge_dev.dataset.av2_kalmannet_shard_loader import (
+        iter_segments,
+        load_shard_index,
+    )
+
+    clean_output_root = Path(clean_output_root).resolve()
+    debug_output_root = Path(debug_output_root).resolve()
+    corruption_config.validate()
+
+    clean_manifest = json.loads((clean_output_root / "export_manifest.json").read_text("utf-8"))
+    marker = debug_output_root / Av2KalmanNetExporter.MARKER
+    if debug_output_root.exists():
+        if not overwrite:
+            raise AdapterError(f"debug output exists: {debug_output_root}; pass overwrite=True")
+        if marker.is_file():
+            shutil.rmtree(debug_output_root)
+        else:
+            raise AdapterError(f"refusing to overwrite unrecognised directory: {debug_output_root}")
+
+    staging = debug_output_root.with_name(debug_output_root.name + ".tmp")
+    if staging.exists():
+        shutil.rmtree(staging)
+    (staging / "shards").mkdir(parents=True, exist_ok=True)
+    (staging / Av2KalmanNetExporter.MARKER).write_text(
+        "HEVEN AV2 KalmanNet adapter (DEBUG materialized-corruption copy -- not the Stage-1 workflow)\n",
+        encoding="utf-8",
+    )
+
+    refs = load_shard_index(clean_output_root)
+    by_shard: dict[str, list] = {}
+    for ref in refs:
+        by_shard.setdefault(ref.shard_file, []).append(ref)
+
+    shard_index_lines: list[str] = []
+    shard_manifest_rows: list[dict[str, Any]] = []
+    artifact_hashes: list[str] = []
+
+    for shard_i, (shard_file, _shard_refs) in enumerate(sorted(by_shard.items())):
+        accumulator = _ShardAccumulator.empty()
+        for segment in iter_segments(clean_output_root, shard_files=[shard_file]):
+            arrays = {
+                "timestamps_ns": segment.timestamps_ns,
+                "dt_s": segment.dt_s,
+                "gt_state": segment.gt_state,
+                "clean_position": segment.gt_state[:, :2],
+                "av2_timestep": segment.av2_timestep,
+                "av2_observed": segment.av2_observed,
+                "origin_xy": np.array([segment.origin_x, segment.origin_y]),
+            }
+            corrupted = apply_corruption(arrays, segment.segment_id, corruption_config)
+            corrupted["measurement_data"] = corrupted.pop("measurement")
+            row = {
+                "sample_count": segment.sample_count,
+                "valid_for_kalmannet_gt": segment.valid_for_kalmannet_gt,
+            }
+            fake_segment = Av2Segment(
+                segment_id=segment.segment_id, scenario_id=segment.scenario_id, track_id=segment.track_id,
+                segment_index=segment.segment_index, av2_object_type=segment.av2_object_type,
+                coarse_object_type=segment.coarse_object_type, track_category=segment.track_category,
+                city_name=segment.city_name, states=[],
+            )
+            accumulator.add_segment(fake_segment, corrupted, row)
+
+        shard_arrays = accumulator.build_shard_arrays()
+        npz_bytes = _npz_bytes(shard_arrays)
+        shard_name = f"shard_{shard_i:05d}.npz"
+        (staging / "shards" / shard_name).write_bytes(npz_bytes)
+        artifact_hashes.append(_sha256_bytes(npz_bytes))
+
+        offsets = shard_arrays["segment_offsets"]
+        for i in range(accumulator.num_segments):
+            index_row = {
+                "segment_id": accumulator.segment_id[i], "shard_file": f"shards/{shard_name}",
+                "shard_index": shard_i, "offset_start": int(offsets[i]), "offset_end": int(offsets[i + 1]),
+                "scenario_id": accumulator.scenario_id[i], "track_id": accumulator.track_id[i],
+            }
+            shard_index_lines.append(json.dumps(index_row, sort_keys=True))
+        shard_manifest_rows.append(
+            {"shard_file": f"shards/{shard_name}", "num_segments": accumulator.num_segments}
+        )
+
+    (staging / "shard_index.jsonl").write_text("".join(f"{ln}\n" for ln in shard_index_lines), encoding="utf-8")
+    _atomic_write_json(staging / "shard_manifest.json", {"shards": shard_manifest_rows})
+    manifest = {
+        "status": "complete",
+        "warning": "DEBUG MATERIALIZED CORRUPTION COPY -- NOT the recommended Stage-1 storage workflow",
+        "adapter_schema_version": ADAPTER_SCHEMA_VERSION,
+        "shard_format_version": SHARD_FORMAT_VERSION,
+        "materialized_from": str(clean_output_root),
+        "materialized_from_fingerprint": clean_manifest.get("content_fingerprint"),
+        "corruption_config": json.loads(corruption_config.canonical_json()),
+        "corruption_materialized": True,
+        "content_fingerprint": _sha256_bytes("|".join(sorted(artifact_hashes)).encode("utf-8")),
+        "created_unix_time": time.time(),
+    }
+    _atomic_write_json(staging / "export_manifest.json", manifest)
+    staging.replace(debug_output_root)
+    return ExportResult(manifest, manifest["content_fingerprint"])
