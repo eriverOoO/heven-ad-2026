@@ -1,5 +1,131 @@
 # STATUS
 
+## Dynamic OGM Future Sweep — per-object budget — FIXED (accounting + bounded worst-case)
+
+Branch `fix/dynamic-ogm-future-sweep-object-budget`, from `origin/main` `4a8d161`
+(merge of PR #43). **`ad_lidar_perception` occupancy layer only. No change to
+the motion-history yaw-rate estimator, IMM, prediction trajectories, prediction
+horizon, `future_sweep_horizon_s` (stays 3.0), drivable mask, planner, lane
+graph, CenterPoint, KalmanNet, AB3DMOT, or the geometry of any valid
+prediction. `dynamic.yaml` byte-unchanged — no new parameter.**
+
+**Problem (exposed by the PR #43 integrated run).** PR #42's
+`maximum_cells_per_object` guard — the grid-clipped, covariance-inflated
+bounding-box candidate-cell count above which `build_dynamic_grid` skips a
+`DynamicBox` — was written when one tracked object was one box. Future Sweep v1
+turns one `PredictedObject` into many interpolated footprints and the guard hit
+each one, so a single high-covariance AB3DMOT track (PR #10 published-std cap
+7.0 m → ~14 m inflation → ~28 m footprint ≫ 20 000 cells) was skip-counted once
+per swept sample. On `morai_cam4` `oversized_objects_skipped` reached ~12 000
+against a few hundred genuinely oversized objects, a mid-sweep hole could
+appear, and the per-object rasterization work was effectively unbounded
+(measured `max_step_ms` 86 ms, `p95` 34 ms and climbing).
+
+**Fix — smallest robust design (parameter-free aggregate).** New pure
+`budget_object_sweep(geometry, footprints, config, max_sweep_samples, *outcome)`
+in `ad_lidar_perception_dynamic_grid` (no ROS, unit-tested). `footprints[0]` is
+the current footprint, `[1..]` the in-horizon keyframes. It returns either the
+full gap-free interpolated sweep or **just the current footprint** — never a
+partial sweep — and reports a `SweepOutcome`:
+
+| outcome | condition | node counter |
+|---|---|---|
+| `kFullSweep` | every swept footprint ≤ `maximum_cells_per_object` **and** Σ group candidate cells ≤ one full grid (`width·height`) | `future_sweep_objects` |
+| `kCurrentOversized` | the **current** footprint alone exceeds `maximum_cells_per_object` | `oversized_objects_skipped` (+1, via the unchanged builder guard) |
+| `kBudgetCapped` | current fits, but a swept footprint exceeds `maximum_cells_per_object` **or** Σ exceeds one grid | `future_sweep_budget_capped` (new) |
+| `kExpansionFailed` | `sweep_object_footprints` threw / a future keyframe malformed | `future_sweep_skips` |
+
+The footprint-extent / candidate-cell math the builder and the budget check
+share is now one function (`footprint_extent` file-local, `footprint_candidate_cells`
+public). **`build_dynamic_grid`'s per-object loop and its skip guard are
+byte-identical** (the old `exceeds_row_budget` overflow check is reproduced by
+`candidate_cell_count` returning `SIZE_MAX` on `width·height` overflow). Because
+the only footprint over `maximum_cells_per_object` that now reaches the builder
+from the sweep path is the single current footprint of a `kCurrentOversized`
+object, **`oversized_objects_skipped` counts physical predicted objects, one
+each, by construction.** Legacy mode (`use_predicted_future_sweep: false` or a
+single footprint) never calls `budget_object_sweep` — byte-identical to before.
+A malformed *current* footprint still throws and fail-safe-clears the layer.
+
+**Aggregate ceiling = `geometry.width · geometry.height`** (one full grid,
+208 000 on the 1040×200 `base_link` grid). Chosen from the measured per-object
+aggregate candidate-cell distribution on a curved-prediction capture
+(p50 13 k / p90 134 k / p99 539 k / max 4.4 M): one grid passes p90 and cuts
+the p99+ covariance-blow-up tail. Parameter-free, scales with grid.
+`sweep_object_footprints` already hard-caps footprints at
+`kMaximumSweepSamplesPerObject = 2048`, so the sum is over a bounded set,
+computed before rasterization — the budget check stays protective. Trade-off
+(documented): a genuine ≳30 m/s highway object (~250 k candidate cells) sits
+near the ceiling; `morai_cam4` has almost none.
+
+**Same-bag A/B** (`morai_cam4_20260813_163222`, full `study_pipeline_rviz.launch.py`
+Pipeline A, `prediction_yaw_rate_source:=motion_history use_predicted_future_sweep:=true
+future_sweep_horizon_s:=3.0`, `rate:=0.5`; BEFORE = merged parent `9d3df09`
+install, AFTER = this branch install; two pipeline runs, so replay timing is
+not bit-identical — the counter-semantics delta is ~8× and dwarfs the jitter):
+
+| metric (at `frames=900`) | BEFORE | AFTER |
+|---|---|---|
+| `predicted_objects` (received) | 9025 | 9158 |
+| `future_sweep_objects` (full sweep) | 9025 | 6968 |
+| `future_sweep_skips` (expansion failed) | 0 | 0 |
+| `future_sweep_budget_capped` (new) | — | 1305 |
+| **`oversized_objects_skipped`** | **9666** | **885** |
+| `frames_with_oversized_skip` | 393 | 390 |
+| empty / non-empty grids | 337 / 563 | 336 / 564 |
+| step latency median / p95 / **max** (ms) | 2.57 / 34.4 / **86.0** | 2.35 / 7.8 / **15.4** |
+
+`oversized_objects_skipped` drops ~11× to ≈ one increment per physical
+oversized object; `frames_with_oversized_skip` is unchanged (same frames, no
+longer multi-counted). The full BEFORE run ended at `frames=1620` with
+`oversized_objects_skipped=12044`, `frames_with_oversized_skip=558`,
+`median/p95/max = 2.61 / 23.3 / 86.0 ms`. AFTER's `max_step_ms` never left the
+~15 ms band because the aggregate ceiling bounds the covariance-blow-up
+rasterization spike. `future occupancy loss rate` — physical objects that lost
+some/all of their future sweep to the budget ÷ future-swept objects ≈
+`(kCurrentOversized + kBudgetCapped) / predicted_objects` ≈ (885 + 1305) / 9158
+≈ 24 % at `frames=900`, dominated on this bag by covariance-driven cases, not
+fast motion. 0 crashes / NaN either arm.
+
+**Geometry checks (offline, curved-prediction capture).**
+- *Normal curved object* (L 0.10 m, W 0.53 m, 7 keyframes, yaw span 2.1 rad,
+  48 swept footprints, max footprint 2 970 cells, Σ 111 k < one grid):
+  `kFullSweep` — AFTER swept footprints are **byte-identical** to the raw
+  `sweep_object_footprints` output (locked by
+  `BudgetObjectSweep.CurvedSweepGeometryIsUnchangedByBudgeting`).
+- *Oversized object* (0.17×0.29 m box, covariance_xx 49 → std 7.0 m, all 7
+  in-horizon footprints ~69 800 candidate cells, stationary): BEFORE all 7
+  footprints were appended and each skip-counted by the builder (+7 to
+  `oversized_objects_skipped` for one object); AFTER `budget_object_sweep`
+  classifies it `kCurrentOversized` from `footprint_candidate_cells(current) =
+  69 800 > 20 000`, returns only the current footprint, the builder skips it
+  once (+1), and no interpolation is attempted.
+
+**Tests.** `test_dynamic_grid_builder.cpp` + 12 (`FootprintCandidateCells` ×1,
+`BudgetObjectSweep` ×11 covering tasks A–J: legacy reject / normal full sweep /
+many valid footprints not counted oversized / single pathological future
+footprint dropped / aggregate-pathological dropped + deterministic / current
+pathological = legacy one-skip / oversized group increments the counter by 1
+not N (contrasted against the raw sweep's multi-count) / valid object survives
+beside an oversized one / curved geometry byte-identical / stationary stays
+current-only / malformed current throws & malformed future falls back).
+**43 / 43** `test_dynamic_grid_builder`; **103 / 103** across
+`test_dynamic_grid_builder` + `test_grid_builder` + `test_grid_combiner` +
+`test_dynamic_object_risk`. No CMakeLists change (extended the existing file).
+`colcon build --packages-select ad_lidar_perception` clean.
+
+**Files:** `ad_lidar_perception/include/ad_lidar_perception/occupancy_grid/dynamic_grid_builder.hpp`,
+`ad_lidar_perception/src/occupancy_grid/{dynamic_grid_builder.cpp,dynamic_occupancy_grid_node.cpp}`,
+`ad_lidar_perception/test/test_dynamic_grid_builder.cpp`,
+`docs/perception/dynamic_ogm_future_sweep_v1.md`, this file.
+
+**Recommended next task:** Planner Interaction Evaluation / Future Sweep Horizon
+Tuning — with the sweep now per-object budgeted, evaluate how the swept dynamic
+layer interacts with the planner's occupancy consumption and only then revisit
+`future_sweep_horizon_s` (2.0 vs 3.0). Not started.
+
+---
+
 ## Prediction yaw-rate source launch propagation — FIXED (plumbing + regression + integration)
 
 Branch `fix/prediction-yaw-rate-launch-propagation`, from `origin/main` `bcb2e6b`

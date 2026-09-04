@@ -663,4 +663,311 @@ TEST(DynamicGridFutureSweep, KeyframeBudgetExceedsRealisticPredictionDepth)
   EXPECT_NO_THROW(sweep_object_footprints(footprints, 0.1, 2048U));
 }
 
+// ---------------------------------------------------------------------------
+// Per-object future-sweep budget (footprint_candidate_cells + budget_object_sweep)
+// ---------------------------------------------------------------------------
+using ad_lidar_perception::occupancy_grid::SweepOutcome;
+using ad_lidar_perception::occupancy_grid::budget_object_sweep;
+using ad_lidar_perception::occupancy_grid::footprint_candidate_cells;
+
+// footprint_candidate_cells reports exactly the grid-clipped inflated
+// bounding-box size the builder's per-object guard is checked against: a box
+// just under the budget is rasterized, a box just over is skip-counted, and an
+// entirely off-grid box reports 0.
+TEST(FootprintCandidateCells, PredictsBuilderOversizedDecisionExactly)
+{
+  auto guarded = config();
+  guarded.maximum_cells_per_object = 100U;
+  const auto grid_geometry = geometry(50U, 50U, 1.0);
+
+  const auto within = box(25.0, 25.0, 0.0, 8.0, 8.0);   // 10 x 10 clipped cells
+  EXPECT_EQ(footprint_candidate_cells(grid_geometry, within, guarded), 100U);
+  std::size_t within_skipped = 5U;
+  (void)build_dynamic_grid(grid_geometry, {within}, guarded, &within_skipped);
+  EXPECT_EQ(within_skipped, 0U);
+
+  const auto over = box(25.0, 25.0, 0.0, 12.0, 12.0);   // 14 x 14 clipped cells
+  EXPECT_GT(footprint_candidate_cells(grid_geometry, over, guarded), 100U);
+  std::size_t over_skipped = 0U;
+  (void)build_dynamic_grid(grid_geometry, {over}, guarded, &over_skipped);
+  EXPECT_EQ(over_skipped, 1U);
+
+  EXPECT_EQ(
+    footprint_candidate_cells(
+      grid_geometry, box(1000.0, 1000.0, 0.0, 1.0, 1.0), guarded),
+    0U);
+}
+
+// A: with the sweep disabled the node feeds a single current footprint and
+// build_dynamic_grid rasterizes it exactly as before -- locked by
+// DynamicGridFutureSweep.NoFutureKeyframeReproducesLegacySingleFootprint and by
+// test_occupancy_layer_launch.py's flag-off contract. budget_object_sweep is
+// only ever reached with the sweep enabled and >= 2 footprints; it rejects a
+// degenerate call.
+TEST(BudgetObjectSweep, RejectsFewerThanTwoFootprints)
+{
+  EXPECT_THROW(
+    budget_object_sweep(
+      geometry(20U, 20U, 1.0), {box(1.0, 1.0, 0.0, 1.0, 1.0)}, config(), 2048U),
+    std::invalid_argument);
+}
+
+// B: a normal moving object with a reasonable total returns the full gap-free
+// sweep and no footprint is skip-counted.
+TEST(BudgetObjectSweep, NormalMovingObjectReturnsFullSweepWithNoSkip)
+{
+  const auto grid_geometry = geometry(400U, 20U, 0.1);
+  const std::vector<DynamicBox> keyframes{
+    box(0.5, 1.0, 0.0, 0.4, 0.4), box(30.5, 1.0, 0.0, 0.4, 0.4)};
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, config(), 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kFullSweep);
+  EXPECT_GT(group.size(), 50U);
+  std::size_t skipped = 9U;
+  const auto grid = build_dynamic_grid(grid_geometry, group, config(), &skipped);
+  EXPECT_EQ(skipped, 0U);
+  EXPECT_GT(
+    std::count_if(
+      grid.begin(), grid.end(), [](std::int8_t v) {return v > 0;}),
+    0);
+}
+
+// C: a long valid sweep contributes many interpolated footprints, none of which
+// is counted as an oversized object.
+TEST(BudgetObjectSweep, ManyValidSweepFootprintsAreNeverCountedOversized)
+{
+  const auto grid_geometry = geometry(600U, 20U, 0.1);
+  const std::vector<DynamicBox> keyframes{
+    box(0.5, 1.0, 0.0, 0.3, 0.3), box(50.5, 1.0, 0.0, 0.3, 0.3)};
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, config(), 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kFullSweep);
+  EXPECT_GT(group.size(), 150U);
+  std::size_t skipped = 3U;
+  (void)build_dynamic_grid(grid_geometry, group, config(), &skipped);
+  EXPECT_EQ(skipped, 0U);
+}
+
+// D: a single pathological future footprint (one interpolated box over the
+// per-footprint budget) drops the whole future expansion; the in-budget current
+// footprint is kept and rasterizes with no skip.
+TEST(BudgetObjectSweep, SinglePathologicalFutureFootprintDropsWholeSweep)
+{
+  auto guarded = config();  // maximum_cells_per_object = 10000
+  const auto grid_geometry = geometry(200U, 200U, 1.0);  // grid budget 40000
+  const std::vector<DynamicBox> keyframes{
+    box(20.0, 20.0, 0.0, 2.0, 2.0),        // current: tiny, in budget
+    box(60.0, 60.0, 0.0, 250.0, 250.0)};   // future: clips to ~200 x 200 cells
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, guarded, 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kBudgetCapped);
+  ASSERT_EQ(group.size(), 1U);
+  EXPECT_DOUBLE_EQ(group.front().x_m, 20.0);
+  EXPECT_DOUBLE_EQ(group.front().length_m, 2.0);
+  std::size_t skipped = 4U;
+  const auto grid = build_dynamic_grid(
+    grid_geometry, group, guarded, &skipped);
+  EXPECT_EQ(skipped, 0U);
+  EXPECT_GT(
+    std::count_if(
+      grid.begin(), grid.end(), [](std::int8_t v) {return v > 0;}),
+    0);
+}
+
+// E: an aggregate-pathological sweep -- every individual footprint fits, but
+// the group's total grid-clipped candidate-cell work exceeds one full grid --
+// is dropped whole (deterministic, all-or-nothing), current footprint kept.
+TEST(BudgetObjectSweep, AggregatePathologicalSweepIsDroppedWhole)
+{
+  auto guarded = config();  // maximum_cells_per_object = 10000
+  const auto grid_geometry = geometry(200U, 200U, 1.0);  // grid budget 40000
+  std::vector<DynamicBox> keyframes;
+  // 10 footprints, each ~91 x 91 = 8281 candidate cells (< 10000), 5 m apart:
+  // one interpolation interval each -> ~10 footprints, sum ~82000 > 40000.
+  for (int i = 0; i < 10; ++i) {
+    keyframes.push_back(
+      box(60.0 + static_cast<double>(i) * 5.0, 100.0, 0.0, 90.0, 90.0));
+  }
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, guarded, 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kBudgetCapped);
+  ASSERT_EQ(group.size(), 1U);
+  EXPECT_DOUBLE_EQ(group.front().x_m, 60.0);
+
+  // Deterministic: a second identical call gives the identical result.
+  SweepOutcome repeat_outcome{};
+  const auto repeat = budget_object_sweep(
+    grid_geometry, keyframes, guarded, 2048U, &repeat_outcome);
+  EXPECT_EQ(repeat_outcome, SweepOutcome::kBudgetCapped);
+  EXPECT_EQ(repeat.size(), 1U);
+}
+
+// F: when the current footprint itself is pathological the object keeps the
+// pre-sweep legacy semantics exactly -- only the current footprint is emitted
+// and build_dynamic_grid skip-counts it once.
+TEST(BudgetObjectSweep, PathologicalCurrentFootprintKeepsLegacySkipSemantics)
+{
+  auto guarded = config();  // maximum_cells_per_object = 10000
+  const auto grid_geometry = geometry(200U, 200U, 1.0);
+  const std::vector<DynamicBox> keyframes{
+    box(100.0, 100.0, 0.0, 300.0, 300.0),   // current: clips to ~200 x 200
+    box(150.0, 100.0, 0.0, 300.0, 300.0)};
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, guarded, 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kCurrentOversized);
+  ASSERT_EQ(group.size(), 1U);
+  EXPECT_DOUBLE_EQ(group.front().length_m, 300.0);
+  std::size_t skipped = 0U;
+  const auto grid = build_dynamic_grid(
+    grid_geometry, group, guarded, &skipped);
+  EXPECT_EQ(skipped, 1U);
+  EXPECT_TRUE(
+    std::all_of(
+      grid.begin(), grid.end(), [](std::int8_t v) {return v == 0;}));
+}
+
+// G: one physical object with many swept footprints that fails the budget once
+// increments the oversized counter by 1, never by the footprint count. Contrast
+// against feeding the raw (un-budgeted) sweep, which multi-counts.
+TEST(BudgetObjectSweep, OversizedSweptGroupIncrementsTheCounterByOneNotMany)
+{
+  auto guarded = config();  // maximum_cells_per_object = 10000
+  const auto grid_geometry = geometry(200U, 200U, 1.0);
+  const std::vector<DynamicBox> keyframes{
+    box(20.0, 100.0, 0.0, 2.0, 2.0),        // current: in budget
+    box(120.0, 100.0, 0.0, 180.0, 180.0)};  // grows past budget mid-sweep
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, keyframes, guarded, 2048U, &outcome);
+  EXPECT_EQ(outcome, SweepOutcome::kBudgetCapped);
+  ASSERT_EQ(group.size(), 1U);
+  std::size_t budgeted_skipped = 0U;
+  (void)build_dynamic_grid(grid_geometry, group, guarded, &budgeted_skipped);
+  EXPECT_EQ(budgeted_skipped, 0U);  // current footprint is in budget
+
+  const auto raw_sweep = sweep_object_footprints(
+    keyframes, grid_geometry.resolution_m, 2048U);
+  std::size_t raw_skipped = 0U;
+  (void)build_dynamic_grid(
+    grid_geometry, raw_sweep, guarded, &raw_skipped);
+  EXPECT_GT(raw_skipped, 1U);  // the pre-fix per-temporal-footprint multi-count
+}
+
+// H: two objects, one valid and one oversized -- the valid object's complete
+// sweep is still rasterized; only the oversized object is affected/counted.
+TEST(BudgetObjectSweep, ValidObjectSweepSurvivesAlongsideOversizedObject)
+{
+  auto guarded = config();  // maximum_cells_per_object = 10000
+  const auto grid_geometry = geometry(200U, 60U, 1.0);
+
+  SweepOutcome valid_outcome{};
+  auto valid_group = budget_object_sweep(
+    grid_geometry,
+    {box(10.0, 30.0, 0.0, 2.0, 2.0), box(40.0, 30.0, 0.0, 2.0, 2.0)},
+    guarded, 2048U, &valid_outcome);
+  EXPECT_EQ(valid_outcome, SweepOutcome::kFullSweep);
+
+  SweepOutcome oversized_outcome{};
+  auto oversized_group = budget_object_sweep(
+    grid_geometry,
+    {box(120.0, 30.0, 0.0, 300.0, 300.0), box(140.0, 30.0, 0.0, 300.0, 300.0)},
+    guarded, 2048U, &oversized_outcome);
+  EXPECT_EQ(oversized_outcome, SweepOutcome::kCurrentOversized);
+
+  std::vector<DynamicBox> all;
+  all.insert(all.end(), valid_group.begin(), valid_group.end());
+  all.insert(all.end(), oversized_group.begin(), oversized_group.end());
+  std::size_t skipped = 0U;
+  const auto grid = build_dynamic_grid(
+    grid_geometry, all, guarded, &skipped);
+
+  EXPECT_EQ(skipped, 1U);
+  EXPECT_EQ(at(grid, grid_geometry, 25U, 30U), 100);  // valid object's corridor
+}
+
+// I: budgeting must not straighten or otherwise alter a curved sweep -- an
+// under-budget curved object rasterizes to exactly the raw sweep.
+TEST(BudgetObjectSweep, CurvedSweepGeometryIsUnchangedByBudgeting)
+{
+  const auto grid_geometry = geometry(40U, 40U, 1.0);
+  const std::vector<DynamicBox> keyframes{
+    box(2.0, 2.0, 0.0, 0.4, 0.4),
+    box(10.0, 8.0, 0.6, 0.4, 0.4),
+    box(16.0, 18.0, 1.2, 0.4, 0.4),
+    box(18.0, 26.0, 1.5, 0.4, 0.4)};
+
+  const auto raw = sweep_object_footprints(
+    keyframes, grid_geometry.resolution_m, 2048U);
+  SweepOutcome outcome{};
+  const auto budgeted = budget_object_sweep(
+    grid_geometry, keyframes, config(), 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kFullSweep);
+  ASSERT_EQ(raw.size(), budgeted.size());
+  for (std::size_t i = 0U; i < raw.size(); ++i) {
+    EXPECT_DOUBLE_EQ(raw[i].x_m, budgeted[i].x_m);
+    EXPECT_DOUBLE_EQ(raw[i].y_m, budgeted[i].y_m);
+    EXPECT_DOUBLE_EQ(raw[i].yaw_rad, budgeted[i].yaw_rad);
+  }
+  EXPECT_EQ(
+    build_dynamic_grid(grid_geometry, raw, config()),
+    build_dynamic_grid(grid_geometry, budgeted, config()));
+}
+
+// J: a stationary object neither expands its occupied area nor inflates the
+// budget -- its swept group rasterizes to exactly its current footprint.
+TEST(BudgetObjectSweep, StationaryObjectStaysCurrentFootprintOnly)
+{
+  const auto grid_geometry = geometry(20U, 20U, 1.0);
+  const auto current = box(10.0, 10.0, 0.0, 1.0, 1.0);
+
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    grid_geometry, {current, current, current}, config(), 2048U, &outcome);
+
+  EXPECT_EQ(outcome, SweepOutcome::kFullSweep);
+  EXPECT_EQ(
+    build_dynamic_grid(grid_geometry, group, config()),
+    build_dynamic_grid(grid_geometry, {current}, config()));
+}
+
+// A malformed current footprint still throws (fail-safe clear), a malformed
+// future keyframe instead falls back to the current footprint.
+TEST(BudgetObjectSweep, MalformedCurrentThrowsMalformedFutureFallsBack)
+{
+  auto non_psd = box(1.0, 1.0, 0.0, 1.0, 1.0);
+  non_psd.covariance_xx = -5.0;
+  EXPECT_THROW(
+    budget_object_sweep(
+      geometry(20U, 20U, 1.0), {non_psd, box(2.0, 1.0, 0.0, 1.0, 1.0)},
+      config(), 2048U),
+    std::invalid_argument);
+
+  auto nan_future = box(5.0, 0.0, 0.0, 0.4, 0.4);
+  nan_future.x_m = std::numeric_limits<double>::quiet_NaN();
+  SweepOutcome outcome{};
+  const auto group = budget_object_sweep(
+    geometry(60U, 10U, 1.0), {box(0.0, 5.0, 0.0, 0.4, 0.4), nan_future},
+    config(), 2048U, &outcome);
+  EXPECT_EQ(outcome, SweepOutcome::kExpansionFailed);
+  ASSERT_EQ(group.size(), 1U);
+  EXPECT_DOUBLE_EQ(group.front().x_m, 0.0);
+}
+
 }  // namespace
