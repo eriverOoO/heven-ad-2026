@@ -14,6 +14,13 @@ ad_dynamic_occupancy_grid:
     minimum_inflation_m: 0.20
     occupied_cost: 100
     maximum_cells_per_object: 20000
+    # Dynamic OGM Future Sweep v1 (opt-in) is configured through the launch
+    # argument use_predicted_future_sweep (default false => only the current
+    # footprint is rasterized, unchanged behaviour) and future_sweep_horizon_s
+    # (default 3.0 s; 0.0 also reproduces the legacy path). They are deliberately
+    # NOT set here: an rcl_yaml_param_parser merge with a nested launch override
+    # for the same key is unreliable, so the node's own declared defaults plus
+    # the launch dict own these two values.
     road_gate.enabled: true
     road_gate.maximum_pending_messages: 8
     topics.predicted_objects: "/ad/perception/objects/predicted"

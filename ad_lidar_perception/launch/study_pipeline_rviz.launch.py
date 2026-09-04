@@ -110,6 +110,12 @@ def _launch_setup(context):
             "prediction_yaw_rate_source": _perform(
                 context, "prediction_yaw_rate_source"
             ),
+            "use_predicted_future_sweep": _perform(
+                context, "use_predicted_future_sweep"
+            ),
+            "future_sweep_horizon_s": _perform(
+                context, "future_sweep_horizon_s"
+            ),
             "ab3dmot_kalmannet_checkpoint": kalmannet_checkpoint,
             "ab3dmot_kalmannet_device": _perform(context, "kalmannet_device"),
             "ab3dmot_root": _perform(context, "ab3dmot_root"),
@@ -204,6 +210,21 @@ def generate_launch_description():
                 "Curve-Aware Prediction v1: 'tracker' (default) or "
                 "'motion_history' to derive the IMM turn rate from tracked "
                 "velocity history."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "use_predicted_future_sweep",
+            default_value="false",
+            description=(
+                "Dynamic OGM Future Sweep v1: 'true' sweeps the predicted "
+                "trajectory into the dynamic occupancy grid. Default 'false'."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "future_sweep_horizon_s",
+            default_value="3.0",
+            description=(
+                "Forward horizon in seconds of the Dynamic OGM future sweep."
             ),
         ),
         DeclareLaunchArgument("ab3dmot_root", default_value=""),

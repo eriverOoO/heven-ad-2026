@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace
@@ -444,6 +445,222 @@ TEST(DynamicGridBuilder, OversizedSkipIsDeterministicAndOutParamResets)
   (void)build_dynamic_grid(
     geometry(100U, 100U), {box(2.0, 2.0, 0.0, 1.0, 1.0)}, guarded, &skipped_c);
   EXPECT_EQ(skipped_c, 0U);
+}
+
+using ad_lidar_perception::occupancy_grid::sweep_object_footprints;
+
+// Centroid (mean cell centre, grid units) of every occupied cell.
+std::pair<double, double> occupied_centroid(
+  const std::vector<std::int8_t> & grid, const GridGeometry & grid_geometry)
+{
+  double sum_x = 0.0;
+  double sum_y = 0.0;
+  std::size_t count = 0U;
+  for (std::size_t y = 0U; y < grid_geometry.height; ++y) {
+    for (std::size_t x = 0U; x < grid_geometry.width; ++x) {
+      if (grid.at(y * grid_geometry.width + x) > 0) {
+        sum_x += static_cast<double>(x);
+        sum_y += static_cast<double>(y);
+        ++count;
+      }
+    }
+  }
+  if (count == 0U) {
+    return {0.0, 0.0};
+  }
+  return {sum_x / static_cast<double>(count), sum_y / static_cast<double>(count)};
+}
+
+// A: with no in-horizon predicted state the sweep is exactly the legacy single
+// current footprint (this is also the node's feature-disabled / empty-future
+// fallback path; the node-level flag-off contract is locked by
+// test_occupancy_layer_launch.py's "must not collapse future predictions").
+TEST(DynamicGridFutureSweep, NoFutureKeyframeReproducesLegacySingleFootprint)
+{
+  const auto current = box(1.5, 0.5, 0.0, 0.2, 0.2);
+  const auto swept = sweep_object_footprints({current}, 0.1, 64U);
+
+  ASSERT_EQ(swept.size(), 1U);
+  const auto grid_geometry = geometry(6U, 1U);
+  EXPECT_EQ(
+    build_dynamic_grid(grid_geometry, swept, config()),
+    build_dynamic_grid(grid_geometry, {current}, config()));
+}
+
+// H: a stationary object (identical keyframes) never sweeps more than its
+// current footprint.
+TEST(DynamicGridFutureSweep, StationaryObjectDoesNotExpandArea)
+{
+  const auto current = box(2.5, 0.5, 0.0, 0.2, 0.2);
+  const auto swept = sweep_object_footprints({current, current, current}, 0.1, 64U);
+
+  const auto grid_geometry = geometry(6U, 1U);
+  EXPECT_EQ(
+    build_dynamic_grid(grid_geometry, swept, config()),
+    build_dynamic_grid(grid_geometry, {current}, config()));
+}
+
+// B: a straight predicted future produces one continuous occupied corridor with
+// no gap between the sparse keyframes.
+TEST(DynamicGridFutureSweep, StraightFutureProducesGapFreeCorridor)
+{
+  const auto swept = sweep_object_footprints(
+    {box(0.5, 0.5, 0.0, 0.4, 0.4), box(9.5, 0.5, 0.0, 0.4, 0.4)},
+    0.1, 512U);
+
+  const auto grid_geometry = geometry(10U, 1U);
+  const auto grid = build_dynamic_grid(grid_geometry, swept, config());
+  for (std::size_t x = 0U; x < 10U; ++x) {
+    EXPECT_EQ(at(grid, grid_geometry, x, 0U), 100)
+      << "gap in swept corridor at x=" << x;
+  }
+}
+
+// E: the sweep never extends past the last keyframe it was given (the node
+// clips keyframes to future_sweep_horizon_s before calling this).
+TEST(DynamicGridFutureSweep, SweepIsBoundedByTheLastKeyframe)
+{
+  const auto swept = sweep_object_footprints(
+    {box(0.5, 0.5, 0.0, 0.4, 0.4), box(3.5, 0.5, 0.0, 0.4, 0.4)},
+    0.1, 512U);
+
+  const auto grid_geometry = geometry(12U, 1U);
+  const auto grid = build_dynamic_grid(grid_geometry, swept, config());
+  // Everything beyond the last keyframe (x=3.5) plus its half-width stays free.
+  for (std::size_t x = 5U; x < 12U; ++x) {
+    EXPECT_EQ(at(grid, grid_geometry, x, 0U), 0) << "occupancy past horizon at x=" << x;
+  }
+}
+
+// C: a future that bends +y (left) sweeps a curved region -- its occupied
+// centroid is displaced toward +y relative to a straight sweep from the same
+// start pose and travel distance.
+TEST(DynamicGridFutureSweep, LeftBendingFutureSweepsCurvedRegion)
+{
+  const auto grid_geometry = geometry(14U, 14U);
+
+  const auto straight = build_dynamic_grid(
+    grid_geometry,
+    sweep_object_footprints(
+      {box(1.0, 1.0, 0.0, 0.4, 0.4), box(8.0, 1.0, 0.0, 0.4, 0.4)},
+      0.1, 512U),
+    config());
+  const auto curved = build_dynamic_grid(
+    grid_geometry,
+    sweep_object_footprints(
+      {
+        box(1.0, 1.0, 0.0, 0.4, 0.4),
+        box(5.0, 4.0, 0.6, 0.4, 0.4),
+        box(7.0, 9.0, 1.2, 0.4, 0.4),
+        box(7.5, 12.0, 1.5, 0.4, 0.4),
+      },
+      0.1, 512U),
+    config());
+
+  const auto straight_centroid = occupied_centroid(straight, grid_geometry);
+  const auto curved_centroid = occupied_centroid(curved, grid_geometry);
+  // Straight sweep centroid sits near the start row; the curved sweep pulls the
+  // occupied mass strongly toward +y.
+  EXPECT_GT(curved_centroid.second, straight_centroid.second + 3.0);
+}
+
+// D: the opposite turn sweeps the mirror region -- symmetric lateral
+// displacement, opposite sign.
+TEST(DynamicGridFutureSweep, RightBendingFutureIsTheMirrorOfLeftBending)
+{
+  const auto grid_geometry = geometry(14U, 28U);
+  const double y0 = 13.5;
+
+  const auto sweep_arm = [&](const double s) {
+      return build_dynamic_grid(
+        grid_geometry,
+        sweep_object_footprints(
+          {
+            box(1.0, y0, 0.0, 0.4, 0.4),
+            box(5.0, y0 + s * 3.0, s * 0.6, 0.4, 0.4),
+            box(7.0, y0 + s * 8.0, s * 1.2, 0.4, 0.4),
+            box(7.5, y0 + s * 11.0, s * 1.5, 0.4, 0.4),
+          },
+          0.1, 512U),
+        config());
+    };
+
+  const auto left_centroid = occupied_centroid(sweep_arm(1.0), grid_geometry);
+  const auto right_centroid = occupied_centroid(sweep_arm(-1.0), grid_geometry);
+
+  EXPECT_GT(left_centroid.second, y0 + 2.0);
+  EXPECT_LT(right_centroid.second, y0 - 2.0);
+  EXPECT_NEAR(
+    left_centroid.second - y0, y0 - right_centroid.second, 1.0);
+  EXPECT_NEAR(left_centroid.first, right_centroid.first, 1.0);
+}
+
+// F: a fast object with sparse keyframes still fills every grid cell along the
+// path -- spacing derives from the footprint size, not the keyframe spacing.
+TEST(DynamicGridFutureSweep, FastObjectSparseKeyframesHasNoGridHoles)
+{
+  const auto swept = sweep_object_footprints(
+    {box(0.5, 0.5, 0.0, 0.3, 0.3), box(59.5, 0.5, 0.0, 0.3, 0.3)},
+    0.1, 2048U);
+
+  const auto grid_geometry = geometry(60U, 1U);
+  const auto grid = build_dynamic_grid(grid_geometry, swept, config());
+  EXPECT_TRUE(
+    std::all_of(
+      grid.begin(), grid.end(),
+      [](const std::int8_t value) {return value == 100;}));
+}
+
+// G: the drivable-mask gate still applies to every swept footprint -- swept
+// cells outside the mask stay free, exactly as for the current footprint.
+TEST(DynamicGridFutureSweep, DrivableMaskGatesEverySweptFootprint)
+{
+  const auto swept = sweep_object_footprints(
+    {box(0.5, 0.5, 0.0, 0.4, 0.4), box(5.5, 0.5, 0.0, 0.4, 0.4)},
+    0.1, 128U);
+
+  const auto grid_geometry = geometry(6U, 1U);
+  //             x=0  1    2  3    4  5
+  const std::vector<std::int8_t> drivable_mask{0, 100, 0, 100, 0, 0};
+  const auto grid = build_dynamic_grid(
+    grid_geometry, swept, config(), drivable_mask);
+
+  EXPECT_EQ(grid, (std::vector<std::int8_t>{100, 0, 100, 0, 100, 100}));
+}
+
+// I: a non-finite predicted keyframe and an unbounded expansion both throw --
+// the node catches these and falls back to the current footprint, never a
+// crash, NaN, or grid explosion.
+TEST(DynamicGridFutureSweep, RejectsNonFiniteKeyframeAndUnboundedExpansion)
+{
+  auto bad = box(3.0, 0.0, 0.0, 0.4, 0.4);
+  bad.x_m = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_THROW(
+    sweep_object_footprints({box(0.0, 0.0, 0.0, 0.4, 0.4), bad}, 0.1, 128U),
+    std::invalid_argument);
+
+  // 400 m at 0.2 m spacing = 2000 samples > the caller's budget.
+  EXPECT_THROW(
+    sweep_object_footprints(
+      {box(0.0, 0.0, 0.0, 0.4, 0.4), box(400.0, 0.0, 0.0, 0.4, 0.4)},
+      0.1, 64U),
+    std::length_error);
+
+  EXPECT_THROW(
+    sweep_object_footprints({box(0.0, 0.0, 0.0, 0.4, 0.4)}, 0.0, 64U),
+    std::invalid_argument);
+}
+
+// The keyframe budget comfortably exceeds a realistic in-horizon prediction:
+// current + ~7 states at 0.5 s spacing over a 3 s horizon is 8 keyframes.
+TEST(DynamicGridFutureSweep, KeyframeBudgetExceedsRealisticPredictionDepth)
+{
+  std::vector<DynamicBox> footprints;
+  for (int i = 0; i < 8; ++i) {
+    footprints.push_back(
+      box(static_cast<double>(i) * 4.0, 0.0, 0.0, 4.5, 2.0));
+  }
+  EXPECT_NO_THROW(sweep_object_footprints(footprints, 0.1, 2048U));
 }
 
 }  // namespace

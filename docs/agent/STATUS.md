@@ -1,5 +1,155 @@
 # STATUS
 
+## Dynamic OGM Future Sweep v1 — swept predicted-object occupancy — VALIDATED
+
+Branch `feat/dynamic-ogm-future-sweep-v1`, from merged PR #41 `f97ace0`
+(`feat(prediction): derive turn rate from motion history (#41)`, verified
+`MERGED` via `git log` before branching). **Opt-in, default-off. Wires the
+EXISTING published `PredictedObject.states[]` into the EXISTING Dynamic
+Occupancy Grid so moving-object occupancy covers future swept space.** NOT a
+new motion predictor: the OGM node never re-predicts. No change to the
+motion-history yaw-rate estimator, IMM, prediction probabilities, prediction
+horizons, AB3DMOT, KalmanNet, CenterPoint, Hungarian, track lifecycle, the
+drivable-mask policy, `route_corridor.json`, or any planner default. Occupancy
+semantics unchanged (0 free / 100 occupied, `base_link`, 1040×200 @ 0.1).
+
+**Implementation.** `dynamic_occupancy_grid_node.cpp::boxes_from_message()`
+gained an opt-in branch: keyframe 0 = current footprint; each predicted
+`state` with `time_from_start ≤ future_sweep_horizon_s` is appended with **its
+own predicted (curved) orientation** (`state.pose.orientation`, populated by
+PR #41's `map_imm_prediction`); the keyframe list is expanded by the existing
+unit-tested `interpolate_dynamic_trajectory()` via a thin new pure helper
+`sweep_object_footprints()` in `dynamic_grid_builder.{hpp,cpp}` that only picks
+the sample spacing (`max(grid_resolution_m, 0.5·min(L,W))` — half the smaller
+footprint edge ⇒ no grid-cell holes, never finer than a cell ⇒ bounded, cap
+`kMaximumSweepSamplesPerObject = 2048`, ~20× a realistic in-horizon
+prediction); the resulting footprints are rasterized by the **unchanged**
+`build_dynamic_grid()` (same SAT test, covariance inflation, per-cell
+drivable-mask gate). Feature off / `future_sweep_horizon_s: 0.0` /
+single-footprint (stationary or no in-horizon state) ⇒ byte-identical legacy
+path. A per-object `try/catch` on the sweep-expansion only: a trajectory that
+can't be bounded-expanded falls back to that object's current footprint
+(counted); malformed message content still throws → fail-safe clear, unchanged.
+New `DYNAMIC_OGM_RUNTIME_SUMMARY` fields: `future_sweep=on|off`,
+`future_sweep_objects`, `future_sweep_skips`, `max_future_sweep_horizon_ms`.
+
+**Parameters (opt-in):** `use_predicted_future_sweep` (default `false`),
+`future_sweep_horizon_s` (default `3.0`, validated `[0,10]`). Threaded through
+`dynamic_occupancy_grid.launch.py` → `lidar_perception.launch.py` →
+`lidar_bag_replay.launch.py` → `study_pipeline_rviz.launch.py`. Horizon 3.0 s
+covers `prediction.yaml`'s own stated targets (1.5 s DWA rollout, ~2.8 s 60
+km/h stop, 0.5 s accepted age); 6 s at highway speed (~200 m) would blanket
+the 104 m grid, so not the default. Bag A/B measured 2.0 s and 3.0 s —
+near-identical effect on this recording (road-gate clips the far tail).
+
+**These two params are deliberately NOT keyed in `dynamic.yaml`** (only a
+comment): a real, reproduced `rcl_yaml_param_parser` behaviour — a nested
+launch override of a key already present in a loaded params file is silently
+dropped, so the launch argument would never reach the node through the
+3-level study chain. The node's own `declare_parameter` defaults + the launch
+dict own the values (verified: `future_sweep_horizon_s` reaches the node
+through the full study chain). **The identical latent bug already exists in
+PR #41's `prediction.yaml` `yaw_rate_source: tracker` key** —
+`prediction_yaw_rate_source:=motion_history` is silently inert through every
+nested launch (`study_pipeline_rviz` → … → `prediction`), the IMM keeps
+running on the zero tracker yaw rate. **Left untouched here** (out of scope —
+the task forbids prediction-path changes, and a bare YAML deletion would
+change an already-merged, separately-validated feature's launch behaviour with
+no regression test); recorded as a named follow-up below and in
+`docs/perception/dynamic_ogm_future_sweep_v1.md`.
+
+**Unit tests:** `test_dynamic_grid_builder.cpp` +10 `DynamicGridFutureSweep`
+(A no-future⇒legacy single footprint; H stationary⇒no expansion; B straight⇒
+gap-free corridor; E bounded by last keyframe; **C left-bend⇒occupied-cell
+centroid displaced +y vs a straight sweep; D right-bend⇒mirror, symmetric
+magnitude/opposite sign**; F fast+sparse⇒no grid holes; G drivable-mask gates
+every swept footprint; I non-finite keyframe + unbounded expansion both throw;
+keyframe budget ≥ realistic depth). **31/31** `test_dynamic_grid_builder`
+(21 pre-existing unaffected). `test_occupancy_layer_launch.py` +3 subprocess
+assertions (bad horizon rejected; opt-in config starts; existing "must not
+collapse future predictions" tagged as the feature-off contract) — both
+parametrized cases pass. Launch tests updated (`test_lidar_perception_launch`,
+`test_lidar_bag_replay_launch`, `test_study_pipeline_rviz_launch`,
+`test_occupancy_layer_launch`) — **117 pass**. `colcon build
+--packages-select ad_lidar_perception` clean; `git diff --check` clean.
+
+**Same-bag validation (`morai_cam4_20260813_163222`, Pipeline A,
+motion-history prediction on both arms).** One Pipeline-A capture of
+`/ad/perception/objects/predicted` + `/ad/planning/drivable_mask` + `/tf`,
+replayed verbatim into a standalone `ad_dynamic_occupancy_grid` node three
+times (sweep off / on @ 2.0 s / on @ 3.0 s), identical input each arm.
+Numbers in `docs/perception/dynamic_ogm_future_sweep_v1.md`. Headline:
+aggregate occupied-cell ratio +8 % (h=2.0) / +10 % (h=3.0), median per frame
++5 %, p95 essentially unchanged — a thin curved tail per moving object, not a
+wall; absolute max grid occupancy 5.9 % (no flood). Stationary objects do not
+expand. `future_sweep_skips = 0` (no fallbacks). Step latency median
+0.55 → 1.26 ms, p95 1.45 → 3.99 ms — two orders under the 0.5 s
+`prediction_timeout_sec`; publication rate unchanged (512 grids both arms).
+**Known interaction:** `maximum_cells_per_object` is per DynamicBox, so a
+high-covariance AB3DMOT track (already oversized-skipped in the current-only
+path, PR #9) is now skipped once per swept sample — `oversized_objects_skipped`
+293 → 2243 while `frames_with_oversized_skip` is unchanged (179 → 180); that
+one object's future tail has a hole, every other object still rasterizes, no
+frame aborts. Documented; a per-object budget for swept groups is a follow-up.
+
+**Curved-sweep + full-pipeline checks.** A dedicated motion-history prediction
+run (`tracked_rec` replayed through a standalone `prediction.launch.py
+yaw_rate_source:=motion_history`, 1899 curved object-frames, 2615 with
+non-zero fused yaw rate) fed to the sweep: `future_sweep=on`, 13 799 objects
+swept, **0 fallback skips**, latency median 0.34 ms — curved predictions are
+accepted and swept without error (occupancy cell counts N/A there: the
+standalone replay had no real localization TF so objects fell outside the
+ego-relative grid). Full `study_pipeline_rviz` with
+`use_predicted_future_sweep:=true`: 17 processes, 0 crashes, both new params
+propagate through the whole nested chain (`future_sweep=on`,
+`future_sweep_horizon_s` value reaches the node — 2000/3000 ms —,
+`future_sweep_skips=0`), 0 invalid grid cells, ≤5.7 % grid occupied, RViz
+config already carries the Dynamic Occupancy display. No screenshot capability
+here (documented precedent) — verified from message content. Curved
+predictions through this same chain also need the `prediction.yaml` plumbing
+bug fixed (out of scope) — the curved-sweep evidence here is the unit tests
+plus the standalone `pred_mh` run.
+
+**No occupancy-accuracy or planner-safety claim** — message counts, occupied
+area, throughput, TF-classification counters only. Deterministic geometry
+integration, not learned probabilistic occupancy prediction; motion-history/
+IMM-based, not lane-aware, no maneuver-intent model, bounded horizon; single
+scene / single bag.
+
+**Files:** `ad_lidar_perception/include/ad_lidar_perception/occupancy_grid/
+dynamic_grid_builder.hpp`, `src/occupancy_grid/{dynamic_grid_builder.cpp,
+dynamic_occupancy_grid_node.cpp}`, `config/occupancy_grid/dynamic.yaml`
+(comment only), `launch/{dynamic_occupancy_grid,
+lidar_perception,lidar_bag_replay,study_pipeline_rviz}.launch.py`,
+`test/{test_dynamic_grid_builder.cpp,test_occupancy_layer_launch.py,
+test_lidar_perception_launch.py,test_lidar_bag_replay_launch.py,
+test_study_pipeline_rviz_launch.py}`,
+`docs/perception/dynamic_ogm_future_sweep_v1.md` (new), this file. No
+detector/association/estimator/prediction-algorithm/occupancy-math/planner/
+CenterPoint/KalmanNet file changed; no production launch default changed.
+
+**Follow-up carried out of this task (not done here):** fix the PR #41
+`prediction.yaml` `yaw_rate_source: tracker` plumbing bug so
+`prediction_yaw_rate_source:=motion_history` actually reaches the prediction
+node through the nested launches (repro:
+`study_pipeline_rviz.launch.py prediction_yaw_rate_source:=motion_history` →
+every `/ad/perception/objects/predicted` `initial_twist.twist.angular.z == 0`;
+direct `prediction.launch.py yaw_rate_source:=motion_history` works). Needs its
+own PR + a launch regression test; it changes a merged, separately-validated
+feature's behaviour.
+
+**Recommended next task:** either (A) evaluate/tune the future-sweep horizon
+against real planner interaction — feed the swept dynamic layer into a
+planner scenario and measure how much extra longitudinal caution the
+2–3 s tail actually induces vs. the current-footprint layer, and whether the
+per-DynamicBox `maximum_cells_per_object` budget should become per-object for
+swept groups; or (B) begin the lane-graph / actor-lane association audit for
+genuinely map-aware prediction (the sweep is only as good as the IMM
+trajectory it consumes, which is motion-history not map-aware). Recommend
+**(A)** first: this task added a real new input to the planner's occupancy
+layer and its practical conservatism is unmeasured; (B) is a much larger
+research effort better sequenced after (A) quantifies the gap.
+
 ## Curve-Aware Prediction v1 — motion-history yaw rate — VALIDATED
 
 Branch `feat/prediction-motion-history-yaw-rate-v1`, from merged PR #40 `8f07096`

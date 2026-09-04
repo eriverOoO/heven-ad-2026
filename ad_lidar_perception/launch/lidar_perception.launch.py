@@ -88,6 +88,25 @@ def _launch_setup(context):
         raise RuntimeError(
             "prediction_yaw_rate_source must be tracker or motion_history"
         )
+    use_predicted_future_sweep = _parse_enabled(
+        "use_predicted_future_sweep",
+        LaunchConfiguration(
+            "use_predicted_future_sweep", default="false"
+        ).perform(context),
+    )
+    future_sweep_horizon_s = (
+        LaunchConfiguration("future_sweep_horizon_s", default="3.0")
+        .perform(context)
+        .strip()
+    )
+    try:
+        parsed_future_sweep_horizon_s = float(future_sweep_horizon_s)
+    except ValueError as error:
+        raise RuntimeError(
+            "future_sweep_horizon_s must be a number"
+        ) from error
+    if not 0.0 <= parsed_future_sweep_horizon_s <= 10.0:
+        raise RuntimeError("future_sweep_horizon_s must be in [0, 10]")
     if selection.detector.build_only:
         raise RuntimeError(
             "build_only selection cannot activate the runtime composition"
@@ -311,9 +330,14 @@ def _launch_setup(context):
         )
 
     if selection.occupancy.dynamic_enabled:
-        dynamic_arguments = None
+        dynamic_arguments = {
+            "use_predicted_future_sweep": (
+                "true" if use_predicted_future_sweep else "false"
+            ),
+            "future_sweep_horizon_s": future_sweep_horizon_s,
+        }
         if tracker_backend == "ab3dmot":
-            dynamic_arguments = {"runtime_summary_interval_frames": "180"}
+            dynamic_arguments["runtime_summary_interval_frames"] = "180"
         actions.append(
             _include("dynamic_occupancy_grid.launch.py", dynamic_arguments)
         )
@@ -438,6 +462,25 @@ def generate_launch_description():
                     "'tracker' (default) reproduces prior behaviour; "
                     "'motion_history' derives the turn rate from tracked "
                     "velocity history."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "use_predicted_future_sweep",
+                default_value="false",
+                description=(
+                    "Dynamic OGM Future Sweep v1: forward the predicted "
+                    "trajectory keyframes into the dynamic occupancy grid so "
+                    "moving-object occupancy covers future swept space. "
+                    "Default false reproduces prior behaviour."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "future_sweep_horizon_s",
+                default_value="3.0",
+                description=(
+                    "Forward horizon in seconds of the Dynamic OGM future "
+                    "sweep; 0.0 also reproduces the current-footprint-only "
+                    "behaviour."
                 ),
             ),
             DeclareLaunchArgument(

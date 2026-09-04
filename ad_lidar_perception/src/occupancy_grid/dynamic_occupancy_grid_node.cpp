@@ -38,6 +38,20 @@ namespace
 constexpr double kQuaternionTolerance = 1.0e-6;
 constexpr double kCovarianceSymmetryTolerance = 1.0e-9;
 constexpr std::size_t kMaximumPredictionStatesPerObject = 4096U;
+// Upper bound on the interpolated footprints one object may contribute to the
+// sweep. A ~33 m/s highway object over a 3 s horizon travels ~100 m; at the
+// coarsest ~1 m car spacing that is ~100 samples, so this leaves >20x head
+// room. A prediction that would still exceed it makes that one object fall
+// back to its current footprint (counted), never aborting the frame.
+constexpr std::size_t kMaximumSweepSamplesPerObject = 2048U;
+
+// Per-frame diagnostics for the optional predicted-trajectory sweep.
+struct FutureSweepStats
+{
+  std::size_t objects_with_future{0U};
+  std::size_t objects_skipped{0U};
+  std::int64_t max_horizon_ns{0};
+};
 
 bool positive_stamp(const builtin_interfaces::msg::Time & stamp)
 {
@@ -242,6 +256,26 @@ public:
     }
     runtime_summary_interval_frames_ =
       static_cast<std::size_t>(runtime_summary_interval);
+
+    // Optional predicted-trajectory sweep (Dynamic OGM Future Sweep v1).
+    // Default off => byte-identical to the current-footprint-only behaviour.
+    future_sweep_enabled_ =
+      declare_parameter<bool>("use_predicted_future_sweep", false);
+    future_sweep_horizon_sec_ =
+      declare_parameter<double>("future_sweep_horizon_s", 3.0);
+    if (!std::isfinite(future_sweep_horizon_sec_) ||
+      future_sweep_horizon_sec_ < 0.0 || future_sweep_horizon_sec_ > 10.0)
+    {
+      throw std::invalid_argument(
+              "future_sweep_horizon_s must be in [0, 10]");
+    }
+    future_sweep_horizon_ns_ = static_cast<std::int64_t>(
+      future_sweep_horizon_sec_ * 1.0e9);
+    // horizon 0 s reproduces the legacy behaviour even when the flag is set.
+    if (future_sweep_horizon_ns_ <= 0) {
+      future_sweep_enabled_ = false;
+    }
+
     geometry_.width =
       cell_count(geometry_.x_min_m, x_max_m_, geometry_.resolution_m);
     geometry_.height =
@@ -357,7 +391,8 @@ private:
 
   std::vector<DynamicBox> boxes_from_message(
     const ad_interfaces::msg::PredictedObjectArray & input,
-    const geometry_msgs::msg::TransformStamped & transform) const
+    const geometry_msgs::msg::TransformStamped & transform,
+    FutureSweepStats * const sweep_stats) const
   {
     std::vector<DynamicBox> boxes;
     if (input.objects.size() > boxes.max_size()) {
@@ -391,11 +426,18 @@ private:
         throw std::length_error(
                 "predicted-object horizon count is not representable");
       }
-      boxes.push_back(
+      // First footprint is always the object's current pose. When the sweep is
+      // enabled every predicted state whose horizon is within the sweep window
+      // is appended as a keyframe; its own predicted orientation is used (the
+      // curved yaw produced by the IMM prediction adapter), never the current
+      // one. Every state is still validated in either mode.
+      std::vector<DynamicBox> footprints;
+      footprints.push_back(
         transformed_box(
           object.initial_pose, object.dimensions.x, object.dimensions.y,
           transform));
       std::int64_t previous_horizon = 0;
+      std::int64_t last_swept_horizon = 0;
       for (const auto & state : object.states) {
         const auto horizon = duration_ns(state.time_from_start);
         if (horizon <= previous_horizon) {
@@ -404,12 +446,56 @@ private:
         }
         validate_pose(state.pose);
         previous_horizon = horizon;
+        if (!future_sweep_enabled_) {
+          continue;
+        }
+        // Predicted horizons are strictly increasing, so the first state past
+        // the sweep window ends the object's keyframe list.
+        if (horizon > future_sweep_horizon_ns_) {
+          break;
+        }
+        footprints.push_back(
+          transformed_box(
+            state.pose, object.dimensions.x, object.dimensions.y, transform));
+        last_swept_horizon = horizon;
+      }
+
+      // OccupancyGrid has no time axis. With the sweep disabled the object
+      // contributes only its current footprint; the planner consumes the
+      // original time-indexed prediction for swept collision checks. With the
+      // sweep enabled the current + in-horizon predicted footprints are
+      // expanded into a gap-free swept region.
+      if (!future_sweep_enabled_ || footprints.size() == 1U) {
+        boxes.push_back(std::move(footprints.front()));
+        continue;
+      }
+
+      try {
+        auto swept = sweep_object_footprints(
+          footprints, geometry_.resolution_m, kMaximumSweepSamplesPerObject);
+        if (swept.size() > boxes.max_size() - boxes.size()) {
+          throw std::length_error("swept footprint set is not representable");
+        }
+        if (sweep_stats != nullptr) {
+          ++sweep_stats->objects_with_future;
+          sweep_stats->max_horizon_ns =
+            std::max(sweep_stats->max_horizon_ns, last_swept_horizon);
+        }
+        for (auto & swept_box : swept) {
+          boxes.push_back(std::move(swept_box));
+        }
+      } catch (const std::exception &) {
+        // The predicted trajectory could not be expanded into a bounded sweep
+        // (degenerate spacing, sample budget, interpolation overflow): fall
+        // back to this object's current footprint, leaving the rest of the
+        // frame unaffected. Malformed message content already threw above and
+        // remains the caller's fail-safe-clear concern.
+        boxes.push_back(std::move(footprints.front()));
+        if (sweep_stats != nullptr) {
+          ++sweep_stats->objects_skipped;
+        }
       }
     }
-    // OccupancyGrid has no time axis. Rasterizing every future keyframe would
-    // make the complete trajectory occupied at every DWA rollout instant.
-    // Keep only the current footprint here; the planner consumes the original
-    // time-indexed prediction for swept collision checks and visualization.
     return boxes;
   }
 
@@ -539,7 +625,19 @@ private:
         target_frame_, input.header.frame_id,
         rclcpp::Time(input.header.stamp),
         rclcpp::Duration::from_seconds(transform_timeout_sec_));
-      const auto boxes = boxes_from_message(input, transform);
+      FutureSweepStats sweep_stats;
+      const auto boxes = boxes_from_message(input, transform, &sweep_stats);
+      objects_with_future_sweep_ += sweep_stats.objects_with_future;
+      future_sweep_object_skips_ += sweep_stats.objects_skipped;
+      max_future_sweep_horizon_ns_ =
+        std::max(max_future_sweep_horizon_ns_, sweep_stats.max_horizon_ns);
+      if (sweep_stats.objects_skipped > 0U) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "%zu predicted object(s) this frame fell back to their current "
+          "footprint: future-sweep expansion exceeded its bounds",
+          sweep_stats.objects_skipped);
+      }
       std::vector<std::int8_t> data;
       std::size_t oversized_skipped = 0U;
       if (mask == nullptr) {
@@ -604,10 +702,15 @@ private:
       get_logger(),
       "DYNAMIC_OGM_RUNTIME_SUMMARY frames=%zu predicted_objects=%zu "
       "empty_grids=%zu nonempty_grids=%zu oversized_objects_skipped=%zu "
-      "frames_with_oversized_skip=%zu median_step_ms=%.6f "
+      "frames_with_oversized_skip=%zu future_sweep=%s "
+      "future_sweep_objects=%zu future_sweep_skips=%zu "
+      "max_future_sweep_horizon_ms=%.1f median_step_ms=%.6f "
       "p95_step_ms=%.6f max_step_ms=%.6f",
       count, predicted_objects_, empty_grids_, nonempty_grids_,
-      oversized_objects_skipped_, frames_with_oversized_skip_, median,
+      oversized_objects_skipped_, frames_with_oversized_skip_,
+      future_sweep_enabled_ ? "on" : "off", objects_with_future_sweep_,
+      future_sweep_object_skips_,
+      static_cast<double>(max_future_sweep_horizon_ns_) / 1.0e6, median,
       ordered[p95_index], ordered.back());
   }
 
@@ -697,6 +800,12 @@ private:
   std::size_t nonempty_grids_{0U};
   std::size_t oversized_objects_skipped_{0U};
   std::size_t frames_with_oversized_skip_{0U};
+  bool future_sweep_enabled_{false};
+  double future_sweep_horizon_sec_{0.0};
+  std::int64_t future_sweep_horizon_ns_{0};
+  std::size_t objects_with_future_sweep_{0U};
+  std::size_t future_sweep_object_skips_{0U};
+  std::int64_t max_future_sweep_horizon_ns_{0};
   std::vector<double> step_latency_ms_;
 };
 

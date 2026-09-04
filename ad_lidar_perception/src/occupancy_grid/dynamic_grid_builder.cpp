@@ -286,6 +286,34 @@ std::vector<DynamicBox> interpolate_dynamic_trajectory(
   return output;
 }
 
+std::vector<DynamicBox> sweep_object_footprints(
+  const std::vector<DynamicBox> & footprints,
+  const double grid_resolution_m,
+  const std::size_t maximum_output_samples)
+{
+  if (footprints.empty() || !std::isfinite(grid_resolution_m) ||
+    grid_resolution_m <= 0.0 || maximum_output_samples == 0U)
+  {
+    throw std::invalid_argument("invalid object-footprint sweep input");
+  }
+  if (footprints.size() == 1U) {
+    return footprints;
+  }
+  const auto & current = footprints.front();
+  validate_object(current);
+  // Sample densely enough that consecutive interpolated footprints overlap:
+  // half the smaller footprint edge guarantees no gap between rasterized boxes,
+  // and never finer than one grid cell so the sample count stays bounded.
+  const double spacing = std::max(
+    grid_resolution_m,
+    0.5 * std::min(current.length_m, current.width_m));
+  if (!std::isfinite(spacing) || spacing <= 0.0) {
+    throw std::invalid_argument("object-footprint sweep spacing is invalid");
+  }
+  return interpolate_dynamic_trajectory(
+    footprints, spacing, maximum_output_samples);
+}
+
 std::vector<std::int8_t> build_dynamic_grid_impl(
   const GridGeometry & geometry,
   const std::vector<DynamicBox> & objects,

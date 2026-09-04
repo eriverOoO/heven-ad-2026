@@ -43,9 +43,15 @@ def test_study_launch_is_opt_in_and_has_no_model_default(monkeypatch):
     assert "centerpoint_checkpoint" in arguments
     assert "kalmannet_checkpoint" in arguments
     assert "metrics_source_start_sec" in arguments
+    assert "use_predicted_future_sweep" in arguments
+    assert "future_sweep_horizon_s" in arguments
     context = LaunchContext()
     assert perform_substitutions(context, arguments["centerpoint_checkpoint"]) == ""
     assert perform_substitutions(context, arguments["kalmannet_checkpoint"]) == ""
+    assert (
+        perform_substitutions(context, arguments["use_predicted_future_sweep"])
+        == "false"
+    )
 
 
 def test_rviz_layout_has_all_study_layers_and_camera():
