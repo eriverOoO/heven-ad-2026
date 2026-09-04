@@ -1,0 +1,12 @@
+# AV2 KalmanNet adapter Stage-0 corruption config: A. no corruption.
+# measurement[t] == clean_position[t] exactly; measurement_valid[t] = True
+# for every frame. This is also the adapter's own default when no
+# --corruption-config is passed.
+mode: none
+gaussian_noise_std_m: 0.0
+dropout_prob: 0.0
+dropout_burst_enabled: false
+dropout_burst_prob: 0.0
+dropout_burst_min_len: 2
+dropout_burst_max_len: 5
+seed: 0

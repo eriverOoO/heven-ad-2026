@@ -1,0 +1,22 @@
+# AV2 Motion Forecasting -> HEVEN KalmanNet adapter segment/gap policy
+# (schema av2_kalmannet_adapter_v1). Deliberately mirrors
+# kalmannet_trajectory_adapter's own trajectory_config.yaml field-for-field
+# -- this is the same segmentation philosophy, not a new one.
+#
+# AV2's own per-track object_states are already internally contiguous
+# (verified on all 7,358 tracks across the real 120-scenario Stage-0
+# sample: 0 non-contiguous-timestep tracks), so in practice these
+# thresholds are exercised only when this adapter's own non-finite-frame
+# filtering removes a frame from the middle of a track.
+
+# End the current segment when the gap between consecutive kept frames of
+# one track exceeds this. AV2 samples at a real, uniform 10 Hz (0.1 s);
+# this default is 10 nominal periods, identical to the MORAI adapter's own.
+max_gt_gap_s: 1.0
+
+# End the segment when an implied step speed exceeds this.
+max_teleport_speed_mps: 60.0
+
+# A segment shorter than this is still exported but flagged
+# valid_for_kalmannet_gt = false.
+min_gt_samples: 5

@@ -1,5 +1,214 @@
 # STATUS
 
+## AV2 Motion Forecasting → HEVEN KalmanNet Dataset Adapter v1 (Stage 0) — COMPLETE (adapter correctness only, no training)
+
+Branch `feat/av2-kalmannet-adapter-v1`, from `origin/main` `abeb24c`.
+Implements exactly the ONE task carved out of the preceding read-only
+KalmanNet/AV2 audit: **AV2 Motion Forecasting → the existing HEVEN
+KalmanNet dataset representation, Stage 0 (~100–500 scenarios, adapter
+correctness only, no performance claim).** No KalmanNet architecture file
+touched (`kalmannet_core.py`, `kalmannet_arch2_core.py` unmodified — new
+code only *imports* `KNET_STATE_DIM`/`KNET_MEAS_DIM` from
+`kalmannet_trajectory_adapter.py`, never redefines them). No AB3DMOT,
+CenterPoint, planner, prediction, or occupancy-grid file touched. **No
+training was run — that is the explicit next task, still unimplemented.**
+
+**Real AV2 S3 structure resolved, not guessed.** The prior audit flagged
+a genuine documentation discrepancy (`motion_forecasting` vs.
+`motion-forecasting`). Resolved via plain unsigned public `ListObjectsV2`
+HTTP GET against `https://argoverse.s3.amazonaws.com` (no `s5cmd`/
+`boto3`/AWS account needed — the bucket permits anonymous reads): the real
+key is **`datasets/av2/motion-forecasting/{train,val,test}/<scenario_id>/`**
+(hyphen), each folder containing `scenario_<id>.parquet` (~100–300 KB,
+needed) and `log_map_archive_<id>.json` (map file, confirmed **not**
+needed by the real loader `load_argoverse_scenario_parquet(scenario_path)`
+— single-argument, no map dependency — and never downloaded here).
+Selective per-scenario download (not just bulk tarball) is confirmed to
+work.
+
+**New standalone download tool** `tools/av2_dataset_prep/fetch_av2_stage0.py`
+(stdlib-only: `urllib.request` + a minimal REST XML parse — no new pip
+dependency for the repo itself). Deliberately separate from the adapter
+CLI (download and preprocessing kept apart, per task instruction).
+Real Stage-0 fetch this session: pool of 2,000 listed `train` scenario
+ids, deterministic `random.Random(seed=20260905).sample(pool, 120)` (never
+hand-picked), **120 real scenarios, 20 MB raw**, downloaded in ~2.5 min,
+well under the 10 GB hard stop and the ~100 GB soft AV2 budget. The
+resulting small (48 KB), machine-path-free manifest is committed at
+`ad_morai_bridge_dev/config/dataset_factory/av2_motion_forecasting_adapter/stage0_scenarios.manifest.json`
+— raw parquet and processed NPZ shards themselves live outside the repo
+under `~/datasets/av2/{raw_staging,processed}/`, never committed.
+
+**Real AV2 schema, confirmed against all 120 downloaded scenarios (7,358
+tracks), not assumed from documentation.** 110 timesteps/scenario always,
+real uniform 100 ms step (10 Hz); `FOCAL_TRACK`/`SCORED_TRACK` (full
+110-step) tracks always have exactly 50 `observed=True` + 60
+`observed=False` states (the commonly-cited "50 observed + 60 future"
+convention — verified, not hard-coded from docs); every track's
+`object_states` list is internally **contiguous** over its own appearance
+window (0/7,358 non-contiguous tracks) — a raw-AV2 "missing measurement"
+in the fragmented-gap sense essentially does not occur; AV2 itself is
+naturally dense. 0/7,358 non-finite tracks. Real class distribution:
+VEHICLE 5,088, PEDESTRIAN 996, STATIC 498, BACKGROUND 337,
+RIDERLESS_BICYCLE 153, CONSTRUCTION 96, CYCLIST 83, BUS 80, MOTORCYCLIST
+17, UNKNOWN 10 (confirms the audit's expected class imbalance).
+
+**New adapter** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter{,_cli,_validate}.py`. Core transform
+functions (`extract_segments`, `apply_coordinate_transform`,
+`apply_corruption`) operate on plain, locally-defined, av2-package-
+independent dataclasses (`Av2ScenarioRecord`/`Av2TrackRecord`/
+`Av2ObjectStateRecord`, field-for-field mirrors of the real
+`av2.datasets.motion_forecasting.data_schema` names) — only
+`load_av2_scenario_parquet()` lazily imports the real `av2` pip package
+(mirrors `kalmannet_core.py`'s own lazy-`torch` convention), so every unit
+test in `test_av2_motion_forecasting_adapter.py` runs without `av2`
+installed. Entry points `ad_morai_dataset_export_av2_kalmannet` /
+`ad_morai_dataset_validate_av2_kalmannet` registered in `setup.py`.
+
+**dt: already Option D, unchanged.** `KalmanNetFilter.step(z, dt)` /
+`F_matrix(dt)`/`Q_matrix(dt)` (unmodified) already take real, variable
+`dt`; this adapter derives `dt_s` from AV2's own real `timestamps_ns`
+deltas exactly like the existing MORAI trajectory adapter does — `dt` is
+never added as a network feature, per the task's explicit instruction.
+
+**Missing-measurement representation unchanged, extended only at the data
+layer.** `measurement_valid[t] = False` / `measurement[t] = [NaN, NaN]`
+— never `[0, 0]`, never a repeated previous value — feeds the existing,
+untouched `kalmannet_trajectory_loader.TrajectoryArrays.
+to_kalmannet_sequence()` conversion (`z_meas[t] = None` wherever
+invalid), which in turn drives the existing, untouched prediction-only
+KalmanNet path with zero architecture change. Verified directly by test
+(`test_to_kalmannet_sequence_conversion_yields_none_for_invalid_frames`).
+
+**Coordinate mode: `first_state_relative`, versioned, structurally
+validated — not just asserted.** `x'_t = x_t - x_0`, `y'_t = y_t - y_0`
+per segment (origin = the segment's own first sample, never a
+mean/centroid — no future-information leakage); velocity untouched;
+`origin_xy` stored for exact reversibility. Two focused tests confirm
+this is safe for the *existing* model, exactly as the audit's own §8
+required: (1) `LinearCVKF` (unmodified, from `kalmannet_core.py`) run on
+a synthetic trajectory near the origin vs. the identical trajectory
+translated by a ~53 km constant offset (consistently-shifted init)
+produces **identical error dynamics** (`atol=1e-8`) — expected, since
+`F`/`H`/`Q`/`R` carry no absolute-position term; (2) `KalmanNetGRU` never
+receives absolute position as an input feature at all (only four
+translation-invariant *difference* vectors) — confirmed numerically, an
+untrained fixed-seed network gives a byte-identical gain for the
+identical relative-diff features regardless of absolute trajectory
+position. Both pass; had either failed, this entry would report that and
+a different representation would have been chosen instead — neither did.
+
+**Segment/gap policy reused verbatim** from
+`kalmannet_trajectory_adapter.TrajectoryConfig` (same field names,
+defaults: `max_gt_gap_s=1.0`, `max_teleport_speed_mps=60.0`,
+`min_gt_samples=5`) — not a second segmentation system. `TRACK_FRAGMENT`
+(80.6% of Stage-0 tracks) is never rejected for its category alone —
+only actual finiteness/continuity/`min_gt_samples` gate inclusion; a
+short segment is still exported, flagged `valid_for_kalmannet_gt=false`.
+No interpolation, no fabricated positions anywhere — a non-finite frame
+is dropped and counted, never replaced (0 occurred in the real Stage-0
+sample; the rejection path itself is unit-tested with an injected NaN).
+
+**Class metadata retained, never fed to KalmanNet.** Both the untouched
+`av2_object_type` (real AV2 enum member) and a proposed
+`coarse_object_type` (`VEHICLE`/`PEDESTRIAN`/`OTHER`, under the project's
+own fixed 3-bucket future-taxonomy target — `VEHICLE`+`BUS`→`VEHICLE`,
+`PEDESTRIAN`→`PEDESTRIAN`, everything else→`OTHER`) are stored per
+segment; `metadata.json`/`export_manifest.json` declare
+`class_fed_to_kalmannet: false`, enforced by the validator.
+
+**Corruption v1, deliberately minimal, deterministic given seed
+(per-segment SHA-256-derived RNG, order-independent).** A. no corruption
+(default, `measurement == clean_position`, `measurement_valid=true`
+everywhere) / B. zero-mean Gaussian position noise / C. independent
+per-frame dropout / D. short dropout bursts — every knob composable,
+default-off. Explicitly NOT implemented (deferred to MORAI calibration,
+per the audit's own staged policy): range-dependent noise, heavy-tail
+tuning, ID-switch injection, class-conditioned corruption, outliers.
+
+**Split/leakage policy: AV2's own train/val/test reused verbatim, never
+re-split.** AV2's three splits are disjoint S3 prefixes, already
+leakage-free by construction; `--split` selects one of them as-is.
+`check_scenario_split_leakage` still guards against a bug letting one
+`scenario_id` land in two output splits within one export.
+
+**Real Stage-0 export (this session, both runs against the real 120-
+scenario download, no-corruption and a Gaussian+dropout+burst example
+config):** 7,358 tracks → 7,358 segments (0 needed splitting — AV2
+tracks are already contiguous), 0 rejected, 382,867 total GT samples,
+~66 MB processed (one NPZ per segment, uncompressed/deterministic,
+mirrors the `kalmannet_morai_trajectory_v1` container convention — an
+**expansion** vs. the 20 MB compressed-columnar raw parquet, not a
+compression, dominated by small-per-segment NPZ container overhead;
+reported honestly, not spun), ~10 s wall time each. Both real exports
+pass the validator (`av2_motion_forecasting_adapter_validate.py`) with
+**0 errors, 0 warnings**, 7,358/7,358 segments checked.
+
+**Tests: 46/46 pass** — `test_av2_motion_forecasting_adapter.py` (34,
+covering every required item: schema mapping, dt/timestamp invariants,
+state/measurement tensor shapes, coordinate transform + reversibility +
+no-future-leakage, both translation-equivariance tests, class metadata
+preservation + coarse mapping, missing-measurement representation +
+`to_kalmannet_sequence()` conversion, deterministic Gaussian/dropout/
+dropout-burst corruption, malformed/non-finite track rejection,
+`TRACK_FRAGMENT`-not-rejected-by-category, short-segment flagging, gap/
+teleport segmentation, deterministic export fingerprint, a real Stage-0
+smoke test — skipped not failed when no real download is present) +
+`test_fetch_av2_stage0.py` (12, pure XML-parsing/deterministic-selection/
+download-with-injected-opener tests, no network, runs under plain system
+`python3`). Regression: full affected `ad_morai_bridge_dev` suite
+(`test_kalmannet_trajectory_adapter.py` 27 + `test_kalmannet_measurement_attachment.py`
+27 + `test_centerpoint_adapter.py` 23 + `test_dataset_factory.py` 27) —
+**138/138 pass unchanged**. `pyflakes` clean on every new file; `py_compile`
+clean. Environment: `~/venvs/av2-kalmannet` (new, outside the repo; `av2`
+0.3.6 + its own transitive `torch 2.14.0+cu130`/`numpy`/`pyyaml`/`pytest`
+deps — the RTX 4060's CUDA path was not exercised by this task, no
+training occurred).
+
+**Disk (this machine, this session):** raw Stage-0 20 MB, processed
+(both configs) ~132 MB combined, `~/datasets/av2/` total 150 MB. Host `/`
+free space 909 GB going in (the task's assumed ~300 GB / `D:` Windows
+drive did not match this environment — `/mnt/d` is not mounted here, only
+`/mnt/c`; flagged, not silently overridden). Raw+processed Stage-0 data
+was **not** deleted at the end of this task, per instruction — left for
+the user to inspect before any cleanup decision.
+
+**Not done, by explicit task scope:** no training entry point added, no
+model trained, no AV2-vs-KF/AV2-vs-DENSE-KALMANNET-v2 comparison run. The
+in-repo KalmanNet-training-entry-point gap the audit found (every
+historical training run lived in ad-hoc, uncommitted scripts under
+`~/heven_presentation_assets/`) is **still open** — deliberately, per this
+task's own "keep adapter correctness separate from training correctness"
+instruction.
+
+**Files:** `tools/av2_dataset_prep/{fetch_av2_stage0.py,
+test_fetch_av2_stage0.py}` (new);
+`ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter{,_cli,_validate}.py` (new);
+`ad_morai_bridge_dev/test/test_av2_motion_forecasting_adapter.py` (new);
+`ad_morai_bridge_dev/config/dataset_factory/av2_motion_forecasting_adapter/
+{segment_config.yaml,corruption_none.yaml,
+corruption_example_gaussian_dropout.yaml,stage0_scenarios.manifest.json}`
+(new); `ad_morai_bridge_dev/setup.py` (+1 config data_files entry, +2
+entry points); `docs/perception/av2_kalmannet_adapter_v1.md` (new), this
+file. No `kalmannet_core.py`/`kalmannet_arch2_core.py`/AB3DMOT/
+CenterPoint/planner/prediction/occupancy-grid file changed.
+
+**Recommended next task:** bring a reproducible KalmanNet training entry
+point into the repository (closing the real, audit-found gap that every
+historical training run lived outside the repo) and run the first small
+AV2-pretraining sanity experiment — compare learning curves and a
+held-out position/velocity RMSE against the existing Tuned Linear KF and
+DENSE-KALMANNET-v2 baselines on the existing frozen MORAI evaluation
+data, using this task's Stage-0 processed shards (or a larger Stage-1
+pull, sized only after this Stage-0 measurement, per the audit's own
+staged-acquisition plan). Not started this session.
+
+## AV2 Motion Forecasting adapter v1 (Stage 0) result: **COMPLETE**
+
+---
+
 ## Dynamic OGM Future Sweep — per-object budget — FIXED (accounting + bounded worst-case)
 
 Branch `fix/dynamic-ogm-future-sweep-object-budget`, from `origin/main` `4a8d161`
