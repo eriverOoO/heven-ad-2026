@@ -1,0 +1,975 @@
+{
+  "bucket": "argoverse",
+  "created_unix_time": 1788534779.4011736,
+  "dataset_prefix": "datasets/av2/motion-forecasting",
+  "dataset_source": "argoverse2_motion_forecasting",
+  "manifest_schema_version": "av2_stage0_scenario_manifest_v1",
+  "scenario_count": 120,
+  "scenarios": [
+    {
+      "already_present": false,
+      "bytes": 170165,
+      "remote_key": "datasets/av2/motion-forecasting/train/00052803-b0e6-4d8a-8abe-d8870d7c4132/scenario_00052803-b0e6-4d8a-8abe-d8870d7c4132.parquet",
+      "scenario_id": "00052803-b0e6-4d8a-8abe-d8870d7c4132",
+      "sha256": "8dcf368eeba85700a2df0b255242ffbd26fd30c8514e695d9a1e6619992e26da",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 264389,
+      "remote_key": "datasets/av2/motion-forecasting/train/00141380-52a3-4d08-901a-c8a3b3e12f02/scenario_00141380-52a3-4d08-901a-c8a3b3e12f02.parquet",
+      "scenario_id": "00141380-52a3-4d08-901a-c8a3b3e12f02",
+      "sha256": "0c119952cb05694a2453adce97cca421144fff79da0f2b91a3615a833b19e327",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 128854,
+      "remote_key": "datasets/av2/motion-forecasting/train/0016248f-219a-47a5-bb28-a20fd6f4f46e/scenario_0016248f-219a-47a5-bb28-a20fd6f4f46e.parquet",
+      "scenario_id": "0016248f-219a-47a5-bb28-a20fd6f4f46e",
+      "sha256": "3fa740e40ece4be5cb3cb5310121ebbc280068ccc1726f914cfbe08d847afaea",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 160010,
+      "remote_key": "datasets/av2/motion-forecasting/train/0019a075-80c0-4100-8eb3-65854e8b6153/scenario_0019a075-80c0-4100-8eb3-65854e8b6153.parquet",
+      "scenario_id": "0019a075-80c0-4100-8eb3-65854e8b6153",
+      "sha256": "aaa98e2e383727f356b9f8f39d5be8607e35f654c6c324094f4cd7137a17d447",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 170859,
+      "remote_key": "datasets/av2/motion-forecasting/train/001a13e6-b7b5-46b9-97c6-e04729515cee/scenario_001a13e6-b7b5-46b9-97c6-e04729515cee.parquet",
+      "scenario_id": "001a13e6-b7b5-46b9-97c6-e04729515cee",
+      "sha256": "1afbf9b4d7af17ba418896dabf9d2f0d5ad21bb86220775977923ffb3555e585",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 306659,
+      "remote_key": "datasets/av2/motion-forecasting/train/001aa348-9554-4f08-bf84-bf3afdcb944e/scenario_001aa348-9554-4f08-bf84-bf3afdcb944e.parquet",
+      "scenario_id": "001aa348-9554-4f08-bf84-bf3afdcb944e",
+      "sha256": "ae2ffea03e35f91d931e125828a211d7fb7d1529943a12f377b9110a0cb91f41",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 197937,
+      "remote_key": "datasets/av2/motion-forecasting/train/001b1e59-687f-4ba2-932c-0199c99f1a6b/scenario_001b1e59-687f-4ba2-932c-0199c99f1a6b.parquet",
+      "scenario_id": "001b1e59-687f-4ba2-932c-0199c99f1a6b",
+      "sha256": "778d10e3ef334edbb35aa543882b650336c44a73f986840b4fd7f7e129604e25",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 191522,
+      "remote_key": "datasets/av2/motion-forecasting/train/001bdee0-4713-4e38-9f91-5864c49e8296/scenario_001bdee0-4713-4e38-9f91-5864c49e8296.parquet",
+      "scenario_id": "001bdee0-4713-4e38-9f91-5864c49e8296",
+      "sha256": "d6484a4a52c6f8f5d3f353703f86a5ec58d2cb133f4e65092172876772c8dfd9",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 150860,
+      "remote_key": "datasets/av2/motion-forecasting/train/001c3493-893f-4c2d-919b-da93a310c721/scenario_001c3493-893f-4c2d-919b-da93a310c721.parquet",
+      "scenario_id": "001c3493-893f-4c2d-919b-da93a310c721",
+      "sha256": "21160b6a40af9697026cb198e667d1894842247377c01cf78d0e33be3585938a",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 202810,
+      "remote_key": "datasets/av2/motion-forecasting/train/001daa29-2570-4f71-8417-ac4c05513e2c/scenario_001daa29-2570-4f71-8417-ac4c05513e2c.parquet",
+      "scenario_id": "001daa29-2570-4f71-8417-ac4c05513e2c",
+      "sha256": "c821ec680e429a9bf419d68bbf9152a70f08af1f0decbaee0c9337f5b42f68e2",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 195785,
+      "remote_key": "datasets/av2/motion-forecasting/train/001dece1-a963-4cf3-8f5a-82dca796cad2/scenario_001dece1-a963-4cf3-8f5a-82dca796cad2.parquet",
+      "scenario_id": "001dece1-a963-4cf3-8f5a-82dca796cad2",
+      "sha256": "88395c1fc9873065505714d51a5e0c89d616f0c4bbd0c20e8035d13b74a22bfd",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 53667,
+      "remote_key": "datasets/av2/motion-forecasting/train/001f5046-3bf1-4b01-be93-1755e0bf0c39/scenario_001f5046-3bf1-4b01-be93-1755e0bf0c39.parquet",
+      "scenario_id": "001f5046-3bf1-4b01-be93-1755e0bf0c39",
+      "sha256": "d765bd6d4a4e1853e829a2deccf5154821f59edba721ebd69ae75a442b8def14",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 200990,
+      "remote_key": "datasets/av2/motion-forecasting/train/00220cd0-364e-48fc-90a5-d53171f5ac4e/scenario_00220cd0-364e-48fc-90a5-d53171f5ac4e.parquet",
+      "scenario_id": "00220cd0-364e-48fc-90a5-d53171f5ac4e",
+      "sha256": "ca9127c3fe3b1359b187c8192a3d713f814a5625129dca40b7c10b2c560fb7b7",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 253696,
+      "remote_key": "datasets/av2/motion-forecasting/train/0027b1d0-130d-448a-b268-7146cb641147/scenario_0027b1d0-130d-448a-b268-7146cb641147.parquet",
+      "scenario_id": "0027b1d0-130d-448a-b268-7146cb641147",
+      "sha256": "b72b509cf4d57d4a93df8da92239903ebbf837e9adea7db2b9b631b00136bbde",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 203508,
+      "remote_key": "datasets/av2/motion-forecasting/train/002e3bf4-638c-411c-b191-baf847bc0c07/scenario_002e3bf4-638c-411c-b191-baf847bc0c07.parquet",
+      "scenario_id": "002e3bf4-638c-411c-b191-baf847bc0c07",
+      "sha256": "dadcdd61771fa8a3a6c229cfc7f9eadeef303a73670632cad4e8f828eed08d92",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 104062,
+      "remote_key": "datasets/av2/motion-forecasting/train/0030993d-1b01-4797-81e6-ab8abc4decf9/scenario_0030993d-1b01-4797-81e6-ab8abc4decf9.parquet",
+      "scenario_id": "0030993d-1b01-4797-81e6-ab8abc4decf9",
+      "sha256": "f4be1dcd5d99ff49cceba165ee82e4b9db3e28470182b824b1e4392f39faafc4",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 169964,
+      "remote_key": "datasets/av2/motion-forecasting/train/0036c301-6ae8-420e-92c2-b996f90a27dd/scenario_0036c301-6ae8-420e-92c2-b996f90a27dd.parquet",
+      "scenario_id": "0036c301-6ae8-420e-92c2-b996f90a27dd",
+      "sha256": "0fe9ce9e8114537e7e0f5b1212134ec9f7da268cfbc970690389df56cc6be75f",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 168833,
+      "remote_key": "datasets/av2/motion-forecasting/train/00375d61-7502-44ba-8e9d-83c8193c90e0/scenario_00375d61-7502-44ba-8e9d-83c8193c90e0.parquet",
+      "scenario_id": "00375d61-7502-44ba-8e9d-83c8193c90e0",
+      "sha256": "3d98a21a009d3bf7776c0cf334f8f26a69012426d39a60b92d42e4501c4a7ba0",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 165164,
+      "remote_key": "datasets/av2/motion-forecasting/train/003a28af-8c90-4710-9ebf-5665fb40888d/scenario_003a28af-8c90-4710-9ebf-5665fb40888d.parquet",
+      "scenario_id": "003a28af-8c90-4710-9ebf-5665fb40888d",
+      "sha256": "865b09d1ce15f03e1ccd19e67f4e1761ef9b468d942b9fd971435ff920dab799",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 170603,
+      "remote_key": "datasets/av2/motion-forecasting/train/003e9185-53b3-449a-acc6-71571c3e9a7f/scenario_003e9185-53b3-449a-acc6-71571c3e9a7f.parquet",
+      "scenario_id": "003e9185-53b3-449a-acc6-71571c3e9a7f",
+      "sha256": "24b42eb0b9d5b94f629a01b7c30fa236d7935d31719a2500ff9b69dd3f07f9da",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 282401,
+      "remote_key": "datasets/av2/motion-forecasting/train/003ec831-84a6-4da1-9031-f56134bd9a59/scenario_003ec831-84a6-4da1-9031-f56134bd9a59.parquet",
+      "scenario_id": "003ec831-84a6-4da1-9031-f56134bd9a59",
+      "sha256": "b4c9d2a00b94c6415e0f4089d720c47d2898f9624b9d703f6567c2a68807c96d",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 90419,
+      "remote_key": "datasets/av2/motion-forecasting/train/004813e3-3dec-4287-9e69-38942acd9113/scenario_004813e3-3dec-4287-9e69-38942acd9113.parquet",
+      "scenario_id": "004813e3-3dec-4287-9e69-38942acd9113",
+      "sha256": "22020214ac0f7437689dfd3551a6a9a07b9298318a6feb0ac87f761803f18e56",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 133054,
+      "remote_key": "datasets/av2/motion-forecasting/train/004af156-7e19-4c94-8fc0-91c0b1c1542c/scenario_004af156-7e19-4c94-8fc0-91c0b1c1542c.parquet",
+      "scenario_id": "004af156-7e19-4c94-8fc0-91c0b1c1542c",
+      "sha256": "4e3c573d2503158e665d5f2a410526233ff808440ccb13d87804ccdf2cf6a168",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 104548,
+      "remote_key": "datasets/av2/motion-forecasting/train/005e23c3-76b7-479c-a97d-ec57d24f58c9/scenario_005e23c3-76b7-479c-a97d-ec57d24f58c9.parquet",
+      "scenario_id": "005e23c3-76b7-479c-a97d-ec57d24f58c9",
+      "sha256": "498557742b01713a360c2c0f066c4eb4d75b89cada5f778b34276148c548a994",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 172515,
+      "remote_key": "datasets/av2/motion-forecasting/train/005f6f36-8e1c-457e-a6d2-c70346269523/scenario_005f6f36-8e1c-457e-a6d2-c70346269523.parquet",
+      "scenario_id": "005f6f36-8e1c-457e-a6d2-c70346269523",
+      "sha256": "60d58e9387dc490f2a2a1eea8e27693aab9bca07e270d66e945e0074317f3001",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 145366,
+      "remote_key": "datasets/av2/motion-forecasting/train/00648447-9e78-4de9-98f5-097062261bd7/scenario_00648447-9e78-4de9-98f5-097062261bd7.parquet",
+      "scenario_id": "00648447-9e78-4de9-98f5-097062261bd7",
+      "sha256": "be4b0e717ba55567f65ae7b9d77351ae194f7bb259f144f63df948f499154a14",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 190293,
+      "remote_key": "datasets/av2/motion-forecasting/train/0069ea8f-4c95-4e8a-9a15-73dac0601fd2/scenario_0069ea8f-4c95-4e8a-9a15-73dac0601fd2.parquet",
+      "scenario_id": "0069ea8f-4c95-4e8a-9a15-73dac0601fd2",
+      "sha256": "39089cc1eb39db7e6b97209ea1523514a4015aaa110eed757fc557dbdf777ffd",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 222167,
+      "remote_key": "datasets/av2/motion-forecasting/train/0075a4b6-20f4-45eb-8e6f-b2054e60d397/scenario_0075a4b6-20f4-45eb-8e6f-b2054e60d397.parquet",
+      "scenario_id": "0075a4b6-20f4-45eb-8e6f-b2054e60d397",
+      "sha256": "72b389f30f5959f6b9f2003f19900aacd408600f6bbab81a2e3fc57025899ba5",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 281866,
+      "remote_key": "datasets/av2/motion-forecasting/train/00767329-af12-4551-b39a-5d24ad4da356/scenario_00767329-af12-4551-b39a-5d24ad4da356.parquet",
+      "scenario_id": "00767329-af12-4551-b39a-5d24ad4da356",
+      "sha256": "f97c2844f162d7570994b4b95e7a00f76945d0d5c9a168c83afa201575ae424f",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 228508,
+      "remote_key": "datasets/av2/motion-forecasting/train/0077bf00-bb46-4bf7-b021-81b8313c8467/scenario_0077bf00-bb46-4bf7-b021-81b8313c8467.parquet",
+      "scenario_id": "0077bf00-bb46-4bf7-b021-81b8313c8467",
+      "sha256": "17c447e89e077a605e863765cadc4d15faa9c1c870527c9ee09b941333d8e523",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 126532,
+      "remote_key": "datasets/av2/motion-forecasting/train/00796ac3-1610-4654-8c8a-04c067f9f15d/scenario_00796ac3-1610-4654-8c8a-04c067f9f15d.parquet",
+      "scenario_id": "00796ac3-1610-4654-8c8a-04c067f9f15d",
+      "sha256": "53af49548189641a7ada4fcaa60e0a35f51914a056ff87644df0587cf0994e49",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 179972,
+      "remote_key": "datasets/av2/motion-forecasting/train/007bbea8-e031-4834-ab2a-28a54d9adaf6/scenario_007bbea8-e031-4834-ab2a-28a54d9adaf6.parquet",
+      "scenario_id": "007bbea8-e031-4834-ab2a-28a54d9adaf6",
+      "sha256": "82f645c2f0225b31f647e0e52db8ebce91b005d4ffc77e6f8fc7dd2c5a08df53",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 60093,
+      "remote_key": "datasets/av2/motion-forecasting/train/007e7778-a8fd-44fe-8919-a874a6ddbd52/scenario_007e7778-a8fd-44fe-8919-a874a6ddbd52.parquet",
+      "scenario_id": "007e7778-a8fd-44fe-8919-a874a6ddbd52",
+      "sha256": "dba68ffd67b91f941d7f37483b6eb5d9d6c224c1a42c52b76db6d82165332614",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 245314,
+      "remote_key": "datasets/av2/motion-forecasting/train/0084a3c4-b2a4-4254-828f-ba4f1a0b740c/scenario_0084a3c4-b2a4-4254-828f-ba4f1a0b740c.parquet",
+      "scenario_id": "0084a3c4-b2a4-4254-828f-ba4f1a0b740c",
+      "sha256": "67774539013aacf93849d2ab883ef6f9ed87c88f9cfb80421dafa9b9541e5756",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 285662,
+      "remote_key": "datasets/av2/motion-forecasting/train/008715d7-5bc5-464f-a55e-64e83531eaa6/scenario_008715d7-5bc5-464f-a55e-64e83531eaa6.parquet",
+      "scenario_id": "008715d7-5bc5-464f-a55e-64e83531eaa6",
+      "sha256": "09188f05dab5a5f01fdec74ced2d0d179259d3e4e07921a9b475fd76c6c18c8b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 118691,
+      "remote_key": "datasets/av2/motion-forecasting/train/0087809e-fa2f-4f6d-a1f2-571bccab212d/scenario_0087809e-fa2f-4f6d-a1f2-571bccab212d.parquet",
+      "scenario_id": "0087809e-fa2f-4f6d-a1f2-571bccab212d",
+      "sha256": "3f25513b933dc8b04cc6d6b17438e4f67098bf92f7b5af4f5aae8a572a57efec",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 77842,
+      "remote_key": "datasets/av2/motion-forecasting/train/00999c01-abad-4924-a012-8f743321ae01/scenario_00999c01-abad-4924-a012-8f743321ae01.parquet",
+      "scenario_id": "00999c01-abad-4924-a012-8f743321ae01",
+      "sha256": "d30a0c928d1606c1a3738e2ef3d633b8aeb18e858f5fcaf5861be2c0cc445c35",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 57395,
+      "remote_key": "datasets/av2/motion-forecasting/train/00a25bbd-d1e0-4a86-8d22-b81e0b691cb2/scenario_00a25bbd-d1e0-4a86-8d22-b81e0b691cb2.parquet",
+      "scenario_id": "00a25bbd-d1e0-4a86-8d22-b81e0b691cb2",
+      "sha256": "24a2d94d558d324e4c9db603444ab9a616bb0f3f913a568a430cde7935869573",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 197044,
+      "remote_key": "datasets/av2/motion-forecasting/train/00a25be3-de75-48d3-9956-e8710b82508c/scenario_00a25be3-de75-48d3-9956-e8710b82508c.parquet",
+      "scenario_id": "00a25be3-de75-48d3-9956-e8710b82508c",
+      "sha256": "89e078b737622ff2e08018cf981185f6869a39ffebc6de1179f2979a31becdd4",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 120538,
+      "remote_key": "datasets/av2/motion-forecasting/train/00a8e301-fcf1-4456-8aa2-d131a450c0f7/scenario_00a8e301-fcf1-4456-8aa2-d131a450c0f7.parquet",
+      "scenario_id": "00a8e301-fcf1-4456-8aa2-d131a450c0f7",
+      "sha256": "184c8a10ee021113aa4019de9a7b7925e77aa7fd58683cdfc01e8789df81630b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 227697,
+      "remote_key": "datasets/av2/motion-forecasting/train/00af76b7-0e86-46ed-b6d7-c87f4b110519/scenario_00af76b7-0e86-46ed-b6d7-c87f4b110519.parquet",
+      "scenario_id": "00af76b7-0e86-46ed-b6d7-c87f4b110519",
+      "sha256": "63a25adeecad7402ebeebc2219a08c856df22403bf9b1537b2593c48cc77f0c2",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 114212,
+      "remote_key": "datasets/av2/motion-forecasting/train/00b1c081-0d88-410e-800e-ed4156d99ccf/scenario_00b1c081-0d88-410e-800e-ed4156d99ccf.parquet",
+      "scenario_id": "00b1c081-0d88-410e-800e-ed4156d99ccf",
+      "sha256": "addc6d3e21a3bbb1cebcb2539c7bccb403383d87aff2a2541111e80b39685265",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 226700,
+      "remote_key": "datasets/av2/motion-forecasting/train/00baa5fd-fde6-4c0b-ae24-966b62f729dd/scenario_00baa5fd-fde6-4c0b-ae24-966b62f729dd.parquet",
+      "scenario_id": "00baa5fd-fde6-4c0b-ae24-966b62f729dd",
+      "sha256": "6794ccac2de4f65b5bac7efb6a50b1ed1ab8e36fb9ce57cdc5c1dd5885622e53",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 124773,
+      "remote_key": "datasets/av2/motion-forecasting/train/00bad258-5142-4535-ae4a-f1f9a83347ca/scenario_00bad258-5142-4535-ae4a-f1f9a83347ca.parquet",
+      "scenario_id": "00bad258-5142-4535-ae4a-f1f9a83347ca",
+      "sha256": "de0d45bdd5f4d824bd9c296f4fc0f367a90a25cbe656e20aa211f2ea756f4d0d",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 209168,
+      "remote_key": "datasets/av2/motion-forecasting/train/00bf3a2d-b48a-46b2-b672-9d731aaae032/scenario_00bf3a2d-b48a-46b2-b672-9d731aaae032.parquet",
+      "scenario_id": "00bf3a2d-b48a-46b2-b672-9d731aaae032",
+      "sha256": "0ffa72873c364861ce2696e9e4e7070636494675267578370024f25042614210",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 107402,
+      "remote_key": "datasets/av2/motion-forecasting/train/00c5624c-6073-4fc7-a375-77dc0c9d6da1/scenario_00c5624c-6073-4fc7-a375-77dc0c9d6da1.parquet",
+      "scenario_id": "00c5624c-6073-4fc7-a375-77dc0c9d6da1",
+      "sha256": "b79367c748c993ae2ee7717ee2d1725aea78a2980f84cce038f26e873a5df05a",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 79622,
+      "remote_key": "datasets/av2/motion-forecasting/train/00e3ac76-d002-4709-aac9-01082ca1fbfa/scenario_00e3ac76-d002-4709-aac9-01082ca1fbfa.parquet",
+      "scenario_id": "00e3ac76-d002-4709-aac9-01082ca1fbfa",
+      "sha256": "61953252d40e64173c3bf0cf16a2d9bf6b0d1904b88dfa3b1b80ffda7c390ddb",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 135107,
+      "remote_key": "datasets/av2/motion-forecasting/train/00e776f8-ea84-4a89-a36b-e0fa9a4bda9f/scenario_00e776f8-ea84-4a89-a36b-e0fa9a4bda9f.parquet",
+      "scenario_id": "00e776f8-ea84-4a89-a36b-e0fa9a4bda9f",
+      "sha256": "02535ab455d81d9eb7b82640ed5aea903f57276acd5eaa687e7d454c7459b4bb",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 95532,
+      "remote_key": "datasets/av2/motion-forecasting/train/00eb50f2-218e-4258-912c-6c459a75a11e/scenario_00eb50f2-218e-4258-912c-6c459a75a11e.parquet",
+      "scenario_id": "00eb50f2-218e-4258-912c-6c459a75a11e",
+      "sha256": "1f359bb991856ab214a6d2e403265bb462e67fdfd63f1fdff4ad912f12d32e18",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 132254,
+      "remote_key": "datasets/av2/motion-forecasting/train/00eb7da9-1701-4dfe-a3c9-390492aa9151/scenario_00eb7da9-1701-4dfe-a3c9-390492aa9151.parquet",
+      "scenario_id": "00eb7da9-1701-4dfe-a3c9-390492aa9151",
+      "sha256": "68b27701437708b0f81c45a3fa50943063367d8645a3555674a8bae622bf3304",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 167149,
+      "remote_key": "datasets/av2/motion-forecasting/train/00ebd498-53be-43a5-af7f-0c2e6be5b72f/scenario_00ebd498-53be-43a5-af7f-0c2e6be5b72f.parquet",
+      "scenario_id": "00ebd498-53be-43a5-af7f-0c2e6be5b72f",
+      "sha256": "208770caee256fdf126f5b256a1888d0bc6ebadfe366a31babbe506b47f3ee63",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 218027,
+      "remote_key": "datasets/av2/motion-forecasting/train/00f1e298-289f-45e4-b5c1-68b618fac4a9/scenario_00f1e298-289f-45e4-b5c1-68b618fac4a9.parquet",
+      "scenario_id": "00f1e298-289f-45e4-b5c1-68b618fac4a9",
+      "sha256": "9b6241c8b0cf842fc20d2d52509b9ee55966277b5c7b2f9a012ed8586b0bbb6c",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 104586,
+      "remote_key": "datasets/av2/motion-forecasting/train/00fcc6d3-f5e1-4de8-ab3b-5ef90e54c320/scenario_00fcc6d3-f5e1-4de8-ab3b-5ef90e54c320.parquet",
+      "scenario_id": "00fcc6d3-f5e1-4de8-ab3b-5ef90e54c320",
+      "sha256": "32d867091590e15902b79833eddb281aa39cb9145b4b68488ae79ef87acda66b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 162037,
+      "remote_key": "datasets/av2/motion-forecasting/train/00ff9e15-77eb-48d5-88ce-88a01d123199/scenario_00ff9e15-77eb-48d5-88ce-88a01d123199.parquet",
+      "scenario_id": "00ff9e15-77eb-48d5-88ce-88a01d123199",
+      "sha256": "24fc2ec73cc4dbe3c37038ef6ddb81f586df9e45dd6568f644207d80e0c57fc3",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 72820,
+      "remote_key": "datasets/av2/motion-forecasting/train/01073d25-52c1-4ed8-9ee3-9fa8d66f78d2/scenario_01073d25-52c1-4ed8-9ee3-9fa8d66f78d2.parquet",
+      "scenario_id": "01073d25-52c1-4ed8-9ee3-9fa8d66f78d2",
+      "sha256": "b84d72f406c1ad7383338c62eba41be8fc440913e57291e1386c7bc866ce3adf",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 58830,
+      "remote_key": "datasets/av2/motion-forecasting/train/012574cc-d48b-4f7c-a36a-05674aa46f61/scenario_012574cc-d48b-4f7c-a36a-05674aa46f61.parquet",
+      "scenario_id": "012574cc-d48b-4f7c-a36a-05674aa46f61",
+      "sha256": "02c719311081b79a6061dd811e86cbd3c02929d4df23cd7582a986a1049a7345",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 275301,
+      "remote_key": "datasets/av2/motion-forecasting/train/01292be8-13e9-4b39-820a-3dcb2f8ae9f7/scenario_01292be8-13e9-4b39-820a-3dcb2f8ae9f7.parquet",
+      "scenario_id": "01292be8-13e9-4b39-820a-3dcb2f8ae9f7",
+      "sha256": "113340835f544dd5ad2c16149ad9afe0e4eaf3295896dd8f7df1b75a4e8b2398",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 317260,
+      "remote_key": "datasets/av2/motion-forecasting/train/012e5cd9-cccd-4a68-94bc-601d800d5175/scenario_012e5cd9-cccd-4a68-94bc-601d800d5175.parquet",
+      "scenario_id": "012e5cd9-cccd-4a68-94bc-601d800d5175",
+      "sha256": "2a1ad33db06f1c493b322ddf5e1753f3f2780d2b0692dbd834fe1ebaa357675a",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 281769,
+      "remote_key": "datasets/av2/motion-forecasting/train/0133f4d7-9207-4fea-bb3c-aa57bede761d/scenario_0133f4d7-9207-4fea-bb3c-aa57bede761d.parquet",
+      "scenario_id": "0133f4d7-9207-4fea-bb3c-aa57bede761d",
+      "sha256": "f754c5f0639c0c8d316fa77e2151d8379ac3f9555cbbc830bcbfd0035278bc28",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 99319,
+      "remote_key": "datasets/av2/motion-forecasting/train/01365535-5958-41f4-bde6-a39043f6a3ff/scenario_01365535-5958-41f4-bde6-a39043f6a3ff.parquet",
+      "scenario_id": "01365535-5958-41f4-bde6-a39043f6a3ff",
+      "sha256": "6538ce3646fe7ba0e3438ec84c664d23832577f370a8e5d028169970da7b1b14",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 114937,
+      "remote_key": "datasets/av2/motion-forecasting/train/013e569a-0543-494d-938d-3fdc74b14d7d/scenario_013e569a-0543-494d-938d-3fdc74b14d7d.parquet",
+      "scenario_id": "013e569a-0543-494d-938d-3fdc74b14d7d",
+      "sha256": "cd81fa1a9f667a6e2818e4b7c0252a3269c48976ca385733fef196dbec5b846f",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 118163,
+      "remote_key": "datasets/av2/motion-forecasting/train/013f6fed-88b9-40fe-85ba-1c56f5fd864d/scenario_013f6fed-88b9-40fe-85ba-1c56f5fd864d.parquet",
+      "scenario_id": "013f6fed-88b9-40fe-85ba-1c56f5fd864d",
+      "sha256": "289c733043d47258d49a465f19e5e9c93ef66c5cc5a57049ce25451b527103da",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 246185,
+      "remote_key": "datasets/av2/motion-forecasting/train/013f7610-3964-4dbf-a952-e42283971f29/scenario_013f7610-3964-4dbf-a952-e42283971f29.parquet",
+      "scenario_id": "013f7610-3964-4dbf-a952-e42283971f29",
+      "sha256": "6c3d0f795ede8afb1e354d101dd1806cf9bf9c78daec1c0bf48244c2abff4199",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 211900,
+      "remote_key": "datasets/av2/motion-forecasting/train/0144d679-8f5c-4d7b-970c-f03c817098a6/scenario_0144d679-8f5c-4d7b-970c-f03c817098a6.parquet",
+      "scenario_id": "0144d679-8f5c-4d7b-970c-f03c817098a6",
+      "sha256": "2d96e006b9531343a7557efeb22a014d9988dae28c942fa98d0b16cbc355c477",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 115276,
+      "remote_key": "datasets/av2/motion-forecasting/train/01482ba7-163d-44f3-b92e-32914dc53a34/scenario_01482ba7-163d-44f3-b92e-32914dc53a34.parquet",
+      "scenario_id": "01482ba7-163d-44f3-b92e-32914dc53a34",
+      "sha256": "3c793213fe028757c70c6d73683492ee87da0b4f2f29f8c4cd46f66ae60bbfa6",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 295692,
+      "remote_key": "datasets/av2/motion-forecasting/train/014ac88d-4c0e-4de9-8d6a-4970bef656da/scenario_014ac88d-4c0e-4de9-8d6a-4970bef656da.parquet",
+      "scenario_id": "014ac88d-4c0e-4de9-8d6a-4970bef656da",
+      "sha256": "7e7d82062f955c959326bc75cdf95d30903b4fbdce7696081c6f788604f9a20c",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 70103,
+      "remote_key": "datasets/av2/motion-forecasting/train/01546972-6280-4bc5-9992-d0f3a032292e/scenario_01546972-6280-4bc5-9992-d0f3a032292e.parquet",
+      "scenario_id": "01546972-6280-4bc5-9992-d0f3a032292e",
+      "sha256": "0da743866f1c8a103adfe6631651914861034d5e98ddab9df2e77c5bf539011d",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 153511,
+      "remote_key": "datasets/av2/motion-forecasting/train/01557284-68d9-4b88-9dfc-cf954e26640e/scenario_01557284-68d9-4b88-9dfc-cf954e26640e.parquet",
+      "scenario_id": "01557284-68d9-4b88-9dfc-cf954e26640e",
+      "sha256": "39ffec955fcf7b6cfe7a82ff77fe1ced4a0ced16bf7dcdd29c2825d05d4ede6e",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 145544,
+      "remote_key": "datasets/av2/motion-forecasting/train/01561cda-9acd-4fd2-9fc6-ff0a6b4154bd/scenario_01561cda-9acd-4fd2-9fc6-ff0a6b4154bd.parquet",
+      "scenario_id": "01561cda-9acd-4fd2-9fc6-ff0a6b4154bd",
+      "sha256": "7d825f0b7e56ad50306110f87923f3cdab5dc4d59343a0bc725914bb9bab1d9b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 233236,
+      "remote_key": "datasets/av2/motion-forecasting/train/015a8f03-d6b5-4fe4-8f6f-499a0b710df8/scenario_015a8f03-d6b5-4fe4-8f6f-499a0b710df8.parquet",
+      "scenario_id": "015a8f03-d6b5-4fe4-8f6f-499a0b710df8",
+      "sha256": "d8be1b431cc257474d4943d2f656fd97401e3a3073f70bffcfb4797562bf1260",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 131351,
+      "remote_key": "datasets/av2/motion-forecasting/train/015bb75d-8103-4563-aa3f-7f11885b4b95/scenario_015bb75d-8103-4563-aa3f-7f11885b4b95.parquet",
+      "scenario_id": "015bb75d-8103-4563-aa3f-7f11885b4b95",
+      "sha256": "60b3c16d64c250a786bf54a0dfd61db89dce872b0255fb4f9cefaa1141eeb2a7",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 220922,
+      "remote_key": "datasets/av2/motion-forecasting/train/0165253d-2e39-4295-9c91-90e59956300a/scenario_0165253d-2e39-4295-9c91-90e59956300a.parquet",
+      "scenario_id": "0165253d-2e39-4295-9c91-90e59956300a",
+      "sha256": "5bc55d3dec314893e9399b85a31cea92f89a989a3cf30646a88b9adfbb4687d5",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 148466,
+      "remote_key": "datasets/av2/motion-forecasting/train/01658c27-0c80-46b8-a969-ae8f055929e0/scenario_01658c27-0c80-46b8-a969-ae8f055929e0.parquet",
+      "scenario_id": "01658c27-0c80-46b8-a969-ae8f055929e0",
+      "sha256": "93c649e6941806e952ae13f81c956fede7139ec45efef5329d25a1a522fca0a9",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 109526,
+      "remote_key": "datasets/av2/motion-forecasting/train/0166f9a1-ad1a-47ed-97d0-ee631fc92b1b/scenario_0166f9a1-ad1a-47ed-97d0-ee631fc92b1b.parquet",
+      "scenario_id": "0166f9a1-ad1a-47ed-97d0-ee631fc92b1b",
+      "sha256": "36fb2e7043e99a61fe4abfcec4c5c2e80cc09e74674f1e7ca55f2ea075ef909b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 84930,
+      "remote_key": "datasets/av2/motion-forecasting/train/016ac840-66f9-4e89-80a2-d4dfecdf173e/scenario_016ac840-66f9-4e89-80a2-d4dfecdf173e.parquet",
+      "scenario_id": "016ac840-66f9-4e89-80a2-d4dfecdf173e",
+      "sha256": "0ce2d5bbf53885e260eefc6fbf898658417aca3e246e7a6a0da0ecb376416f74",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 149637,
+      "remote_key": "datasets/av2/motion-forecasting/train/016ad72d-5b1b-4d87-9536-7723645472c2/scenario_016ad72d-5b1b-4d87-9536-7723645472c2.parquet",
+      "scenario_id": "016ad72d-5b1b-4d87-9536-7723645472c2",
+      "sha256": "b46c7304bbccd147fa282b1037b878c13e46a332c9f62e7d870091729c32d941",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 130636,
+      "remote_key": "datasets/av2/motion-forecasting/train/016b67e6-ef27-4833-b0e6-b87ad891a11c/scenario_016b67e6-ef27-4833-b0e6-b87ad891a11c.parquet",
+      "scenario_id": "016b67e6-ef27-4833-b0e6-b87ad891a11c",
+      "sha256": "abf1c63f14fc77808bfcb9642a167216d89b596f1673a4af4b0f05c77d140d89",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 456232,
+      "remote_key": "datasets/av2/motion-forecasting/train/016b90aa-d58b-48ae-bf65-2d91ec27c537/scenario_016b90aa-d58b-48ae-bf65-2d91ec27c537.parquet",
+      "scenario_id": "016b90aa-d58b-48ae-bf65-2d91ec27c537",
+      "sha256": "328bf9ab4c92dce4f7e1225574bc341b388b4529786258e8638ebdbea79daf26",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 113490,
+      "remote_key": "datasets/av2/motion-forecasting/train/016f75b1-fbe8-442d-8cd0-554acd3bd6d0/scenario_016f75b1-fbe8-442d-8cd0-554acd3bd6d0.parquet",
+      "scenario_id": "016f75b1-fbe8-442d-8cd0-554acd3bd6d0",
+      "sha256": "69f4ddac5ec79ccc1b82a1514581ffa15d6b0e011abe54231cefe8a7dac65ec2",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 148803,
+      "remote_key": "datasets/av2/motion-forecasting/train/017f07e9-abfb-4b7e-81e3-2f5a74fd3fac/scenario_017f07e9-abfb-4b7e-81e3-2f5a74fd3fac.parquet",
+      "scenario_id": "017f07e9-abfb-4b7e-81e3-2f5a74fd3fac",
+      "sha256": "53efd1ca15930d315058569eeca7e90e87fa20b121ce78cea87510d2f4b740ec",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 299769,
+      "remote_key": "datasets/av2/motion-forecasting/train/0188a0d5-f4e9-46a1-bd5e-5ab0501294a1/scenario_0188a0d5-f4e9-46a1-bd5e-5ab0501294a1.parquet",
+      "scenario_id": "0188a0d5-f4e9-46a1-bd5e-5ab0501294a1",
+      "sha256": "04f0c49fafb49408fb498898d30e0a31faaacec1dce6b62af5b2df83c84fe293",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 85417,
+      "remote_key": "datasets/av2/motion-forecasting/train/018a7461-79be-4d0d-a80a-0fdd4871e447/scenario_018a7461-79be-4d0d-a80a-0fdd4871e447.parquet",
+      "scenario_id": "018a7461-79be-4d0d-a80a-0fdd4871e447",
+      "sha256": "7ad39b94b67c4d6e461c72ccfa0cd5b126772be1d52bcbbc905df8197c6080df",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 66443,
+      "remote_key": "datasets/av2/motion-forecasting/train/018ed72c-cc50-40a9-b339-09e6ee0dbfd2/scenario_018ed72c-cc50-40a9-b339-09e6ee0dbfd2.parquet",
+      "scenario_id": "018ed72c-cc50-40a9-b339-09e6ee0dbfd2",
+      "sha256": "bb93233755e5d50113df5e29bb0cd4a161d647144887f8262a356d0ba3db8a75",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 124482,
+      "remote_key": "datasets/av2/motion-forecasting/train/01949827-1d2e-4d8b-bc8f-aa2edf1c494a/scenario_01949827-1d2e-4d8b-bc8f-aa2edf1c494a.parquet",
+      "scenario_id": "01949827-1d2e-4d8b-bc8f-aa2edf1c494a",
+      "sha256": "936324e9e87c82b9a4092ccf7ac3f30fb0af7baafa28205320f669a8e7137a5a",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 38125,
+      "remote_key": "datasets/av2/motion-forecasting/train/0197d18d-5c04-4bce-8275-3d1781bb193a/scenario_0197d18d-5c04-4bce-8275-3d1781bb193a.parquet",
+      "scenario_id": "0197d18d-5c04-4bce-8275-3d1781bb193a",
+      "sha256": "0bf836fd7ca91c0101b497d8bb5e534eb03c58aa5550ad57b1f212e8bcc66ed4",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 370549,
+      "remote_key": "datasets/av2/motion-forecasting/train/01a41e1c-ae5f-4cce-8b06-1365496315a0/scenario_01a41e1c-ae5f-4cce-8b06-1365496315a0.parquet",
+      "scenario_id": "01a41e1c-ae5f-4cce-8b06-1365496315a0",
+      "sha256": "6fe3b0dd232305aea791cbc8162cd5dfc8fbc839e1c79fe86f0fc0dc33784d49",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 193975,
+      "remote_key": "datasets/av2/motion-forecasting/train/01a74862-b500-4776-b7c1-8ee3f0d65414/scenario_01a74862-b500-4776-b7c1-8ee3f0d65414.parquet",
+      "scenario_id": "01a74862-b500-4776-b7c1-8ee3f0d65414",
+      "sha256": "57ba500952aa171de214611719193c40015003ff775210ab47ca7dc3893c8043",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 108309,
+      "remote_key": "datasets/av2/motion-forecasting/train/01b7122b-e9a0-44b4-a8c7-5329736a6688/scenario_01b7122b-e9a0-44b4-a8c7-5329736a6688.parquet",
+      "scenario_id": "01b7122b-e9a0-44b4-a8c7-5329736a6688",
+      "sha256": "dde8c85c7343041f44d0c25313919f917af87313e050339aa06c7597368d1543",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 248949,
+      "remote_key": "datasets/av2/motion-forecasting/train/01c19cb2-abc1-4498-8aef-ad2040729091/scenario_01c19cb2-abc1-4498-8aef-ad2040729091.parquet",
+      "scenario_id": "01c19cb2-abc1-4498-8aef-ad2040729091",
+      "sha256": "f5db19fc18060347eb910d925b9018de3f2c0e690ecfc2ab1f1d3c8032124d75",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 153059,
+      "remote_key": "datasets/av2/motion-forecasting/train/01c7659f-e9dc-4747-ab05-5c6a1e855428/scenario_01c7659f-e9dc-4747-ab05-5c6a1e855428.parquet",
+      "scenario_id": "01c7659f-e9dc-4747-ab05-5c6a1e855428",
+      "sha256": "87b23784f1301b2fd76917d7903899aff71dbbb9906a4e58503bb4ff1a246f81",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 50202,
+      "remote_key": "datasets/av2/motion-forecasting/train/01ca9e41-fff6-4a22-8684-cb012764fcc8/scenario_01ca9e41-fff6-4a22-8684-cb012764fcc8.parquet",
+      "scenario_id": "01ca9e41-fff6-4a22-8684-cb012764fcc8",
+      "sha256": "acb3627c15d7a01f1ea993706a30c3d32d860b0c96e58b82f181c4b8836c6fa3",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 130019,
+      "remote_key": "datasets/av2/motion-forecasting/train/01ccd2ec-0333-4f48-a2d7-8891820344fe/scenario_01ccd2ec-0333-4f48-a2d7-8891820344fe.parquet",
+      "scenario_id": "01ccd2ec-0333-4f48-a2d7-8891820344fe",
+      "sha256": "09d9ba9b79caa5b34a21552fd16a5bd014d1fd726e43ddb8ad9ac005d8f14685",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 191448,
+      "remote_key": "datasets/av2/motion-forecasting/train/01ccdeef-fb41-432d-b97f-726721668577/scenario_01ccdeef-fb41-432d-b97f-726721668577.parquet",
+      "scenario_id": "01ccdeef-fb41-432d-b97f-726721668577",
+      "sha256": "139b4f2ae8bae0ff85ed3812fe9ce5ce7ab61dfb2c3392e70d1b87b9b6354b90",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 76013,
+      "remote_key": "datasets/av2/motion-forecasting/train/01d27e77-8984-4c58-b9d9-5c62499422de/scenario_01d27e77-8984-4c58-b9d9-5c62499422de.parquet",
+      "scenario_id": "01d27e77-8984-4c58-b9d9-5c62499422de",
+      "sha256": "f70292f134fd9b65f7f1da5c1e9f25a4cc346665674602f4f62b4fa673672c30",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 146203,
+      "remote_key": "datasets/av2/motion-forecasting/train/01da43dc-86fa-4712-8e50-995aef2b0f20/scenario_01da43dc-86fa-4712-8e50-995aef2b0f20.parquet",
+      "scenario_id": "01da43dc-86fa-4712-8e50-995aef2b0f20",
+      "sha256": "f7896e73f64c38cd1de8074b203ba9fd8d12d592feb1859e55c87cd6d59ea64c",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 248953,
+      "remote_key": "datasets/av2/motion-forecasting/train/01e378c3-e338-489f-8458-99ff89269e90/scenario_01e378c3-e338-489f-8458-99ff89269e90.parquet",
+      "scenario_id": "01e378c3-e338-489f-8458-99ff89269e90",
+      "sha256": "3c9aed1f7f9f258473a9f5c5ce8fd5a2a384f0da49b69b6cb1ad40c7d92e0131",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 81642,
+      "remote_key": "datasets/av2/motion-forecasting/train/01e7afd2-5f1b-4623-94ca-974487bf9fed/scenario_01e7afd2-5f1b-4623-94ca-974487bf9fed.parquet",
+      "scenario_id": "01e7afd2-5f1b-4623-94ca-974487bf9fed",
+      "sha256": "c6c098ba8396524c70d67ffd0ecc8546cb0c84a357870fce8b830fe198552a2b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 139572,
+      "remote_key": "datasets/av2/motion-forecasting/train/01ec859c-5836-41e4-8c89-4a65c8cf2f0b/scenario_01ec859c-5836-41e4-8c89-4a65c8cf2f0b.parquet",
+      "scenario_id": "01ec859c-5836-41e4-8c89-4a65c8cf2f0b",
+      "sha256": "9b25867d95de282ee7f7742ff675653c3fa958bc4e1eaeb7980b67cd560840ed",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 169936,
+      "remote_key": "datasets/av2/motion-forecasting/train/01f276fe-935e-4e39-9724-5f9a8480fd91/scenario_01f276fe-935e-4e39-9724-5f9a8480fd91.parquet",
+      "scenario_id": "01f276fe-935e-4e39-9724-5f9a8480fd91",
+      "sha256": "a7e3e2c1b7c9c808828f9d4e088b2569041c4ee2f9104e645dd443f21da6b7bf",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 240657,
+      "remote_key": "datasets/av2/motion-forecasting/train/01f3ee81-f15d-4fdf-9884-5041f39e9702/scenario_01f3ee81-f15d-4fdf-9884-5041f39e9702.parquet",
+      "scenario_id": "01f3ee81-f15d-4fdf-9884-5041f39e9702",
+      "sha256": "395b394c9207a9faeef839e590590e70f5be4c52c0e5c33bb347ada3b8a00e28",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 82089,
+      "remote_key": "datasets/av2/motion-forecasting/train/0201e725-ca28-4893-a6c5-6c04ef3f3707/scenario_0201e725-ca28-4893-a6c5-6c04ef3f3707.parquet",
+      "scenario_id": "0201e725-ca28-4893-a6c5-6c04ef3f3707",
+      "sha256": "476d704c60b6ad6883fd39415da8700e670d924b04c076f867f27c97cb4d4654",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 33052,
+      "remote_key": "datasets/av2/motion-forecasting/train/0202affc-cf2b-451e-a170-3ededd46e88f/scenario_0202affc-cf2b-451e-a170-3ededd46e88f.parquet",
+      "scenario_id": "0202affc-cf2b-451e-a170-3ededd46e88f",
+      "sha256": "7d6dc62e06621d2a6b42a968714ac18dd65cc15905153c9e8cb85e1e570100e0",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 90961,
+      "remote_key": "datasets/av2/motion-forecasting/train/02092589-25b7-4ffc-badb-b2495fcc4722/scenario_02092589-25b7-4ffc-badb-b2495fcc4722.parquet",
+      "scenario_id": "02092589-25b7-4ffc-badb-b2495fcc4722",
+      "sha256": "5124bc6798b6267cca0437688f5047c62fe1e72fef3ef695dbed2a3ee4c32dbc",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 186110,
+      "remote_key": "datasets/av2/motion-forecasting/train/020d363e-c67d-4749-8020-33c6ab49aa4d/scenario_020d363e-c67d-4749-8020-33c6ab49aa4d.parquet",
+      "scenario_id": "020d363e-c67d-4749-8020-33c6ab49aa4d",
+      "sha256": "b381980367825820e777cb892e44531bedfe4dcd60617566ecbf11e102e59209",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 126311,
+      "remote_key": "datasets/av2/motion-forecasting/train/020e93ce-fb75-48e4-9f45-4cc257b22132/scenario_020e93ce-fb75-48e4-9f45-4cc257b22132.parquet",
+      "scenario_id": "020e93ce-fb75-48e4-9f45-4cc257b22132",
+      "sha256": "e1aa86feb53e78e2f28385cbf9ff8d38664ce5d2d2419965d8df83e57ea50bb1",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 179893,
+      "remote_key": "datasets/av2/motion-forecasting/train/02118e9f-0cc4-49f9-968f-26ed7a218930/scenario_02118e9f-0cc4-49f9-968f-26ed7a218930.parquet",
+      "scenario_id": "02118e9f-0cc4-49f9-968f-26ed7a218930",
+      "sha256": "a052cba6c08fb3dbd5a1bca23cf73223688be996ccc65bb10f39edd998b7b8c6",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 163555,
+      "remote_key": "datasets/av2/motion-forecasting/train/021f472a-1a6c-4fc4-bb89-10907d62ea62/scenario_021f472a-1a6c-4fc4-bb89-10907d62ea62.parquet",
+      "scenario_id": "021f472a-1a6c-4fc4-bb89-10907d62ea62",
+      "sha256": "f7238f6da633ce1aa5f4e8f882e0dca3ff10fc0e1c858ca74813887680e06a43",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 157392,
+      "remote_key": "datasets/av2/motion-forecasting/train/02206b61-10a5-4a32-bba8-7e429698afb2/scenario_02206b61-10a5-4a32-bba8-7e429698afb2.parquet",
+      "scenario_id": "02206b61-10a5-4a32-bba8-7e429698afb2",
+      "sha256": "33eab8e3479b3fe779a91ad81e00ba2b44821b0edb8acc1dc27b305c698160bb",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 87475,
+      "remote_key": "datasets/av2/motion-forecasting/train/0222cddd-1dff-42f3-bbde-632a1411cbcb/scenario_0222cddd-1dff-42f3-bbde-632a1411cbcb.parquet",
+      "scenario_id": "0222cddd-1dff-42f3-bbde-632a1411cbcb",
+      "sha256": "d8199db1b78563710ea9ba96a00d2a3ffafd265e8ca0b0cdf6abdac83a30d960",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 130085,
+      "remote_key": "datasets/av2/motion-forecasting/train/02249650-2317-4534-bb84-ab81ce33b801/scenario_02249650-2317-4534-bb84-ab81ce33b801.parquet",
+      "scenario_id": "02249650-2317-4534-bb84-ab81ce33b801",
+      "sha256": "a649d3f00fc79a5aee6e1e31b7372674a00c0a1a9e57b509f15e59fae393d119",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 103007,
+      "remote_key": "datasets/av2/motion-forecasting/train/023542b9-c20b-46d0-8960-12aecb0e426f/scenario_023542b9-c20b-46d0-8960-12aecb0e426f.parquet",
+      "scenario_id": "023542b9-c20b-46d0-8960-12aecb0e426f",
+      "sha256": "c7e459c08168a7fad75ab69f6d1ab9765237557e2cf1160f50c5c6174c2d2d1e",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 175991,
+      "remote_key": "datasets/av2/motion-forecasting/train/02371a9b-bed4-4774-a83c-f92cdcb5c83d/scenario_02371a9b-bed4-4774-a83c-f92cdcb5c83d.parquet",
+      "scenario_id": "02371a9b-bed4-4774-a83c-f92cdcb5c83d",
+      "sha256": "c7be9488efcca4acdaa707959dc2daa79670309f312560f553dfd5ae56b7afca",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 146156,
+      "remote_key": "datasets/av2/motion-forecasting/train/023d94b0-4ed4-411a-84ef-db78f677c3a8/scenario_023d94b0-4ed4-411a-84ef-db78f677c3a8.parquet",
+      "scenario_id": "023d94b0-4ed4-411a-84ef-db78f677c3a8",
+      "sha256": "7b28bc427c4094ecf29bdfea2c8df472676ffed0f22fc7489a23911cbadd2d5f",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 161544,
+      "remote_key": "datasets/av2/motion-forecasting/train/023ee952-5574-48f6-b04e-7423fc743f4a/scenario_023ee952-5574-48f6-b04e-7423fc743f4a.parquet",
+      "scenario_id": "023ee952-5574-48f6-b04e-7423fc743f4a",
+      "sha256": "8b03de0caee9f4ccb82488f311eb50542d01212ae23b09011c927bbf242094b1",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 162106,
+      "remote_key": "datasets/av2/motion-forecasting/train/024839d6-125e-4c88-befc-0a7451c22f5d/scenario_024839d6-125e-4c88-befc-0a7451c22f5d.parquet",
+      "scenario_id": "024839d6-125e-4c88-befc-0a7451c22f5d",
+      "sha256": "acfe23da25754ad71ddfe2a2d11c6857ef8f953e23f39a15d83ef5bd2599874f",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 161466,
+      "remote_key": "datasets/av2/motion-forecasting/train/024c6788-9896-4ea7-a748-8425ec881f84/scenario_024c6788-9896-4ea7-a748-8425ec881f84.parquet",
+      "scenario_id": "024c6788-9896-4ea7-a748-8425ec881f84",
+      "sha256": "c78009bb80b416088e2af06ce96d9a40e258253ea4725174008382090ea53f31",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 218360,
+      "remote_key": "datasets/av2/motion-forecasting/train/024cf114-0fbc-49c7-a1c7-abc6977847f9/scenario_024cf114-0fbc-49c7-a1c7-abc6977847f9.parquet",
+      "scenario_id": "024cf114-0fbc-49c7-a1c7-abc6977847f9",
+      "sha256": "58dfd9ed9354122d234bc0383c2d07ae19a89ab594147f07821ce512f2dc22fa",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 227665,
+      "remote_key": "datasets/av2/motion-forecasting/train/024cf4bd-15b3-4745-9655-888b99aaa585/scenario_024cf4bd-15b3-4745-9655-888b99aaa585.parquet",
+      "scenario_id": "024cf4bd-15b3-4745-9655-888b99aaa585",
+      "sha256": "a8a643d17336d8cd814ec43eb65c8824957f563b0eb3eb403e1a68e684d6043d",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 88366,
+      "remote_key": "datasets/av2/motion-forecasting/train/02549188-6134-4372-8303-7da090c8e985/scenario_02549188-6134-4372-8303-7da090c8e985.parquet",
+      "scenario_id": "02549188-6134-4372-8303-7da090c8e985",
+      "sha256": "bb580cdb3dd4bf7900d12b7dc45aa1a1477d3dca7ae2929802be6ae6ece4f44b",
+      "split": "train"
+    },
+    {
+      "already_present": false,
+      "bytes": 299438,
+      "remote_key": "datasets/av2/motion-forecasting/train/0268eae2-b03d-41ab-8d62-632538a1a4bc/scenario_0268eae2-b03d-41ab-8d62-632538a1a4bc.parquet",
+      "scenario_id": "0268eae2-b03d-41ab-8d62-632538a1a4bc",
+      "sha256": "1ac643facf80b1d3ba4c89d7b24fb068e57f9759cd7cc56b1a7224afb4cd8cbe",
+      "split": "train"
+    }
+  ],
+  "selection_pool_size": 2000,
+  "selection_rule": "uniform_random_sample_without_replacement_from_listed_pool",
+  "selection_seed": 20260905,
+  "split": "train",
+  "total_bytes_downloaded": 19703406
+}

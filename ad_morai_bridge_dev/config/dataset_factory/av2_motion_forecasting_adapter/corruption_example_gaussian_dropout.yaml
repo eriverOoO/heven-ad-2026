@@ -1,0 +1,15 @@
+# AV2 KalmanNet adapter Stage-0 corruption config: an EXAMPLE combining
+# B (Gaussian position noise) + C (independent frame dropout) +
+# D (short dropout bursts). Values below are conservative placeholders
+# for exercising the adapter's corruption code paths (tests, smoke runs,
+# documentation) -- they are NOT derived from any measured detector
+# statistic and must not be treated as MORAI-calibrated (see
+# docs/perception/av2_kalmannet_adapter_v1.md, "Corruption v1").
+mode: custom
+gaussian_noise_std_m: 0.2
+dropout_prob: 0.05
+dropout_burst_enabled: true
+dropout_burst_prob: 0.01
+dropout_burst_min_len: 2
+dropout_burst_max_len: 5
+seed: 20260905
