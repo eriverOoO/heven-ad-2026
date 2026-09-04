@@ -1,5 +1,173 @@
 # STATUS
 
+## KalmanNet Batched Training / Throughput Optimization v1 — COMPLETE
+
+Branch `perf/kalmannet-batched-training-v1`, from merged PR #47
+`850ab15` (`feat(kalmannet): add reproducible AV2 trainer`, verified via
+`gh pr view 47` — `MERGED` — before any edit), built in a fresh isolated
+worktree from `origin/main`. **Offline training tooling only. No
+KalmanNet architecture/estimator-math change: `KalmanNetGRU`,
+`F_matrix(dt)`, `Q_matrix(dt)`, `H_matrix`, `STATE_DIM`/`MEAS_DIM`, the
+runtime `KalmanNetFilter` API, and AB3DMOT/CenterPoint/planner/
+prediction/occupancy are all byte-for-byte untouched.**
+
+**Problem, from PR #47's own measured throughput**: `batch_size=1`
+training ran `~20-34 seq/s` (CPU) / `~4-6 seq/s` (CUDA) — extrapolated,
+a single Stage-1 (5,000+ scenario) training condition would take
+`~26h`, both conditions `~52h` sequentially, making multi-seed Stage-1
+training impractical. **Result: a `>>3x` throughput target (measured
+`24.9x` at CPU `batch_size=128`) achieved with zero correctness
+regression at `batch_size=1` and documented, bounded behavior at
+`batch_size>1`.**
+
+**Baseline profile (`cProfile`, 200 real Stage-0 sequences, both
+devices)**: dominant cost is thousands of tiny, individually-dispatched
+PyTorch ops — `loss.backward()` (CPU 42.5% / CUDA 47.9%),
+`KalmanNetFilter.step()` forward (CPU 39.3% / CUDA 29.8%), with CUDA
+paying an extra, disproportionate `torch.tensor()` host<->device-transfer
+tax (7.7% vs. CPU's 2.6%) for tiny per-call F/H-matrix construction —
+exactly the regime batching amortizes (turning `B` individual GRU/matrix
+calls into 1).
+
+**New training-only batched recursion** (`tools/kalmannet_training/
+batched_kalmannet.py`): `BatchedKalmanNetFilter` reuses the EXISTING
+`KalmanNetGRU` weights/architecture and vectorised, per-row-`dt`-correct
+`f_batched`/`h_batched` (bit-close, `atol=1e-6`, to the runtime
+`KalmanNetFilter._f`/`_h`) — the runtime filter itself is **not
+modified** (it takes one scalar `dt`/batch and always calls the network,
+wrong for variable-length/variably-corrupted AV2 batches). Three
+per-timestep, per-row mask cases, never conflated: CASE A
+(`sequence_valid=False`, padding — no state/hidden-state change, no
+loss), CASE B (`sequence_valid=True, measurement_valid=False` — real
+timestep, missing detector measurement, analytical predict-only, **no**
+network call, `x_post_prev`/`x_prior_prev`/`y_prev`/hidden-state
+untouched, byte-identical to the historical `run_sequence`'s own
+predict-only branch), CASE C (both valid — full predict + learned-gain
+update). Padding is never fabricated as `z=[0,0]` and never confused
+with a detector dropout.
+
+**Hidden-state isolation, directly tested** (the runtime had a real,
+previously-found shared-hidden-state bug class, T-9B): subset-indexed
+`net.h[:, idx, :]` read/scatter-write per timestep means two different
+batched sequences produce output IDENTICAL to running each alone
+(`atol=1e-5`); batch row order doesn't affect any row's own result; a
+short sequence's real steps are unaffected by a much-longer batch-mate's
+padding tail.
+
+**`batch_size=1` numerical equivalence — the task's own most important
+correctness test, satisfied exactly as scoped** (loss + gradients before
+`optimizer.step()`, then ONE optimizer step): loss `atol=1e-6`,
+gradients `atol=1e-5/rtol=1e-4` (every parameter), one Adam step
+`atol=1e-6` (every parameter) — all pass on first implementation
+attempt. A STRONGER, additional multi-epoch comparison (not required by
+the task) shows small, bounded, non-diverging floating-point drift
+(`<=0.14%` relative train-loss/epoch, `best_epoch` matches exactly) —
+root-caused precisely to `torch.bmm` (needed for per-row `dt`) vs.
+`torch.matmul`/`@` dispatching to different internal GEMV kernels for
+bit-identical input VALUES — a benign, documented non-associativity
+source, not a logic bug.
+
+**`batch_size>1` is a distinct, explicitly documented THROUGHPUT MODE**
+(mini-batch gradient averaging), **never claimed numerically identical**
+to the historical per-sequence optimizer path — recorded per-checkpoint
+via `training_config.mini_batch_semantics`
+(`correctness_mode_equivalent_to_per_sequence_optimizer` at
+`batch_size=1` vs. `throughput_mode_mini_batch_gradient_averaging_...`
+at `batch_size>1`).
+
+**CPU vs. CUDA sweep, real 300-sequence Stage-0 subset, batch sizes 1
+through 256:**
+
+| batch size | CPU seq/s | CUDA seq/s |
+|---|---|---|
+| 1 | 20.22 | 4.21 |
+| 32 | 320.04 | 90.10 |
+| 128 | **503.51** | 185.66 |
+| 256 (CPU only) | 553.98 | -- |
+
+**CPU wins at every batch size** (2.7x faster than CUDA even at
+`bs=128`); VRAM never limiting (`35.2 MB` at `bs=128`). **Recommendation:
+CPU, `batch_size=128`** (`24.9x` speedup, well past the diminishing-
+returns knee visible by `bs=256`'s smaller marginal gain).
+
+**Length bucketing** (`make_length_buckets`/`bucketed_epoch_batch_order`,
+new): groups sequences into length-quantile buckets before batching,
+measurably reduces padding waste vs. naive shuffled batching on a
+synthetic bimodal-length test, fully deterministic given the epoch's own
+seed. **Corruption reproducibility unaffected by batch grouping**
+(verified directly — a sequence's own `z_meas`/`dt` content is
+byte-identical regardless of which batch/row/order it's grouped under).
+
+**Stage-0 training sanity, real data, CLEAN, seed 0, 10 epochs
+(historical `batch_size=1` vs. new `batch_size=128`, identical
+hyperparameters)**:
+
+| | historical | batched (bs=128) |
+|---|---|---|
+| best epoch | 9 | 9 |
+| best val loss | 0.5693 | 0.5894 (+3.5%, expected — un-retuned LR under a different mini-batch regime) |
+| `train_time_s` | 2244.34 | **96.76** |
+| **speedup** | -- | **23.2x** |
+
+Real-data evaluator check (batched checkpoint through the EXISTING,
+UNMODIFIED `evaluate_kalmannet.py`, zero evaluator changes): held-out
+CLEAN position RMSE 0.0484 m (batched) vs. 0.0347 m (historical) — both
+clearly beat the transferred-KF baseline (0.0563 m). GENERIC-ROBUST
+smoke run (real corrupted data, `bs=128`, 3 epochs): `n_train=5,768`
+(matches the historical GENERIC-ROBUST run's own count exactly), loss
+decreases monotonically, 0 nonfinite steps, not catastrophic — confirms
+CASE B batching handles real AV2 dropout/burst corruption at scale.
+
+**No claim that batching improves model accuracy** — the `~3.5%` higher
+held-out loss under THROUGHPUT MODE at un-retuned hyperparameters is
+reported honestly, not hidden. The sole claim is training throughput.
+
+**Tests:** `tools/kalmannet_training/` **60/60 pass** (37 from PR #47,
+unchanged + 18 new `test_batched_kalmannet.py` + 5 new
+`test_batched_trainer.py`) — covers every item A-P from this task's own
+list: batch_size=1 loss/gradient/one-optimizer-step equivalence,
+hidden-state isolation, variable `dt`, padding, missing/valid-measurement
+masking, `loss_on_predict_only` parity, deterministic bucketing,
+corruption-order-invariance, checkpoint batch-metadata round trip,
+evaluator compatibility. `pyflakes` clean, `py_compile` clean,
+`git diff --check` clean.
+
+**Projected Stage-1 cost (new throughput):** 10,000 scenarios,
+GENERIC-ROBUST-only, 3 seeds `~= 8.7h` unattended (vs. `>4 days` for
+just TWO conditions at ONE seed, pre-batching) — an overnight run, not a
+multi-day one.
+
+**Recommended Stage-1 training matrix:** GENERIC-ROBUST-trained only,
+evaluated on CLEAN + GENERIC-ROBUST + a different-seed corruption variant
+(mirrors Stage-0's own A/B/C eval conditions) — CLEAN's role is a
+reference EVALUATION point, not a second full training run (halves
+Stage-1 training cost, no loss of the primary KNet-vs-KF-vs-dense-v2
+comparison).
+
+**Recommended Stage-1 scenario count:** **10,000** (the task's own
+originally-preferred count, now affordable — `kalmannet_av2_training_v1.md`'s
+prior 5,000 recommendation was throughput-constrained and no longer
+applies).
+
+**Files:** `tools/kalmannet_training/{batched_kalmannet.py,
+batched_trainer.py,train_kalmannet_batched.py,test_batched_kalmannet.py,
+test_batched_trainer.py}` (all new). No change to `trainer_core.py`,
+`checkpoint_utils.py`, `train_kalmannet.py`, `evaluate_kalmannet.py`,
+`calibrate_kf.py`, `av2_split.py`, `kalmannet_sequences.py`, or any
+`ad_lidar_perception`/`ad_morai_bridge_dev` file.
+`docs/perception/kalmannet_batched_training_v1.md` (new), this file. No
+checkpoint, AV2 data, log, or profiler dump committed.
+
+**Recommended next task:** Download/preprocess the recommended Stage-1
+AV2 scenario set (10,000 scenarios) and run the first real multi-seed
+GENERIC-ROBUST KalmanNet pretraining experiment using this optimized
+batched trainer (CPU, `batch_size=128`), then evaluate on BOTH AV2
+held-out data (CLEAN + GENERIC-ROBUST + different-seed corruption) and
+the frozen MORAI-side evaluation stream. Do NOT implement that next
+task yet.
+
+---
+
 ## Reproducible KalmanNet Training Entry Point v1 + AV2 Stage-0 Training Sanity Experiment — COMPLETE
 
 Branch `feat/kalmannet-av2-training-v1`, from merged PR #46
