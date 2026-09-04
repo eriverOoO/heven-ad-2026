@@ -54,6 +54,67 @@ def test_study_launch_is_opt_in_and_has_no_model_default(monkeypatch):
     )
 
 
+class _RecordingInclude:
+    calls = []
+
+    def __init__(self, source, launch_arguments=None, **kwargs):
+        self.source = getattr(source, "location", source)
+        self.launch_arguments = dict(launch_arguments or {})
+        type(self).calls.append(self)
+
+
+def test_prediction_yaw_rate_source_override_reaches_bag_replay_include(
+    monkeypatch,
+):
+    module = load_module()
+    monkeypatch.setattr(
+        module, "get_package_share_directory", lambda _name: str(PACKAGE)
+    )
+    monkeypatch.setattr(
+        module,
+        "_launch_file",
+        lambda package, name: type("S", (), {"location": name})(),
+    )
+    _RecordingInclude.calls.clear()
+    monkeypatch.setattr(module, "IncludeLaunchDescription", _RecordingInclude)
+
+    context = LaunchContext()
+    context.launch_configurations.update(
+        {
+            "pipeline_variant": "training_free",
+            "bag_path": "/tmp/bag",
+            "rate": "0.5",
+            "start_paused": "false",
+            "start_rviz": "false",
+            "enable_drivable_mask": "false",
+            "centerpoint_checkpoint": "",
+            "openpcdet_root": "",
+            "kalmannet_checkpoint": "",
+            "centerpoint_device": "cpu",
+            "kalmannet_device": "cpu",
+            "ab3dmot_root": "",
+            "prediction_yaw_rate_source": "motion_history",
+            "use_predicted_future_sweep": "true",
+            "future_sweep_horizon_s": "3.0",
+            "data_dir": "",
+            "metrics_output": "",
+            "metrics_duration_sec": "0",
+            "metrics_source_start_sec": "0",
+        }
+    )
+    module._launch_setup(context)
+
+    replay = next(
+        call
+        for call in _RecordingInclude.calls
+        if call.source == "lidar_bag_replay.launch.py"
+    )
+    assert replay.launch_arguments["prediction_yaw_rate_source"] == (
+        "motion_history"
+    )
+    assert replay.launch_arguments["use_predicted_future_sweep"] == "true"
+
+
 def test_rviz_layout_has_all_study_layers_and_camera():
     displays = {
         item["Name"]: item

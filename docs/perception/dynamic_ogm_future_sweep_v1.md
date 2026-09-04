@@ -165,28 +165,29 @@ predictions through this same launch chain additionally require the PR #41
 plumbing bug to be fixed (below) — out of scope here — so the curved-sweep
 evidence in this PR is the unit tests and the standalone `pred_mh` run above.
 
-## Launch-plumbing bug found (not fixed here)
+## Launch-plumbing bug found — fixed separately (`fix/prediction-yaw-rate-launch-propagation`)
 
 While wiring the two new params it surfaced that `prediction_yaw_rate_source`
-(PR #41) is **silently inert through every nested launch** (`lidar_perception`
-/ `lidar_bag_replay` / `study_pipeline_rviz`): `prediction.yaml` keys
-`yaw_rate_source: tracker`, and `rcl_yaml_param_parser` keeps the file value
-when a nested-launch dict overrides a key already present in a loaded params
-file. Repro: `study_pipeline_rviz.launch.py
-prediction_yaw_rate_source:=motion_history` leaves the fused yaw rate at
-exactly 0 on every predicted object (`ros2 topic echo
-/ad/perception/objects/predicted` — all `initial_twist.twist.angular.z == 0`);
-a direct `prediction.launch.py yaw_rate_source:=motion_history` works.
+(PR #41) was **silently inert through every nested launch** (`lidar_perception`
+/ `lidar_bag_replay` / `study_pipeline_rviz`). Root cause: `prediction.launch.py`
+passed `parameters=[prediction.yaml, {override}]` as two `--params-file`
+arguments, and once `launch_ros`'s `SetParameter(use_sim_time=…)` (in
+`lidar_bag_replay.launch.py`'s scoped group) emitted a leading `-p` argument,
+`rcl` resolved `yaw_rate_source` against the node-name-scoped YAML section
+(`ad_autoware_prediction:`) rather than the later wildcard (`/**:`) override
+dict, keeping the file's `tracker`. Repro:
+`study_pipeline_rviz.launch.py prediction_yaw_rate_source:=motion_history` left
+`initial_twist.twist.angular.z == 0` on every predicted object; a direct
+`prediction.launch.py yaw_rate_source:=motion_history` worked.
 
-This is **out of scope for this PR** — the task forbids any change to the
-prediction path, and a one-line YAML deletion would alter the launch behaviour
-of an already-merged, independently-validated feature with no regression test
-guarding it. It is recorded here and in `docs/agent/STATUS.md` as a named
-follow-up. The two new sweep params sidestep it structurally: they are
-comment-only in `dynamic.yaml`, so the node's `declare_parameter` default plus
-the launch dict are the only two sources and there is no file value to win the
-merge (verified: `future_sweep_horizon_s` reaches the node through the full
-study chain).
+It was **out of scope for the future-sweep PR** (no prediction-path change), so
+the two new sweep params sidestepped it structurally (comment-only in
+`dynamic.yaml`). The bug itself is fixed in the follow-up branch
+`fix/prediction-yaw-rate-launch-propagation`: `prediction.launch.py` now reads
+`prediction.yaml` in Python and overlays the override before launch (one param
+source, no two-file race — the same pattern `ad_planner`'s
+`road_corridor_mask.launch.py` uses), with `test_prediction_launch.py` locking
+the runtime parameter under the exact `SetParameter` + scoped-group trigger.
 
 ## Known limitations
 
