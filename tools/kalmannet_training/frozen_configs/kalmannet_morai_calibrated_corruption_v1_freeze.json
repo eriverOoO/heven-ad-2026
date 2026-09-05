@@ -1,0 +1,171 @@
+{
+  "batch_size": 64,
+  "bucket_policy": {
+    "n_buckets": 8,
+    "sampler_version": "length_bucketed_v1",
+    "use_length_bucketing": true
+  },
+  "corruption_policy": {
+    "bias_xy": [
+      -0.6548025429052758,
+      0.6652460172320311
+    ],
+    "covariance_xy": [
+      [
+        0.5054367466769748,
+        -0.07705166171251883
+      ],
+      [
+        -0.07705166171251883,
+        0.3577342804083116
+      ]
+    ],
+    "dropout_burst_enabled": true,
+    "dropout_burst_length_samples": [
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      4,
+      4,
+      4,
+      4,
+      4,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      6,
+      6,
+      6,
+      7,
+      7,
+      7,
+      7,
+      8,
+      8,
+      9,
+      9,
+      9,
+      9,
+      9,
+      9,
+      10,
+      10,
+      10,
+      10,
+      17,
+      20,
+      21,
+      23,
+      24,
+      28,
+      29,
+      34,
+      35,
+      44
+    ],
+    "dropout_burst_max_len": 5,
+    "dropout_burst_min_len": 2,
+    "dropout_burst_prob": 0.04,
+    "dropout_prob": 0.013963039014373716,
+    "gaussian_noise_std_m": 0.0,
+    "mode": "morai_calibrated",
+    "seed": 20260906
+  },
+  "extra": {},
+  "frozen_at_git_sha": "936e32a592697622f2d3dec021f6f375ca0fe5e3",
+  "gradient_clip": 10.0,
+  "learning_rate": 0.004,
+  "loss_on_predict_only": true,
+  "max_epochs": 60,
+  "model_architecture": {
+    "hidden_size": 32,
+    "measurement_dim": 2,
+    "state_dim": 4
+  },
+  "notes": "MORAI-Calibrated AV2 Corruption v1 -- AV2 Stage-1 pilot (2000 scenarios, seed 0), MORAI TRAIN+VAL-calibrated corruption (bias+full-covariance noise, empirical burst-length resampling). Checkpoint SHA-256 125d02f84493b41413690a3c6c53e9618dbddf3a3b31843e61aa19046be8ae37. Written BEFORE any AV2 TEST or MORAI TEST evaluation of this checkpoint.",
+  "patience": 15,
+  "schema_version": "kalmannet_batch_calibration_freeze_v1",
+  "selection_evidence": {
+    "best_epoch": 6,
+    "best_val_loss": 1.6461352533320102,
+    "morai_calibration_provenance": {
+      "bias_xy": [
+        -0.6548025429052758,
+        0.6652460172320311
+      ],
+      "calibration_source": "MORAI TRAIN+VAL sequences.pkl (original, non-dense-filtered)",
+      "calibration_train_actor_ids": [
+        1,
+        13,
+        15,
+        18,
+        35,
+        36,
+        38,
+        40,
+        44,
+        46,
+        48
+      ],
+      "calibration_val_actor_ids": [
+        21,
+        23,
+        27,
+        31
+      ],
+      "corruption_config_canonical_json": "{\"bias_xy\": [-0.6548025429052758, 0.6652460172320311], \"covariance_xy\": [[0.5054367466769748, -0.07705166171251883], [-0.07705166171251883, 0.3577342804083116]], \"dropout_burst_enabled\": true, \"dropout_burst_length_samples\": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7, 8, 8, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 17, 20, 21, 23, 24, 28, 29, 34, 35, 44], \"dropout_burst_max_len\": 5, \"dropout_burst_min_len\": 2, \"dropout_burst_prob\": 0.04, \"dropout_prob\": 0.013963039014373716, \"gaussian_noise_std_m\": 0.0, \"mode\": \"morai_calibrated\", \"seed\": 20260906}",
+      "corruption_model_version": "corruption_v2",
+      "covariance_xy": [
+        [
+          0.5054367466769748,
+          -0.07705166171251883
+        ],
+        [
+          -0.07705166171251883,
+          0.3577342804083116
+        ]
+      ],
+      "dropout_burst_length_samples_n": 64,
+      "dropout_burst_prob_renewal_corrected": 0.04,
+      "dropout_prob": 0.013963039014373716,
+      "frozen_test_actor_ids_never_touched": [
+        16,
+        20,
+        30
+      ]
+    },
+    "selected_on": "AV2 VAL only (early stopping) -- AV2 TEST and every MORAI split untouched"
+  },
+  "shuffle_seed_policy": {
+    "init_seed": 0,
+    "order_seed": 0,
+    "seed": 0
+  },
+  "three_seed_validation_summary": {
+    "note": "single-seed run per this task's explicit scope ('train ONE MORAI-CALIBRATED-ROBUST KNet, one seed only') -- no multi-seed stability claim is made for this checkpoint"
+  }
+}

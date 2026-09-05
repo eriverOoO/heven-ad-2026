@@ -532,6 +532,142 @@ def test_corruption_config_validation_rejects_bad_values():
 
 
 # ==========================================================================
+# corruption_v2: bias + full-covariance + empirical burst-length resampling
+# (MORAI-Calibrated AV2 Corruption v1)
+# ==========================================================================
+def test_corruption_v2_rejects_non_positive_semidefinite_covariance():
+    with pytest.raises(AdapterError):
+        CorruptionConfig(covariance_xy=((1.0, 2.0), (2.0, 1.0))).validate()  # eigenvalues -1, 3
+
+
+def test_corruption_v2_rejects_asymmetric_covariance():
+    with pytest.raises(AdapterError):
+        CorruptionConfig(covariance_xy=((1.0, 0.5), (0.9, 1.0))).validate()
+
+
+def test_corruption_v2_rejects_nonfinite_bias():
+    with pytest.raises(AdapterError):
+        CorruptionConfig(bias_xy=(float("nan"), 0.0)).validate()
+
+
+def test_corruption_v2_accepts_valid_covariance_and_bias():
+    CorruptionConfig(bias_xy=(-0.65, 0.67), covariance_xy=((0.5, -0.08), (-0.08, 0.36))).validate()
+
+
+def test_corruption_v2_bias_applied_when_no_noise_configured():
+    scenario = _scenario([_straight_track(n=10)])
+    segments, _ = extract_segments(scenario, SegmentConfig())
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    config = CorruptionConfig(bias_xy=(-0.65, 0.67))
+    out = apply_corruption(transformed, segments[0].segment_id, config)
+    assert np.all(out["measurement_valid"])
+    residual = out["measurement"] - transformed["clean_position"]
+    assert np.allclose(residual, np.array([-0.65, 0.67]))
+
+
+def test_corruption_v2_full_covariance_noise_is_deterministic_given_seed():
+    scenario = _scenario([_straight_track(n=40)])
+    segments, _ = extract_segments(scenario, SegmentConfig())
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    config = CorruptionConfig(
+        bias_xy=(-0.65, 0.67), covariance_xy=((0.5, -0.08), (-0.08, 0.36)), seed=42,
+    )
+    run1 = apply_corruption(transformed, segments[0].segment_id, config)
+    run2 = apply_corruption(transformed, segments[0].segment_id, config)
+    assert np.array_equal(run1["measurement"], run2["measurement"])
+
+    config_other_seed = CorruptionConfig(
+        bias_xy=(-0.65, 0.67), covariance_xy=((0.5, -0.08), (-0.08, 0.36)), seed=43,
+    )
+    run3 = apply_corruption(transformed, segments[0].segment_id, config_other_seed)
+    assert not np.array_equal(run1["measurement"], run3["measurement"])
+
+
+def test_corruption_v2_full_covariance_noise_reproduces_correlation_at_scale():
+    # Large-sample check: generated x/y noise correlation should be close
+    # to the configured off-diagonal-derived correlation, not just "some
+    # noise was added". Uses a long synthetic track (one segment) purely
+    # to get enough corrupted samples for a stable empirical correlation --
+    # not a claim about any particular track's physical plausibility.
+    scenario = _scenario([_straight_track(n=110)], n_timestamps=110)
+    segments, _ = extract_segments(scenario, SegmentConfig(max_gt_gap_s=1000.0, max_teleport_speed_mps=1e6))
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    target_cov = ((0.5, -0.2), (-0.2, 0.36))
+    config = CorruptionConfig(covariance_xy=target_cov, seed=7)
+    out = apply_corruption(transformed, segments[0].segment_id, config)
+    residual = out["measurement"] - transformed["clean_position"]
+    empirical_cov = np.cov(residual[:, 0], residual[:, 1])
+    target_corr = target_cov[0][1] / (target_cov[0][0] ** 0.5 * target_cov[1][1] ** 0.5)
+    empirical_corr = empirical_cov[0, 1] / (empirical_cov[0, 0] ** 0.5 * empirical_cov[1, 1] ** 0.5)
+    assert abs(empirical_corr - target_corr) < 0.1
+    assert abs(empirical_cov[0, 0] - target_cov[0][0]) < 0.15
+    assert abs(empirical_cov[1, 1] - target_cov[1][1]) < 0.15
+
+
+def test_corruption_v2_empirical_burst_length_samples_only_draws_from_the_pool():
+    scenario = _scenario([_straight_track(n=110)], n_timestamps=110)
+    segments, _ = extract_segments(scenario, SegmentConfig(max_gt_gap_s=1000.0, max_teleport_speed_mps=1e6))
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    pool = (2, 5, 9, 20)
+    config = CorruptionConfig(
+        dropout_burst_enabled=True, dropout_burst_prob=0.3,
+        dropout_burst_length_samples=pool, seed=11,
+    )
+    out = apply_corruption(transformed, segments[0].segment_id, config)
+    invalid = ~out["measurement_valid"]
+    run_lengths = []
+    run_len = 0
+    for v in list(invalid) + [False]:
+        if v:
+            run_len += 1
+        elif run_len > 0:
+            run_lengths.append(run_len)
+            run_len = 0
+    assert run_lengths  # at least one burst fired at this probability/length
+    # Every observed contiguous run must be expressible as a sum of one or
+    # more pool entries (bursts can land back-to-back, same convention as
+    # the existing uniform-burst test above) -- never a length absent from
+    # the pool and not a multi-pool-entry sum.
+    reachable = {0}
+    for total in range(1, max(run_lengths) + 1):
+        if any(total - p in reachable and total - p >= 0 for p in pool):
+            reachable.add(total)
+    for run_len in run_lengths:
+        assert run_len in reachable, f"run length {run_len} not reachable from pool {pool}"
+
+
+def test_corruption_v2_empirical_burst_length_pool_empty_falls_back_to_uniform():
+    # dropout_burst_length_samples=() (the default) must take the
+    # pre-existing uniform(min, max) code path, never the new pool draw --
+    # verified by checking every observed run length falls in
+    # [min_len, max_len] or a back-to-back-burst sum thereof, exactly the
+    # same invariant test_dropout_burst_deterministic_and_produces_
+    # contiguous_runs already checks for the unmodified path.
+    scenario = _scenario([_straight_track(n=60)])
+    segments, _ = extract_segments(scenario, SegmentConfig())
+    arrays = segments[0].clean_arrays({i: ns for i, ns in enumerate(scenario.timestamps_ns)})
+    transformed = apply_coordinate_transform(arrays, CoordinateConfig())
+    config = CorruptionConfig(
+        dropout_burst_enabled=True, dropout_burst_prob=0.3,
+        dropout_burst_min_len=3, dropout_burst_max_len=6, seed=9,
+        dropout_burst_length_samples=(),
+    )
+    out = apply_corruption(transformed, segments[0].segment_id, config)
+    invalid = ~out["measurement_valid"]
+    run_len = 0
+    for v in list(invalid) + [False]:
+        if v:
+            run_len += 1
+        elif run_len > 0:
+            assert run_len >= config.dropout_burst_min_len
+            run_len = 0
+
+
+# ==========================================================================
 # N. scenario-level split leakage rejection
 # ==========================================================================
 def test_scenario_split_leakage_detected():

@@ -1,0 +1,263 @@
+{
+  "bootstrap_D_minus_E_pos_rmse": {
+    "caveat": "n=3 sequences -- CI/stability are NOT a claim of statistical robustness, per this task's own explicit scope",
+    "ci_high": 0.637888603622228,
+    "ci_low": -0.26730408270547845,
+    "fraction_bootstrap_same_sign": 0.716,
+    "n_bootstrap": 2000,
+    "observed_diff": 0.03866530927877321,
+    "stable": false
+  },
+  "conditions": {
+    "A_tuned_kf": {
+      "matched_missing_per_sequence": [
+        {
+          "matched_pos_rmse": 1.506891452518312,
+          "matched_vel_rmse": 2.565098030379951,
+          "missing_pos_rmse": 11.500890815364802,
+          "missing_vel_rmse": 5.215845542416666,
+          "n_matched": 39,
+          "n_missing": 24
+        },
+        {
+          "matched_pos_rmse": 1.5946624918541032,
+          "matched_vel_rmse": 2.5256665181499773,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 72,
+          "n_missing": 0
+        },
+        {
+          "matched_pos_rmse": 0.44444516742445467,
+          "matched_vel_rmse": 1.5073281897124926,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 19,
+          "n_missing": 0
+        }
+      ],
+      "n_divergent_sequences": 0,
+      "overall_pos_rmse": 3.0654160970771382,
+      "overall_vel_rmse": 2.7960091304032235,
+      "per_sequence_pos_rmse": [
+        7.140591982516709,
+        1.5864154391981353,
+        0.46924086951656985
+      ],
+      "per_sequence_vel_rmse": [
+        3.9205453871829965,
+        2.6431882450796174,
+        1.8242937589470563
+      ],
+      "provenance": "T-9A.1 selected_kf_config.json, validation-only selection on MORAI HEVEN actors 1/13/15/18/35/36/38/40/44/46/48 (train) + 21/23/27/31 (val); CROSS-DOMAIN TRANSFERRED to AV2 without retuning -- NOT the fair AV2-tuned baseline"
+    },
+    "B_dense_v2": {
+      "matched_missing_per_sequence": [
+        {
+          "matched_pos_rmse": 1.5441951464209507,
+          "matched_vel_rmse": 1.8771608986363473,
+          "missing_pos_rmse": 5.563051823518357,
+          "missing_vel_rmse": 2.0449890784554006,
+          "n_matched": 39,
+          "n_missing": 24
+        },
+        {
+          "matched_pos_rmse": 1.596638360652981,
+          "matched_vel_rmse": 2.9301594977018848,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 72,
+          "n_missing": 0
+        },
+        {
+          "matched_pos_rmse": 0.4215485048285887,
+          "matched_vel_rmse": 1.3086735498989357,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 19,
+          "n_missing": 0
+        }
+      ],
+      "n_divergent_sequences": 0,
+      "overall_pos_rmse": 1.8837124771537443,
+      "overall_vel_rmse": 2.302416765799908,
+      "per_sequence_pos_rmse": [
+        3.6140425673823815,
+        1.5883744105804505,
+        0.44872045349840095
+      ],
+      "per_sequence_vel_rmse": [
+        2.20789036974281,
+        3.027054190410968,
+        1.672305737245946
+      ]
+    },
+    "C_stage0_av2": {
+      "matched_missing_per_sequence": [
+        {
+          "matched_pos_rmse": 1.4723323218012399,
+          "matched_vel_rmse": 2.2530128031521874,
+          "missing_pos_rmse": 7.195388868702621,
+          "missing_vel_rmse": 3.171796420490249,
+          "n_matched": 39,
+          "n_missing": 24
+        },
+        {
+          "matched_pos_rmse": 1.6384059416811882,
+          "matched_vel_rmse": 2.199546962684329,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 72,
+          "n_missing": 0
+        },
+        {
+          "matched_pos_rmse": 0.4726617149466929,
+          "matched_vel_rmse": 2.0911658602365,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 19,
+          "n_missing": 0
+        }
+      ],
+      "n_divergent_sequences": 0,
+      "overall_pos_rmse": 2.2261787806563182,
+      "overall_vel_rmse": 2.4927653678031447,
+      "per_sequence_pos_rmse": [
+        4.554007302484918,
+        1.629785987321766,
+        0.4947430521622708
+      ],
+      "per_sequence_vel_rmse": [
+        2.8328608030575113,
+        2.3380694706660354,
+        2.3073658296858874
+      ]
+    },
+    "D_stage1_generic_av2": {
+      "matched_missing_per_sequence": [
+        {
+          "matched_pos_rmse": 1.5305012864773073,
+          "matched_vel_rmse": 2.1148982064779602,
+          "missing_pos_rmse": 5.1471724456038075,
+          "missing_vel_rmse": 2.1573632991573493,
+          "n_matched": 39,
+          "n_missing": 24
+        },
+        {
+          "matched_pos_rmse": 1.7436649971894111,
+          "matched_vel_rmse": 2.340656688210762,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 72,
+          "n_missing": 0
+        },
+        {
+          "matched_pos_rmse": 0.4663538559791452,
+          "matched_vel_rmse": 2.0500079553669317,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 19,
+          "n_missing": 0
+        }
+      ],
+      "n_divergent_sequences": 0,
+      "overall_pos_rmse": 1.8648123713362794,
+      "overall_vel_rmse": 2.371439365709803,
+      "per_sequence_pos_rmse": [
+        3.3712515157600644,
+        1.7341624083932552,
+        0.4890231898555182
+      ],
+      "per_sequence_vel_rmse": [
+        2.3728048459082873,
+        2.4695059238376738,
+        2.2720073273834482
+      ]
+    },
+    "E_stage1_morai_calibrated_av2": {
+      "matched_missing_per_sequence": [
+        {
+          "matched_pos_rmse": 1.2635405268562387,
+          "matched_vel_rmse": 2.419589561593172,
+          "missing_pos_rmse": 4.161886645113514,
+          "missing_vel_rmse": 2.1584973634813194,
+          "n_matched": 39,
+          "n_missing": 24
+        },
+        {
+          "matched_pos_rmse": 2.0003356706938358,
+          "matched_vel_rmse": 2.2658250257527466,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 72,
+          "n_missing": 0
+        },
+        {
+          "matched_pos_rmse": 0.7535871483301578,
+          "matched_vel_rmse": 2.2828292105127606,
+          "missing_pos_rmse": null,
+          "missing_vel_rmse": null,
+          "n_matched": 19,
+          "n_missing": 0
+        }
+      ],
+      "n_divergent_sequences": 0,
+      "overall_pos_rmse": 1.8261470620575062,
+      "overall_vel_rmse": 2.472671583073521,
+      "per_sequence_pos_rmse": [
+        2.7333629121378364,
+        1.9887510014736856,
+        0.7563272725609966
+      ],
+      "per_sequence_vel_rmse": [
+        2.5443981987126856,
+        2.3996814118435927,
+        2.4739351386642854
+      ]
+    }
+  },
+  "frozen_test_actor_ids": [
+    16,
+    20,
+    30
+  ],
+  "gain_prior_posterior_D_vs_E": {
+    "D_stage1_generic_av2": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.6018046544148372,
+        "n": 130,
+        "posterior_pos_rmse": 1.555124616831225,
+        "posterior_vel_rmse": 2.233919651058006,
+        "prior_pos_rmse": 1.7911310684934185,
+        "prior_to_posterior_improvement": 0.23600645166219358
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 5.1471724456038075,
+        "posterior_vel_rmse": 2.1573632991573493,
+        "prior_pos_rmse": 5.1471724456038075,
+        "prior_to_posterior_improvement": 0.0
+      }
+    },
+    "E_stage1_morai_calibrated_av2": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.2159375635477212,
+        "n": 130,
+        "posterior_pos_rmse": 1.666759895361629,
+        "posterior_vel_rmse": 2.31547029033789,
+        "prior_pos_rmse": 1.9206420749692519,
+        "prior_to_posterior_improvement": 0.25388217960762294
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 4.161886645113514,
+        "posterior_vel_rmse": 2.1584973634813194,
+        "prior_pos_rmse": 4.161886645113514,
+        "prior_to_posterior_improvement": 0.0
+      }
+    }
+  },
+  "schema_version": "kalmannet_morai_calibrated_corruption_v1_eval"
+}

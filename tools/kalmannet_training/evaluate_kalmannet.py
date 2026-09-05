@@ -177,7 +177,8 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--shard-root", type=Path, required=True)
     parser.add_argument("--split-manifest", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True, help="AV2 Stage-0 KNet checkpoint to evaluate")
-    parser.add_argument("--training-condition", choices=["clean", "generic_robust"], required=True,
+    parser.add_argument("--training-condition", choices=["clean", "generic_robust", "morai_calibrated_robust"],
+                         required=True,
                          help="which corruption family this checkpoint was trained under (for condition-B eval)")
     parser.add_argument("--eval-corruption-seed-variant", type=int, default=999999,
                          help="a different corruption seed for condition C (must differ from training's own seed)")
@@ -210,9 +211,9 @@ def main(argv: list[str] | None = None) -> int:
     conditions = {
         "A_clean_held_out": CorruptionConfig(mode="none"),
     }
-    if args.training_condition == "generic_robust":
+    if args.training_condition in ("generic_robust", "morai_calibrated_robust"):
         from train_kalmannet import CONDITION_PRESETS
-        train_corruption = CONDITION_PRESETS["generic_robust"]
+        train_corruption = CONDITION_PRESETS[args.training_condition]
         conditions["B_same_corruption_family"] = train_corruption
         conditions["C_different_corruption_seed"] = type(train_corruption)(
             **{**train_corruption.__dict__, "seed": args.eval_corruption_seed_variant}
