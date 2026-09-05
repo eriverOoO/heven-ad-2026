@@ -1,0 +1,256 @@
+{
+  "av2_kf_calibration": {
+    "calibrated_on_condition": "stage1_pilot_generic_robust",
+    "n_candidates": 40,
+    "p0_scale": 10.0,
+    "r_std": 0.30009496874561936,
+    "sigma_a": 5.0,
+    "train_residual_sigma_z": 0.30009496874561936,
+    "val_position_rmse": 0.3477125466547978,
+    "val_velocity_rmse": 1.617558505649398
+  },
+  "dataset": {
+    "gt_samples_total": 5646787,
+    "scenario_count": 2000,
+    "segments_exported": 110094,
+    "sequences_after_truncation": {
+      "test": 10731,
+      "train_clean": 88877,
+      "train_generic_robust": 88875,
+      "val": 10486
+    },
+    "shard_count": 10,
+    "split_counts": {
+      "test": 200,
+      "train": 1600,
+      "val": 200
+    },
+    "stage0_overlap_in_selection": 0
+  },
+  "label": "AV2 Stage-1 Pilot v1 -- 2,000 scenarios / 1 seed (NOT the final 10k Stage-1 result)",
+  "morai_zero_shot_transfer_results": {
+    "A_tuned_linear_kf_transferred": {
+      "gap_1_2_n": 2,
+      "gap_1_2_pos_rmse": 3.5344492456455296,
+      "gap_3_5_n": 3,
+      "gap_3_5_pos_rmse": 4.863244440681431,
+      "gap_6_plus_n": 19,
+      "gap_6_plus_pos_rmse": 12.72906670973558,
+      "matched_n": 130,
+      "matched_pos_rmse": 1.4555029268211082,
+      "matched_vel_rmse": 2.416395111375808,
+      "missing_n": 24,
+      "missing_pos_rmse": 11.500890815364802,
+      "missing_vel_rmse": 5.215845542416666,
+      "n": 154,
+      "nonfinite_count": 0,
+      "overall_pos_rmse": 4.733066391093377,
+      "overall_vel_rmse": 3.0279933851006686
+    },
+    "B_dense_v2_knet": {
+      "gap_1_2_n": 2,
+      "gap_1_2_pos_rmse": 3.3419300626562243,
+      "gap_3_5_n": 3,
+      "gap_3_5_pos_rmse": 3.6524017352123916,
+      "gap_6_plus_n": 19,
+      "gap_6_plus_pos_rmse": 5.984118277307367,
+      "matched_n": 130,
+      "matched_pos_rmse": 1.4673882639028872,
+      "matched_vel_rmse": 2.462246644435165,
+      "missing_n": 24,
+      "missing_pos_rmse": 5.563050976355796,
+      "missing_vel_rmse": 2.044988989127449,
+      "n": 154,
+      "nonfinite_count": 0,
+      "overall_pos_rmse": 2.576946432661166,
+      "overall_vel_rmse": 2.401992042764822
+    },
+    "C_stage0_av2_knet_120_scenarios": {
+      "gap_1_2_n": 2,
+      "gap_1_2_pos_rmse": 2.8049318760456554,
+      "gap_3_5_n": 3,
+      "gap_3_5_pos_rmse": 3.503204570686179,
+      "gap_6_plus_n": 19,
+      "gap_6_plus_pos_rmse": 7.914058033598419,
+      "matched_n": 130,
+      "matched_pos_rmse": 1.4729939742169307,
+      "matched_vel_rmse": 2.200331433558781,
+      "missing_n": 24,
+      "missing_pos_rmse": 7.195387958832997,
+      "missing_vel_rmse": 3.171796382180472,
+      "n": 154,
+      "nonfinite_count": 0,
+      "overall_pos_rmse": 3.1464565220210274,
+      "overall_vel_rmse": 2.3779788007588443
+    },
+    "D_stage1_av2_pilot_knet_2000_scenarios": {
+      "gap_1_2_n": 2,
+      "gap_1_2_pos_rmse": 2.5061670398601126,
+      "gap_3_5_n": 3,
+      "gap_3_5_pos_rmse": 2.9158508035042128,
+      "gap_6_plus_n": 19,
+      "gap_6_plus_pos_rmse": 5.6090751741036415,
+      "matched_n": 130,
+      "matched_pos_rmse": 1.555124659289333,
+      "matched_vel_rmse": 2.2339196447929512,
+      "missing_n": 24,
+      "missing_pos_rmse": 5.147171820744625,
+      "missing_vel_rmse": 2.1573632141187113,
+      "n": 154,
+      "nonfinite_count": 0,
+      "overall_pos_rmse": 2.4840199899666335,
+      "overall_vel_rmse": 2.2221622677726534
+    },
+    "caveat": "extremely small sample (3 sequences / 154 frames) -- descriptive only, not statistically conclusive",
+    "frozen_test_actor_ids": [
+      16,
+      20,
+      30
+    ],
+    "n_frozen_test_frames": 154,
+    "n_frozen_test_sequences": 3
+  },
+  "schema_version": "kalmannet_av2_stage1_pilot_v1_summary",
+  "stage1_av2_test_results": {
+    "A_clean_held_out": {
+      "dense_v2_overall": {
+        "n": 550693,
+        "position_rmse_m": 0.06794114770794422,
+        "velocity_rmse_mps": 1.3627946566553375
+      },
+      "kf_av2_tuned_overall": {
+        "n": 550693,
+        "position_rmse_m": 0.10320810267062541,
+        "velocity_rmse_mps": 1.4912019453876184
+      },
+      "kf_transferred_overall": {
+        "n": 550693,
+        "position_rmse_m": 0.08110756264733666,
+        "velocity_rmse_mps": 1.4747337131027942
+      },
+      "knet_gap_stratified": {
+        "gap::matched": {
+          "n": 550693,
+          "position_rmse_m": 0.0817353186317204,
+          "velocity_rmse_mps": 1.3363553195004607
+        }
+      },
+      "knet_overall": {
+        "n": 550693,
+        "position_rmse_m": 0.0817353186317204,
+        "velocity_rmse_mps": 1.3363553195004607
+      },
+      "n_test_sequences": 10731
+    },
+    "B_same_corruption_family": {
+      "dense_v2_overall": {
+        "n": 548597,
+        "position_rmse_m": 0.44934453173676825,
+        "velocity_rmse_mps": 1.946335763852245
+      },
+      "kf_av2_tuned_overall": {
+        "n": 548597,
+        "position_rmse_m": 0.3508857928066862,
+        "velocity_rmse_mps": 1.747210011864984
+      },
+      "kf_transferred_overall": {
+        "n": 548597,
+        "position_rmse_m": 0.3578022085847865,
+        "velocity_rmse_mps": 1.8212952287878945
+      },
+      "knet_gap_stratified": {
+        "gap::gap_1_2": {
+          "n": 67617,
+          "position_rmse_m": 0.3925932483276572,
+          "velocity_rmse_mps": 1.5307440694748051
+        },
+        "gap::gap_3_5": {
+          "n": 16401,
+          "position_rmse_m": 0.7375247419363324,
+          "velocity_rmse_mps": 1.5691993475447081
+        },
+        "gap::gap_6_plus": {
+          "n": 1057,
+          "position_rmse_m": 1.1777179683750243,
+          "velocity_rmse_mps": 1.7301098335257703
+        },
+        "gap::matched": {
+          "n": 463522,
+          "position_rmse_m": 0.27671915128828534,
+          "velocity_rmse_mps": 1.4583266732697118
+        }
+      },
+      "knet_overall": {
+        "n": 548597,
+        "position_rmse_m": 0.3203592952224018,
+        "velocity_rmse_mps": 1.4714283320918524
+      },
+      "n_test_sequences": 10731
+    },
+    "C_different_corruption_seed": {
+      "dense_v2_overall": {
+        "n": 548692,
+        "position_rmse_m": 0.449311155612547,
+        "velocity_rmse_mps": 1.9440965079908867
+      },
+      "kf_av2_tuned_overall": {
+        "n": 548692,
+        "position_rmse_m": 0.35089454964240147,
+        "velocity_rmse_mps": 1.7490097554765425
+      },
+      "kf_transferred_overall": {
+        "n": 548692,
+        "position_rmse_m": 0.35794035232574367,
+        "velocity_rmse_mps": 1.8228775035692666
+      },
+      "knet_gap_stratified": {
+        "gap::gap_1_2": {
+          "n": 67899,
+          "position_rmse_m": 0.38666628407914755,
+          "velocity_rmse_mps": 1.5120374511556636
+        },
+        "gap::gap_3_5": {
+          "n": 16693,
+          "position_rmse_m": 0.7464440850930917,
+          "velocity_rmse_mps": 1.5941900094988979
+        },
+        "gap::gap_6_plus": {
+          "n": 961,
+          "position_rmse_m": 1.2087117136806542,
+          "velocity_rmse_mps": 1.578249783596767
+        },
+        "gap::matched": {
+          "n": 463139,
+          "position_rmse_m": 0.2768592225245535,
+          "velocity_rmse_mps": 1.4631787825418143
+        }
+      },
+      "knet_overall": {
+        "n": 548692,
+        "position_rmse_m": 0.3204855766939425,
+        "velocity_rmse_mps": 1.4736619839702385
+      },
+      "n_test_sequences": 10731
+    }
+  },
+  "training": {
+    "batch_size": 64,
+    "best_epoch": 16,
+    "best_val_loss": 0.7989848739490276,
+    "catastrophic": false,
+    "condition": "generic_robust",
+    "lr": 0.004,
+    "max_epochs": 60,
+    "n_epochs_run": 32,
+    "nonfinite_step_count": 0,
+    "patience": 15,
+    "seed": 0,
+    "train_time_s": 6332.413753032684,
+    "transient_large_loss_epochs": [
+      10,
+      20,
+      25
+    ],
+    "transient_note": "grad_norm_mean showed inf/very-large values at epochs 10/20/25; loss itself stayed finite (not literal NaN/Inf) at every step, nonfinite_step_count stayed 0 throughout; training recovered to normal within 1 epoch each time (grad clipping handled it)."
+  }
+}

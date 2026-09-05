@@ -1,0 +1,71 @@
+{
+  "batch_size": 64,
+  "bucket_policy": {
+    "n_buckets": 8,
+    "sampler_version": "length_bucketed_v1",
+    "use_length_bucketing": true
+  },
+  "corruption_policy": {
+    "dropout_burst_enabled": true,
+    "dropout_burst_max_len": 5,
+    "dropout_burst_min_len": 2,
+    "dropout_burst_prob": 0.02,
+    "dropout_prob": 0.1,
+    "gaussian_noise_std_m": 0.3,
+    "mode": "custom",
+    "seed": 20260905
+  },
+  "extra": {},
+  "frozen_at_git_sha": "63e83e1c60b5cf0035f0c11893ab6db3ceaa84bf",
+  "gradient_clip": 10.0,
+  "learning_rate": 0.004,
+  "loss_on_predict_only": true,
+  "max_epochs": 60,
+  "model_architecture": {
+    "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+    "hidden_size": 32,
+    "measurement_dim": 2,
+    "state_dim": 4
+  },
+  "notes": "AV2 Stage-1 Pilot v1 -- 2,000 scenarios / 1 seed. Checkpoint SHA-256 65fe0c2b13caa2948c8128aacb331a69e0b0f1087ba581be7df7d2e5944e0c17. torch 2.4.1+cu121, av2 package per PR #47.",
+  "patience": 15,
+  "schema_version": "kalmannet_batch_calibration_freeze_v1",
+  "selection_evidence": {
+    "av2_kf_calibration": {
+      "calibrated_on_condition": "stage1_pilot_generic_robust",
+      "n_candidates": 40,
+      "p0_scale": 10.0,
+      "r_std": 0.30009496874561936,
+      "sigma_a": 5.0,
+      "train_residual_sigma_z": 0.30009496874561936,
+      "val_position_rmse": 0.3477125466547978,
+      "val_velocity_rmse": 1.617558505649398
+    },
+    "note_on_procedure": "ONLY ONE seed was run for this pilot (per explicit user instruction), so there was no seed-selection decision to protect from test-set influence -- the single checkpoint's hyperparameters were already fully fixed (inherited unchanged from the PR #49 batch calibration) before this task started. PROCEDURAL NOTE, disclosed honestly: this specific freeze-manifest FILE was written after the Stage-1 AV2 TEST evaluation had already been run (not strictly before, as the general policy asks) -- no retraining or hyperparameter change was made as a result of seeing test numbers, but the file-write ORDERING itself deviated from the prescribed discipline and is recorded here rather than silently corrected after the fact.",
+    "scenario_count": 2000,
+    "scenario_manifest_path": "~/datasets/av2/manifests/stage1_pilot_scenarios.json",
+    "scenario_manifest_sha256": "3b70d5ae598e7c7fdf260650ac66a6b8f781fff173c2766a77ee812858375ee1",
+    "seed_count": 1,
+    "seeds_run": [
+      0
+    ],
+    "split_counts": {
+      "test": 200,
+      "train": 1600,
+      "val": 200
+    },
+    "split_manifest_path": "~/datasets/av2/manifests/stage1_pilot_split.json",
+    "split_manifest_sha256": "d0eab2fef831ee813dbf35fba686d39311c38676f97bc5d9475debbec45dd64a",
+    "stage0_exclusion_verified": true,
+    "stage0_overlap_in_selection": 0
+  },
+  "shuffle_seed_policy": {
+    "init_seed": 0,
+    "n_seeds_run": 1,
+    "order_seed": 0,
+    "seed": 0
+  },
+  "three_seed_validation_summary": {
+    "note": "single-seed pilot, no 3-seed stability check run (per explicit user instruction to scale down to 1 seed)"
+  }
+}
