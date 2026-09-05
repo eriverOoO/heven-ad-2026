@@ -1,5 +1,139 @@
 # STATUS
 
+## AV2 KalmanNet Scale-Up Dataset v2 — COMPLETE (data acquisition/preparation only, no training)
+
+Branch `data/av2-kalmannet-scaleup-v2`, from merged PR #53
+`8cdcc5d0ce63f12c6e152c3f806c9665c9504a8a` (`feat(eval): add frozen
+MORAI estimator dataset v2`, verified via `gh pr view 53` before
+branching). **Data acquisition/preparation only. No KalmanNet training
+launched (1-seed, 3-seed, GENERIC-ROBUST, or MORAI-calibrated). No
+`kalmannet_core.py`/CenterPoint/association/AB3DMOT/prediction/planner/
+occupancy-grid file touched.**
+
+**Continues AV2 pretraining work while MORAI stays unavailable** (per
+the prior MORAI Frozen Estimator Evaluation v2 task's own finding) --
+AV2 has no such availability constraint (public unsigned-read S3
+bucket). AV2 evaluation is explicitly documented as never a substitute
+for the eventual MORAI competition-domain evaluation.
+
+**Exclusion union, verified against real on-disk manifests**: Stage-0's
+120 scenario_ids + Stage-1 pilot's 2,000 = **2,120 unique ids**
+(re-verified by set intersection: 0 overlap between the two, matching
+Stage-1's own recorded `stage0_overlap_in_selection: 0`). Both prior
+experiments used AV2's `train` split only -- no AV2 `val` scenario had
+ever been touched before this task.
+
+**New tool** `tools/av2_dataset_prep/fetch_av2_scaleup_v2.py`
+(generalizes `fetch_av2_stage1.py`'s single-`--exclude-manifest` to a
+repeatable flag, so the union of BOTH prior manifests excludes together,
+never just one; reuses `fetch_av2_stage0.py`'s listing/selection/
+download/manifest primitives verbatim, per the task's own "extend
+cleanly, do not duplicate" instruction). Real downloads (10,704 total
+HTTP requests to the public `argoverse` S3 bucket, no AWS account/
+boto3/s5cmd needed):
+
+| | scenarios | seed | pool size | bytes downloaded | failed |
+|---|---|---|---|---|---|
+| TRAIN (fresh) | 10,000 | 20260920 | 20,000 | 1,482,235,698 (1.48 GB) | 0 |
+| official VAL (fresh, AV2's own `val` split) | 1,000 | 20260921 | 4,000 | 151,175,497 (151 MB) | 0 |
+
+**0 overlap with the exclusion union in both selections (verified)** --
+all 2,120 excluded ids were confirmed still present in the TRAIN pool
+listing (same live bucket, expected); 0 of them were present in the
+VAL-split listing at all (confirms train/val are structurally disjoint
+id spaces, not merely assumed).
+
+**Sharded via the existing, unmodified adapter CLI** + the already-
+frozen `scenarios_per_shard: 200` policy -- **exactly** 50 TRAIN shards,
+**exactly** 5 official-VAL shards (10,000/200 and 1,000/200). **No
+corruption materialized into either shard set** (`CorruptionConfig(mode=
+"none")`, metadata-only) -- clean canonical shards only, corruption
+stays a load-time transform. TRAIN and official-VAL exported into
+physically separate output roots with independent single-role split
+manifests (new `build_scaleup_v2_split_manifests.py`, deliberately not
+`av2_split.py::assign_split`, which enforces a mandatory 3-way carve-out
+of one pool -- here there are two independent pools, each already 100%
+one role) -- structurally impossible for a TRAIN-pointed loader to ever
+see an official-VAL sequence.
+
+**Both exports pass the existing strict validator with 0 errors, 0
+warnings**: TRAIN 50/50 shards, 553,898/553,898 segments; official VAL
+5/5 shards, 56,521/56,521 segments.
+
+**Real dataset statistics** (computed via a new memory-efficient
+streaming script after the first attempt, using the existing
+`sequence_distribution_stats()`, hit a real OOM kill loading 28.57M
+frames' worth of Python-float lists at once -- fixed by streaming
+`iter_segments()` directly into pre-concatenated numpy arrays instead):
+TRAIN 553,898 segments / 28,572,250 GT samples, track length p50=39
+p90-p99=110(max), speed p50~=0/p90=10.06/p95=12.61/p99=16.43 m/s,
+accel-proxy p50~=0/p90=1.73/p95=2.79/p99=8.44 m/s^2, **64.17% near-
+stationary** (speed<0.5 m/s, confirms the domain-gap task's own finding
+at 5x scale, not filtered out); dt fixed at 0.1s at every percentile
+(TRAIN and VAL both). Class distribution VEHICLE-dominant (411,578
+coarse VEHICLE vs. 53,353 PEDESTRIAN vs. 88,967 OTHER for TRAIN),
+matching every prior AV2 task's own finding.
+
+**Freeze manifest** (`tools/av2_dataset_prep/frozen_configs/
+av2_kalmannet_scaleup_v2_freeze.json`, new, committed) records both
+exports' content fingerprints, the exclusion-manifest hashes, and three
+overlap counts (train-vs-val, train-vs-exclusion, val-vs-exclusion) --
+**all 0**, and the freeze-writer script refuses to write at all (exit 1)
+if any overlap is nonzero (verified by test, not just asserted). **A
+real local-path leak was found and fixed while preparing this**: the
+fetch tool's own manifest recorded `str(Path(p).expanduser())` for its
+`excluded_manifests` field, embedding this machine's absolute home
+directory -- fixed to record basenames only, then the freeze manifest
+was rebuilt pointing at the already-scrubbed committed files so its
+recorded hashes match the actually-committed content byte-for-byte
+(verified via direct `sha256sum`).
+
+**Estimated training time** (no training run, per this task's explicit
+instruction) -- real Stage-1 pilot throughput (520.3 s/epoch, 88,584
+train sequences, batch_size=64, from the MORAI-Calibrated AV2 Corruption
+v1 task's own real training run) scaled by the real segment-count ratio
+553,810/88,584 = 6.252x -> **~3,253 s/epoch (~54.2 min)** at this new
+scale. Using each condition's own historical Stage-1-pilot epoch count
+as a (explicitly caveated, not re-verified at this scale) reference:
+GENERIC-ROBUST ~32 epochs -> ~28.9h (1-seed) / ~86.7h (3-seed);
+MORAI-calibrated ~22 epochs -> ~19.9h (1-seed) / ~59.7h (3-seed).
+
+**Disk**: `~/datasets/av2/` grew from 1.2 GB to **6.3 GB** (well under
+the ~100 GB soft budget; host free disk 902 GB -> 897 GB). ~1 GB of
+superseded Stage-0/Stage-1 raw+processed data identified as a future
+cleanup candidate -- **not deleted**, report only.
+
+**Tests: 46/46 new pass** (8 fetch-tool + 6 split-manifest + 4
+freeze-manifest tests in `tools/av2_dataset_prep/`, all offline/
+synthetic-fixture; regression 144/144 in `tools/kalmannet_training/` +
+56/56 in the AV2 adapter suite, both unaffected). `py_compile`/
+`pyflakes`/`git diff --check` clean on every changed/new file. No raw
+`.parquet`, NPZ shard, checkpoint, or local path committed (verified via
+grep + hash cross-check before commit).
+
+**Files:** `tools/av2_dataset_prep/{fetch_av2_scaleup_v2.py,
+test_fetch_av2_scaleup_v2.py,build_scaleup_v2_split_manifests.py,
+test_build_scaleup_v2_split_manifests.py,
+build_scaleup_v2_freeze_manifest.py,
+test_build_scaleup_v2_freeze_manifest.py}` (new),
+`tools/av2_dataset_prep/frozen_configs/av2_kalmannet_scaleup_v2_freeze.json`
+(new, committed), `ad_morai_bridge_dev/config/dataset_factory/
+av2_motion_forecasting_adapter/scaleup_v2_{train,official_val}_scenarios.manifest.json`
+(new, committed), `docs/perception/av2_kalmannet_scaleup_v2.md` (new),
+this file. No `kalmannet_core.py`/CenterPoint/association/AB3DMOT/
+prediction/planner/occupancy-grid file touched; no model trained.
+
+**Recommended next task (per this task's own explicit scope boundary --
+NOT started this session):** using the frozen 10k TRAIN + 1k official
+VAL dataset, choose and run ONE full-scale KalmanNet pretraining matrix
+based on the measured data/compute cost reported above (the ~54.2 min/
+epoch figure and the ~20-29 hour 1-seed / ~60-87 hour 3-seed estimates
+are the concrete inputs that decision needs).
+
+## AV2 KalmanNet Scale-Up Dataset v2 result: **COMPLETE**
+
+---
+
 ## MORAI Frozen Estimator Evaluation Dataset v2 — BLOCKED on new MORAI collection (tooling complete)
 
 Branch `feat/morai-estimator-eval-v2`, from merged PR #52
