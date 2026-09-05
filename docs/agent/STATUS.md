@@ -1,5 +1,130 @@
 # STATUS
 
+## AV2→MORAI KalmanNet Domain-Gap Analysis v1 — COMPLETE
+
+Branch `analysis/kalmannet-av2-morai-domain-gap-v1`, from merged PR #50
+`32970542` (`exp(kalmannet): run AV2 Stage-1 robust pretraining (pilot)`,
+verified via `gh pr view 50` — `MERGED` — before any edit). **Diagnostic/
+analysis only. No new training, no architecture change, no runtime/ROS/
+CenterPoint/planner change.** Explains PR #50's own observed pattern
+(Stage-1 improved MORAI missing-measurement transfer but regressed
+matched-measurement and AV2-internal CLEAN performance) using the exact
+existing checkpoints, unretrained.
+
+**Checkpoints frozen, hashes verified unchanged**: A. dense-v2
+`956604975e...fb7d48`, B. Stage-0 AV2 (calibrated) `6e45c8c4d7...ba7765f65`,
+C. Stage-1 AV2 pilot `65fe0c2b13...5944e0c17`.
+
+**Two large, previously-unexamined domain gaps found (dataset
+distribution, Section 1):** (1) AV2 (both stages) is `64-72%`
+near-stationary (real object mix includes STATIC/BACKGROUND/parked
+tracks); MORAI training/eval data is `98-99%` non-stationary (curated
+moving vehicle actors). (2) Every AV2 sequence has **exactly** `dt=0.100s`
+(zero variance); MORAI's real detector timing varies meaningfully
+(p50 `0.116-0.130s`, p90 up to `0.243s`) — the learned gain network has
+never seen non-`0.1s` `dt` during training. **Directionally supportive**:
+Stage-1's speed distribution (p90/p95 `10.57/13.13 m/s`) sits closer to
+MORAI's real distribution (`12.78/13.17`) than Stage-0's does
+(`5.92/8.53`) — plausible motion-diversity contribution to the observed
+transfer improvement.
+
+**Measurement noise comparison (Section 2) — direct, quantified answer**:
+AV2's GENERIC-ROBUST corruption (isotropic, zero-bias, `~0.3m` std,
+verified exactly as designed) is **too small** (real MORAI radial error
+median `1.08-1.32m`, ~3-4x larger), **too isotropic** (real MORAI
+`x_std/y_std` ratio `~4.7:1` vs. AV2's `~1:1`), and **missing bias**
+(real MORAI shows substantial non-zero bias, e.g. `y_bias=0.43m` on the
+frozen eval stream, `x_bias=-0.68/y_bias=+0.68` on dense-v2's own
+training data) — confirms **Outcome B** (noise-model mismatch) as a real,
+independent contributing factor.
+
+**Kalman gain analysis (Section 3) — direct mechanistic confirmation of
+Outcome A**: new offline instrumentation (`estimator_trace.py`, no
+runtime change) on the frozen MORAI stream shows mean learned-gain
+Frobenius norm decreasing monotonically **dense-v2 (3.31) > Stage-0
+(1.84) > Stage-1 (1.60)** — Stage-1 applies the smallest measurement
+correction of the three, exactly tracking the matched/missing RMSE
+tradeoff (best missing-measurement RMSE, worst matched-measurement RMSE
+among the three KalmanNet checkpoints).
+
+**Prior/posterior decomposition (Section 4) — a second, distinct
+mechanism**: Stage-1's own PRE-UPDATE prior error is the WORST of all
+four methods (`1.791` vs. `1.614-1.704`) — not a case of "strong prior,
+weak update," but a measurably worse dynamics prediction itself.
+
+**AV2-internal CLEAN regression (Section 5)**: the SAME worse-prior
+pattern reappears on AV2's own clean data (Stage-1 prior `0.176` vs.
+Stage-0's `0.104`), but the gain gap there is much SMALLER (`1.818` vs.
+`1.919`, ~5%) than cross-domain on MORAI (~13%, both far below
+dense-v2's `3.31`) — indicates the CLEAN regression is driven
+predominantly by the prior/dynamics mechanism, not the gain/trust
+mechanism, a genuinely separate root cause from the matched/missing
+tradeoff.
+
+**Corruption exposure (Section 6)**: aggregate missing-rate matches well
+(`15.6-15.8%` both AV2 and MORAI), but **gap-LENGTH is a severe
+mismatch** — AV2 training never exposes gaps `>5` frames
+(`dropout_burst_max_len=5`); MORAI's one real observed gap is **24
+frames**, ~5x longer than anything in AV2 training.
+
+**Bootstrap uncertainty (Section 8) — a critical, honest caveat**: per-
+sequence (not per-frame) bootstrap at `n=3` shows **none of the three
+headline MORAI RMSE comparisons are statistically stable** (Stage-1 vs.
+dense-v2/Stage-0/tuned-KF all have 95% CIs that include zero,
+fraction-of-resamples-agreeing-in-sign only `59-74%`). The mechanism
+(lower gain) IS directly, robustly observable in the frame-level trace
+data (n=130-154 frames); the AGGREGATE sequence-level RMSE ranking is
+NOT statistically distinguishable from noise at this sample size.
+
+**Additional MORAI held-out data audit (Section 9)**: searched every
+local `.pkl`/GT artifact — all draw from the identical 21-actor roster
+of the single MORAI scene already split by T-11's own frozen policy. **No
+additional, genuinely independent MORAI evaluation data exists locally**
+— the transfer claim remains data-limited to the 3 frozen test actors.
+
+**Small ablation (Section 10): skipped**, per explicit task permission —
+diagnostics already converge on multiple independently-verified
+mechanisms (gain, prior, noise-magnitude, gap-length) without needing a
+new training run.
+
+**Most likely explanation: Outcome E (multiple factors)** — at least 4
+distinct, separately-verified mechanisms contribute (gain reduction,
+prior degradation, noise-model mismatch, gap-length mismatch), plus a
+5th coexisting caveat (statistical instability at n=3). No single-factor
+story is supported.
+
+**Claims disciplined per the task's own list**: the ONE pre-approved
+claim ("AV2 Stage-1 pilot improved missing-measurement zero-shot
+performance... while matched-measurement performance regressed") is
+fully supported and repeated; universal-superiority, scale-guarantees,
+dropout-robustness-implies-overall-robustness, matched-regression-is-
+harmless, and n=3-is-statistically-strong are all explicitly NOT claimed.
+
+**Tests**: `tools/kalmannet_training/` **108/108 pass** (84 unchanged +
+14 new `test_domain_gap_analysis.py` + 10 new `test_estimator_trace.py`).
+`pyflakes` clean, `py_compile` clean, `git diff --check` clean.
+
+**Files:** `tools/kalmannet_training/{domain_gap_analysis.py,
+test_domain_gap_analysis.py,estimator_trace.py,test_estimator_trace.py,
+frozen_configs/kalmannet_av2_morai_domain_gap_v1_results.json}` (all
+new). No change to any existing training/calibration/eval file, no
+architecture/runtime/ROS/CenterPoint/planner change.
+`docs/perception/kalmannet_av2_morai_domain_gap_v1.md` (new), this file.
+No dataset, checkpoint, or large log committed.
+
+**Recommended next task (from this analysis's own evidence — see the
+task's own final response for the full A-E reasoning): tune the AV2
+corruption distribution toward the measured MORAI residual statistics
+(larger, anisotropic, biased noise; longer gap lengths) before any
+further scale-up or MORAI fine-tuning** — this directly targets the two
+most concretely quantified, independently-actionable mismatches (Section
+2 noise magnitude/isotropy/bias, Section 6 gap length) without yet
+committing to the larger, less-certain decisions (10k scale-up, MORAI
+fine-tune) that depend on a still-data-limited (n=3) transfer signal.
+Not implemented in this task.
+
+---
+
 ## AV2 KalmanNet Stage-1 Pilot v1 — 2,000 scenarios / 1 seed — COMPLETE
 
 Branch `exp/kalmannet-av2-stage1-v1`, from merged PR #49 `63e83e1`
