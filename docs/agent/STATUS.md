@@ -1,5 +1,85 @@
 # STATUS
 
+## MORAI Frozen Estimator Evaluation Dataset v2 — BLOCKED on new MORAI collection (tooling complete)
+
+Branch `feat/morai-estimator-eval-v2`, from merged PR #52
+`764b4f82` (`exp(kalmannet): calibrate AV2 corruption to MORAI`, verified
+via `gh pr view 52` before branching). **Evaluation-data task. No model
+trained or tuned.**
+
+**Central finding: exactly one MORAI simulator run with actor ground
+truth has ever been captured in this project's entire history**
+(`static_20260805_003151`). Audited every locally-known MORAI-adjacent
+source (`~/datasets/morai_heven/`, `~/heven_presentation_assets/
+motion_gt_expansion/canonical/`, the git-tracked metadata-only
+`bags/static_20260805_003151/` remnant, and the untracked
+`morai_cam4_20260813_163222` bag) -- confirmed the metadata-only bag
+remnant is the SAME run (starting_time + message counts match), and the
+camera bag, while genuinely a different/independent recording, carries
+no `/ad/dev/objects` or any actor-GT topic at all.
+
+**Leakage audit over all 21 actors in that sole run: 0 eligible for new
+V2 test data.** 12 already TRAIN, 4 already VAL (T-9A.1 KF tuning, T-12
+KalmanNet training, dense-v2 training, this project's own MORAI
+corruption calibration), 3 already the frozen V1 TEST set
+(16/20/30 -- reused unchanged, not counted as new), 2 excluded for a
+GT-quality defect (vehicle-speed kinematics under an obstacle/pedestrian
+label). 12+4+3+2=21 -- every actor accounted for, none free.
+
+**MORAI confirmed unavailable in this environment** (`import grpc`
+fails, no simulator process, no installation found) -- per this task's
+own explicit instruction, stopped at a complete, collection-ready
+implementation rather than fabricating data or reusing leaked actors.
+
+**Built (all tested against synthetic fixtures, never real data used to
+prove correctness):** `tools/kalmannet_training/morai_estimator_eval_v2.py`
+(source-run audit, per-actor leakage audit, frame/transform-chain
+assertions, positional-frame-index sequence builder matching the
+already-established `motion_gt_expansion/canonical/provenance.json`
+alignment convention, strict validator, freeze-manifest machinery,
+paired + run-level bootstrap statistical design) +
+`build_morai_estimator_eval_v2.py` (validation-first CLI, real audit run
+against real local data, `frozen_configs/morai_estimator_eval_v2_audit.json`
+committed). GT/runtime separation (Section 6 boundary) verified by
+construction: every function operates on already-exported offline
+artifacts only, none reachable from any runtime ROS node.
+
+**Coordinate-frame verification, done directly rather than assumed**: a
+real `morai_heven` label file's own recorded `transform_alignment.chain`
+(`map->odom->base_link->rear_axle_link->lidar_link`) confirms GT is
+genuinely `lidar_link`-frame (not raw ENU); the real frozen detector
+replay's `frame_id` is independently confirmed `lidar_link` too --
+same frame, checked not assumed. Alignment policy confirmed as
+positional frame-index join (detection replay `stamp_ns` values are on
+a completely different wall-clock epoch than GT `header_stamp_ns` --
+directly measured ~23.8-minute offset -- so nearest-stamp matching would
+be meaningless; the project's own existing provenance file already
+documents this, cross-checked here, not re-litigated).
+
+**Tests: 144/144 pass** (118 pre-existing unaffected + 26 new
+`test_morai_estimator_eval_v2.py`). `py_compile`/`pyflakes`/
+`git diff --check` clean. No absolute local path in the committed audit
+JSON (verified via grep before commit).
+
+**Files:** `tools/kalmannet_training/{morai_estimator_eval_v2.py,
+build_morai_estimator_eval_v2.py,test_morai_estimator_eval_v2.py}` (new),
+`tools/kalmannet_training/frozen_configs/morai_estimator_eval_v2_audit.json`
+(new, small/machine-independent), `docs/perception/
+morai_estimator_eval_v2.md` (new), this file. No `kalmannet_core.py`,
+CenterPoint, association, AB3DMOT, prediction, planner, or occupancy-grid
+file touched.
+
+**Recommended next task:** execute the collection checklist in
+`docs/perception/morai_estimator_eval_v2.md` (>=5 independent MORAI runs,
+>=20 actor trajectories minimum, GT logger visibly separate from the
+runtime graph) once MORAI access exists, then resume this task's
+remaining sections to populate/freeze V2 and run the post-freeze sanity
+comparison. Not started this session -- MORAI unavailable here.
+
+## MORAI Frozen Estimator Evaluation Dataset v2 result: **BLOCKED (tooling complete, awaiting real MORAI collection)**
+
+---
+
 ## MORAI-Calibrated AV2 Corruption v1 — COMPLETE (offline, opposite-of-hoped-for pattern found)
 
 Branch `exp/kalmannet-morai-calibrated-corruption-v1`, from merged PR #51
