@@ -1,5 +1,123 @@
 # STATUS
 
+## AV2 KalmanNet Stage-1 Pilot v1 — 2,000 scenarios / 1 seed — COMPLETE
+
+Branch `exp/kalmannet-av2-stage1-v1`, from merged PR #49 `63e83e1`
+(`exp(kalmannet): calibrate batched AV2 training`, verified via
+`gh pr view 49` — `MERGED` — before any edit). **Explicitly scaled down
+from the originally-requested 10,000-scenario/3-seed Stage-1 matrix, per
+direct user instruction, after flagging the literal spec's own ~40-hour
+compute cost.** This is a PILOT, not the final Stage-1 result. No
+KalmanNet architecture/estimator-math change; no runtime/ROS/AB3DMOT
+change; **no MORAI fine-tuning (zero-shot transfer only)**.
+
+**Dataset**: 2,000 unique AV2 `train`-split scenarios, downloaded via a
+new `tools/av2_dataset_prep/fetch_av2_stage1.py` (reuses Stage-0's own
+listing/download code, adds exclusion of Stage-0's exact 120 scenario
+ids from the sampling pool before selection — verified **0 overlap**
+anywhere in the new split, 0 in TEST specifically). 292 MB raw → 647 MB
+sharded (10 shards, default `scenarios_per_shard=200` policy unchanged),
+110,094 segments, 5,646,787 GT samples, 0 dropped/rejected frames.
+Validator: 0 errors. Scenario-level 80/10/10 split (new seed, distinct
+from both the download seed and Stage-0's own split seed): 1,600/200/200
+scenarios → 88,875/10,486/10,731 usable sequences (GENERIC-ROBUST).
+
+**Training**: exactly the frozen PR #49 config (`batch_size=64, lr=0.004,
+max_epochs=60, patience=15`), GENERIC-ROBUST only, **1 seed** (per
+explicit user instruction — no 3-seed matrix run). Best epoch 16, best
+val loss 0.7990, 32 epochs (patience-stopped), `train_time_s=6,332.4`
+(≈1.76h), **not catastrophic, 0 truly non-finite steps**. Three
+transient large-(but-finite)-loss events occurred (epochs 10/20/25,
+`grad_norm_mean` briefly `inf` or ~1.9e13) — each recovered to normal
+within exactly one epoch via the existing gradient clipping; none
+affected the best (epoch-16) checkpoint. Reported as a real, new-at-this-
+scale finding, not hidden.
+
+**Stage-1 AV2 TEST result** (`n=10,731` sequences, existing unmodified
+evaluator): a real, honest finding — **KNet's CLEAN-condition advantage
+over the transferred KF essentially vanished at this scale** (Stage-0:
+KNet 0.0361 vs. KF 0.0563, ~36% better; Stage-1 pilot: KNet 0.0817 vs.
+KF 0.0811, ~0.7% *worse*; dense-v2 now best on CLEAN at 0.0679). **On
+both noisy conditions (B/C), KNet remains clearly best** (0.3204/0.3205
+vs. KF's 0.3578/0.3579, ~10-11% better; vs. dense-v2's 0.4493, ~29%
+better). 0 divergence, 0 non-finite, all 3 conditions.
+
+**AV2-tuned KF**: `sigma_a=5.0, r_std=0.300095` — near-identical to
+Stage-0's own `0.30038` (same corruption noise floor, expected), TRAIN+VAL
+only, verified reproduced identically when re-run inside
+`evaluate_kalmannet.py`'s own integrated calibration call.
+
+**MORAI frozen-stream audit** (`~/heven_presentation_assets/
+state_estimator_gt_comparison/sequences.pkl`, T-11/T-12 lineage):
+**PASS** — test actors `[16,20,30]` (3 sequences, 157 frames, 15.3%
+missing), split frozen BEFORE any T-12 training
+(`"policy_frozen_before_t12": true"`), verified never used to train T-12's
+own KalmanNet, DENSE-KALMANNET-v2 (T-12.2 reused T-12's frozen split
+unmodified), or to tune the Tuned Linear KF (`selected_kf_config.json`:
+val-actors-only selection). New `morai_frozen_stream.py` applies AV2's
+own first-state-relative coordinate convention to this ego-relative
+`lidar_link`-frame stream for a fair comparison.
+
+**MORAI zero-shot transfer (`n=154` frames, 3 sequences, no
+fine-tuning)** — real, cross-validated consistency check: A's numbers
+here (KF, 4.733 overall / 1.456 matched) match T-12's own historically
+documented values almost exactly, confirming this re-implementation is
+correct, not a fresh unverified number.
+
+| model | overall pos/vel RMSE | matched | missing |
+|---|---|---|---|
+| A. Tuned Linear KF (transferred) | 4.733 / 3.028 | 1.456 | 11.501 |
+| B. Dense-v2 (MORAI-trained) | 2.577 / 2.402 | 1.467 | 5.563 |
+| C. Stage-0 AV2 KNet (120 scenarios) | 3.146 / 2.378 | 1.473 | 7.195 |
+| **D. Stage-1 AV2 pilot KNet (2,000 scenarios)** | **2.484 / 2.222** | 1.555 | **5.147** |
+
+**D beats every method (including MORAI-trained dense-v2) on OVERALL and
+MISSING-measurement RMSE, and beats C (Stage-0) on EVERY metric** — real
+evidence that AV2 scale (120→2,000 scenarios) improved MORAI zero-shot
+transfer. The one exception: D is not best on MATCHED-measurement RMSE
+(1.555 vs. 1.456-1.473 for the other three) — a real, disclosed
+regression on the "easy" case. **`n=3` sequences is an extremely small
+sample — descriptive, not statistically conclusive.** No universal-
+superiority claim made.
+
+**Procedural note, disclosed not hidden**: the Stage-1 freeze manifest
+was written AFTER the AV2 TEST evaluation had already run (should have
+been before, per this task's own general policy) — no retraining/
+reselection occurred as a result (only one, already-fully-fixed seed/
+config existed, so there was no decision left to protect), but the
+file-write ORDERING itself deviated from the prescribed discipline.
+
+**Disk**: `~/datasets/av2/` total **1.2 GB** (well under budget, 904 GB
+free before download). Nothing deleted; cleanup recommendation
+(Stage-0 + Stage-1-pilot raw data, ~312 MB, safely deletable once this
+pilot's artifacts are confirmed sufficient) stated but **not executed —
+awaiting user approval**.
+
+**Tests**: `tools/kalmannet_training/` + `tools/av2_dataset_prep/`
+**102/102 pass** (90 unchanged + 6 new `test_fetch_av2_stage1.py` + 6
+new `test_morai_frozen_stream.py`). `pyflakes` clean, `py_compile`
+clean, `git diff --check` clean.
+
+**Files:** `tools/av2_dataset_prep/{fetch_av2_stage1.py,
+test_fetch_av2_stage1.py}` (new), `tools/kalmannet_training/
+{morai_frozen_stream.py,test_morai_frozen_stream.py,frozen_configs/
+kalmannet_av2_stage1_pilot_v1_freeze.json,frozen_configs/
+kalmannet_av2_stage1_pilot_v1_results_summary.json}` (all new). No
+change to any existing training/calibration/eval file.
+`docs/perception/kalmannet_av2_stage1_v1.md` (new), this file. No AV2
+data, checkpoint, or training log committed.
+
+**Recommended next task (from this pilot's own evidence — see the
+task's own final response for the full A/B/C/D reasoning): Run a
+targeted domain-gap analysis before any fine-tuning** — the pilot shows
+AV2 scale clearly helps the missing-measurement/predict-only regime but
+not the matched-measurement regime, and shows an unexplained AV2-internal
+CLEAN-condition regression at larger scale; understanding WHY before
+committing further compute (either a full 10k/3-seed run or a MORAI
+fine-tune) is the highest-value next step. Not implemented in this task.
+
+---
+
 ## KalmanNet Batched Optimizer Calibration v1 — COMPLETE
 
 Branch `exp/kalmannet-batch-calibration-v1`, from merged PR #48
