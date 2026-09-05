@@ -1,5 +1,108 @@
 # STATUS
 
+## MORAI-Calibrated AV2 Corruption v1 — COMPLETE (offline, opposite-of-hoped-for pattern found)
+
+Branch `exp/kalmannet-morai-calibrated-corruption-v1`, from merged PR #51
+`936e32a` (`analysis(kalmannet): explain AV2->MORAI domain gap`, verified
+via `gh pr view 51` before any edit). **Offline only. No KalmanNet
+architecture change, no AV2 re-scale (still the 2,000-scenario Stage-1
+pilot), no direct MORAI fine-tuning.**
+
+**Calibration (MORAI TRAIN+VAL only, TEST actors [16,20,30] never
+touched — programmatically guarded via `morai_calibration.
+LeakedTestDataError`).** Selected model: bias + full-covariance Gaussian
+(`bias_xy=(-0.655, 0.665)`, `covariance_xy=[[0.505,-0.077],[-0.077,0.358]]`)
+— a zero-bias full-covariance alternative under-predicts the real radial
+tail by roughly half, decisively ruling it out; dropping the modest
+(-0.18) x/y correlation changes little. Dropout: single-frame prob
+34/2435, burst-start prob renewal-corrected to 0.040 (naive 64/2435
+under-produced the target missing rate by ~28% relative — a sequential-
+burst-scan artifact, corrected against AV2 TRAIN output only), burst
+lengths drawn from the exact 64 real TRAIN+VAL-observed values (up to
+44 frames — present only because that is what TRAIN+VAL contains, never
+because TEST's own 24-frame gap was consulted). Pre-training check: the
+calibrated config applied to a real AV2 TRAIN sample reproduces the MORAI
+TRAIN+VAL target bias/covariance/radial-percentiles/missing-rate/gap-
+distribution closely (all within a few percent).
+
+**Implementation.** `CorruptionConfig` gains three opt-in, default-off
+v2 fields (`bias_xy`, `covariance_xy`, `dropout_burst_length_samples`);
+every existing field/mode is byte-for-byte unchanged at defaults (47/47
+pre-existing adapter tests unaffected + 10 new). New
+`tools/kalmannet_training/morai_calibration.py` (calibration constants +
+guarded calibration functions + 10 new tests).
+
+**Training.** One seed, frozen config (`batch_size=64, lr=0.004,
+max_epochs=60, patience=15, grad_clip=10.0`). Best epoch 6
+(`val_loss=1.6461`), 22 epochs run, `catastrophic=false`. **A real,
+disclosed instability**: from epoch 9 onward `grad_norm_mean` (pre-clip)
+repeatedly spiked to extreme values (up to `inf` at epoch 10,
+`train_loss=5.5e24`), plausibly triggered by this corruption's much
+longer dropout bursts (max 44 vs. GENERIC-ROBUST's max 5) hitting a rare
+post-long-gap numerically extreme batch — `grad_clip=10.0` bounded every
+applied update (`val_loss` never exceeded 2.13, `nonfinite_step_count=0`
+for the whole run) and the frozen checkpoint (epoch 6) predates every
+spike. Checkpoint SHA-256
+`125d02f84493b41413690a3c6c53e9618dbddf3a3b31843e61aa19046be8ae37`. Freeze
+manifest written **before** any TEST evaluation (correct ordering this
+time, unlike the prior Stage-1 pilot task's disclosed procedural
+deviation).
+
+**AV2 TEST result.** Under its own corruption family, the new checkpoint
+still beats every KF baseline and dense_v2 (same qualitative ranking
+GENERIC-ROBUST showed) — but on CLEAN held-out AV2 it is clearly worse
+than GENERIC-ROBUST's own checkpoint (0.193 vs. 0.082 m pos RMSE), a
+sensible tradeoff of training under much heavier noise/dropout.
+
+**MORAI zero-shot result (the fair, fixed-sequence comparison, frozen
+3-sequence TEST stream).** Pooled matched-frame RMSE **regresses ~7%**
+(1.555→1.667 m) while missing-frame RMSE (the sequence with the real
+24-frame gap) **improves ~19%** (5.147→4.162 m) — **the opposite pairing
+from the task's own hoped-for pattern** (matched-improves/missing-
+preserved). Per-sequence bootstrap (n=3): observed diff `+0.0387`, 95%
+CI `[-0.267, 0.638]` (crosses zero, `stable=False`) — **not statistically
+distinguishable from noise at this sample size.** Gain analysis (robust
+to the sample-size concern — a per-frame, n=130 statistic): the new
+checkpoint learns a smaller matched-frame gain (1.216 vs. 1.602),
+confirming measurement trust shifted in the theoretically expected
+direction given the calibrated noise's larger spread — the one clean,
+sample-size-independent finding of this task.
+
+**Accept/reject: closest to Outcome E** (MORAI differences too unstable
+at n=3 to draw a conclusion) — not A, B, C, or D, since the actual
+direction pairing (missing improves, matched regresses) is the opposite
+of both A's and B's framings, and the bootstrap CI crossing zero is the
+dominant fact.
+
+**Tests: 174/174 pass** (`ad_morai_bridge_dev` adapter suite 56/56 incl.
+10 new; `tools/kalmannet_training` full suite 118/118 incl. 10 new
+`test_morai_calibration.py`). `py_compile`/`pyflakes`/`git diff --check`
+clean on every changed/new file. No AV2/MORAI raw data, checkpoint,
+training log, or local path committed (verified before commit).
+
+**Files:** `ad_morai_bridge_dev/ad_morai_bridge_dev/dataset/
+av2_motion_forecasting_adapter.py` (corruption_v2, additive only),
+`ad_morai_bridge_dev/test/test_av2_motion_forecasting_adapter.py` (+10),
+`tools/kalmannet_training/{morai_calibration.py,test_morai_calibration.py,
+evaluate_morai_frozen_stream.py,write_freeze_manifest_morai_calibrated.py}`
+(new), `tools/kalmannet_training/{train_kalmannet.py,evaluate_kalmannet.py}`
+(+1 condition preset each, additive), `tools/kalmannet_training/
+frozen_configs/kalmannet_morai_calibrated_corruption_v1_{freeze,results,
+av2_test_results}.json` (new, small/machine-independent),
+`docs/perception/kalmannet_morai_calibrated_corruption_v1.md` (new), this
+file. No `kalmannet_core.py` change.
+
+**Recommended next task:** build/freeze a larger MORAI evaluation dataset
+(closing the actual bottleneck Section 19 exposed — a single sequence
+supplies 100% of the missing-frame evidence in every MORAI zero-shot
+comparison this project has run since T-12) before drawing any further
+conclusion about AV2-training variants' effect on real MORAI performance.
+Not started this session.
+
+## MORAI-Calibrated AV2 Corruption v1 result: **COMPLETE**
+
+---
+
 ## AV2→MORAI KalmanNet Domain-Gap Analysis v1 — COMPLETE
 
 Branch `analysis/kalmannet-av2-morai-domain-gap-v1`, from merged PR #50
