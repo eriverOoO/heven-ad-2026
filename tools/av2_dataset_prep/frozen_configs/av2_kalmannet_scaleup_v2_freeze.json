@@ -1,0 +1,58 @@
+{
+  "adapter_shard_format_version": "av2_kalmannet_shard_v1",
+  "coordinate_mode": "first_state_relative",
+  "corruption_config_version": "corruption_v2",
+  "corruption_materialized": false,
+  "exclusion_manifests": {
+    "stage0_scenarios.json": "7da66eb1050123a718dae510f5c3669a7568766b329b1dedb365b81360638858",
+    "stage1_pilot_scenarios.json": "3b70d5ae598e7c7fdf260650ac66a6b8f781fff173c2766a77ee812858375ee1"
+  },
+  "exclusion_scenario_count": 2120,
+  "git_sha": "8cdcc5d0ce63f12c6e152c3f806c9665c9504a8a",
+  "official_val": {
+    "content_fingerprint": "fc74a8985f5844a6797e46f1c3fa0f78063db12cf29a68cbb2ad6b0bcfa77c72",
+    "counts": {
+      "frames_dropped_backward_timestep": 0,
+      "frames_dropped_duplicate_timestep": 0,
+      "frames_dropped_nonfinite": 0,
+      "gt_samples_total": 2918906,
+      "scenarios_processed": 1000,
+      "segments_exported": 56521,
+      "segments_valid_for_kalmannet_gt": 56521,
+      "tracks_fully_rejected_nonfinite": 0,
+      "tracks_seen": 56521
+    },
+    "scenario_count": 1000,
+    "scenario_manifest_sha256": "bebbfd3bc1caca11ece6af6f8c78c88b2fbbd08b221b18824590d584348a66d0",
+    "selection_pool_size": 4000,
+    "selection_seed": 20260921,
+    "shard_count": 5,
+    "source_split": "val",
+    "split_manifest_sha256": "b81b106313a6cb3b4478e39d1cf5e618959e24d39b83119b2ce4602df3bd0693"
+  },
+  "overlap_train_vs_exclusion": 0,
+  "overlap_train_vs_official_val": 0,
+  "overlap_val_vs_exclusion": 0,
+  "schema_version": "av2_kalmannet_scaleup_v2_freeze_v1",
+  "train": {
+    "content_fingerprint": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+    "counts": {
+      "frames_dropped_backward_timestep": 0,
+      "frames_dropped_duplicate_timestep": 0,
+      "frames_dropped_nonfinite": 0,
+      "gt_samples_total": 28572250,
+      "scenarios_processed": 10000,
+      "segments_exported": 553898,
+      "segments_valid_for_kalmannet_gt": 553810,
+      "tracks_fully_rejected_nonfinite": 0,
+      "tracks_seen": 553895
+    },
+    "scenario_count": 10000,
+    "scenario_manifest_sha256": "12ae390ea1b01e714b6e9d3b8d4a06822547b035d8aa8e5746ebdc92526c4c59",
+    "selection_pool_size": 20000,
+    "selection_seed": 20260920,
+    "shard_count": 50,
+    "source_split": "train",
+    "split_manifest_sha256": "a949550d91e04e5165fcb44d352ef871403753d7fcb92233b394f3ec27976125"
+  }
+}
