@@ -1,5 +1,125 @@
 # STATUS
 
+## KalmanNet Batched Optimizer Calibration v1 — COMPLETE
+
+Branch `exp/kalmannet-batch-calibration-v1`, from merged PR #48
+`0ea9cad` (`perf(kalmannet): add batched AV2 training`, verified via
+`gh pr view 48` — `MERGED` — before any edit), built in a fresh isolated
+worktree. **Optimization calibration only. No KalmanNet architecture/
+estimator-math change; no runtime/ROS/AB3DMOT change. Stage-1 not
+started.**
+
+**Problem, from PR #48's own sanity run:** naive `batch_size=128,
+lr=0.001, 10 epochs` (same hyperparameters as the historical
+`batch_size=1` trainer) gave held-out position RMSE `0.0484 m` vs.
+historical's `0.0347 m` — a real `~39%` regression. **Root cause,
+computed exactly:** one epoch at `batch_size=128` produces only `46`
+`optimizer.step()` calls (`ceil(5,769/128)`) vs. `5,769` at
+`batch_size=1` — over "10 epochs," `460` total updates vs. `57,690`, a
+**125x optimizer-step deficit**. "10 epochs" was never a comparable
+training budget once batch size changed.
+
+**Calibration grid (TRAIN/VALIDATION only — Stage-0 TEST never touched
+for selection, evaluated exactly once at the end, after freezing):**
+Phase 1 screened `batch_size ∈ {16,32,64,128} × lr ∈ {0.001,0.004}` at a
+short, bounded budget (12 epochs, patience 6) — `lr=0.004` beat
+`lr=0.001` at every batch size except `16`. Phase 2 extended the
+promising `lr=0.004` candidates to `max_epochs=60, patience=15`
+(validation-driven early stopping, never a fixed epoch count) — all
+three (`bs=32/64/128`) then beat the historical `0.5693` aggregate val
+loss. **Real finding: aggregate MSE loss does not track position RMSE
+monotonically** — `bs=32` and `bs=64` at `lr=0.004` have nearly-identical
+val loss (`0.5465` vs. `0.5468`) but visibly different position RMSE
+(`0.0560` vs. `0.0479`, since velocity error at `~20x` the numeric scale
+dominates the aggregate mean) — selecting on loss alone would have
+picked the wrong batch size. Position RMSE (the task's own primary
+metric) was recomputed directly for every serious candidate.
+
+**Pareto front:** `bs=32/lr=0.001` (pos RMSE `0.0467`, best observed,
+only `4.41x` speedup) vs. **`bs=64/lr=0.004`** (pos RMSE `0.0479`, within
+`2.6%` of best, `6.44x` speedup — SELECTED) vs. `bs=128/lr=0.004`
+(fastest, `9.35x`, but worst position RMSE, `0.0696`, of the three).
+
+**Selected: `batch_size=64, lr=0.004, max_epochs=60, patience=15`**
+(validation-driven early stopping; `4x` the historical LR, chosen from
+the measured grid, not a naive `lr ∝ batch_size` rule).
+
+**GENERIC-ROBUST confirmation** (real corrupted Stage-0 data, selected
+config, seed 0): best epoch `20`, best val loss `0.7080` (better than
+historical's `0.7202`), `36` epochs run, `0` non-finite steps, not
+catastrophic — confirms stability under missing measurements.
+
+**Three-seed stability** (`bs=64, lr=0.004`, CLEAN, seeds `[0,1,2]`):
+position RMSE mean `0.05036`, std `0.00302` (`~6%` relative); velocity
+RMSE mean `1.09943`, std `0.00261`; best-epoch values `[11,8,8]`; `0`
+catastrophic runs across all 3 seeds.
+
+**Freeze manifest** written (`tools/kalmannet_training/frozen_configs/
+kalmannet_batch_calibration_v1_freeze.json`) BEFORE any Stage-0 TEST
+evaluation — records batch size, LR, epochs, patience, grad clip, loss
+policy, bucket/shuffle/corruption policy, model architecture, full
+selection evidence, three-seed summary. New
+`freeze_manifest.require_freeze_manifest_exists()` is a practical
+freeze-before-test guard for future scripts.
+
+**Final Stage-0 TEST result (evaluated exactly once, after freezing):**
+
+| | CLEAN-trained, TEST cond. A (n=724) pos/vel RMSE (m, m/s) |
+|---|---|
+| A. Historical (bs=1, 10ep) | 0.03789 / 0.75579 |
+| B. Naive batched (bs=128, 10ep) | 0.04839 / 0.83608 |
+| **C. Calibrated (bs=64, lr=4e-3, 60ep/pat15)** | **0.03344** / 0.80751 |
+| D. AV2-tuned KF | 0.07170 / 0.89769 |
+| E. Transferred MORAI KF | 0.05626 / 0.90171 |
+| F. Dense-v2 cross-domain | 0.04557 / 0.86802 |
+
+**The calibrated CLEAN-trained checkpoint achieves the BEST position
+RMSE of all six** (`11.7%` better than historical, `30.9%` better than
+naive batched) at `407.7s` training time vs. historical's `2,244.3s`
+(**5.51x** speedup). On GENERIC-ROBUST-trained checkpoints (all 3
+held-out conditions), the calibrated model is within `1.2-4.0%` relative
+of historical position RMSE (squarely inside the task's own 5-10%
+guidance) at `572.1s` vs. historical's `1,951.2s` (**3.41x** speedup) —
+both A and C clearly beat every KF baseline and the dense-v2 diagnostic
+on every condition, every time.
+
+**Tests:** `tools/kalmannet_training/` **78/78 pass** (60 from PR #48,
+unchanged + 8 new `test_optimizer_step_accounting.py` + 4 new
+`test_freeze_manifest.py` + 6 new `test_multi_seed.py`). `pyflakes`
+clean, `py_compile` clean, `git diff --check` clean.
+
+**Recommended Stage-1 training matrix:** GENERIC-ROBUST only (unchanged
+recommendation, now further supported: the calibrated GR-trained
+checkpoint already generalizes to CLEAN held-out data within `4%` of a
+dedicated CLEAN-trained model). **Recommended Stage-1 scenario count:**
+10,000 (unchanged — this task recalibrates the training regime, not
+per-sequence throughput). **Re-estimated Stage-1 wall time** using the
+selected config's own observed `~36`-epoch convergence point (not the
+naive `10`): 10,000 scenarios, GENERIC-ROBUST-only, 3 seeds ≈ **40
+hours** (vs. the prior, epoch-count-understated `~8.7h` estimate) — a
+more honest, validation-grounded figure, not a speed regression.
+
+**Files:** `tools/kalmannet_training/{optimizer_step_accounting.py,
+test_optimizer_step_accounting.py,freeze_manifest.py,
+test_freeze_manifest.py,multi_seed.py,test_multi_seed.py,
+frozen_configs/kalmannet_batch_calibration_v1_freeze.json,
+frozen_configs/kalmannet_batch_calibration_v1_grid_summary.json}` (all
+new). No change to `batched_kalmannet.py`, `batched_trainer.py`,
+`train_kalmannet_batched.py`, `trainer_core.py`, `checkpoint_utils.py`,
+`train_kalmannet.py`, `evaluate_kalmannet.py`, `calibrate_kf.py`, or any
+`ad_lidar_perception`/`ad_morai_bridge_dev` file.
+`docs/perception/kalmannet_batch_calibration_v1.md` (new), this file. No
+checkpoint, AV2 data, log, plot, or profiler dump committed.
+
+**Recommended next task:** Download/preprocess the frozen Stage-1 AV2
+scenario set (10,000, GENERIC-ROBUST-only) and run the first multi-seed
+GENERIC-ROBUST KalmanNet pretraining experiment using the calibrated
+batched configuration (`bs=64, lr=0.004, max_epochs=60, patience=15`),
+then evaluate transfer on the frozen MORAI-side stream. Do NOT implement
+Stage-1 in this task.
+
+---
+
 ## KalmanNet Batched Training / Throughput Optimization v1 — COMPLETE
 
 Branch `perf/kalmannet-batched-training-v1`, from merged PR #47
