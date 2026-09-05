@@ -51,6 +51,11 @@ HISTORICAL_GRAD_CLIP = 10.0
 HISTORICAL_MAX_EPOCHS = 60
 HISTORICAL_PATIENCE = 10
 
+
+# MORAI TRAIN+VAL-calibrated corruption (never TEST) -- constants and
+# full derivation live in morai_calibration.py, reused here unmodified.
+from morai_calibration import build_morai_calibrated_corruption_config  # noqa: E402
+
 CONDITION_PRESETS = {
     "clean": CorruptionConfig(mode="none"),
     "generic_robust": CorruptionConfig(
@@ -58,6 +63,7 @@ CONDITION_PRESETS = {
         dropout_burst_enabled=True, dropout_burst_prob=0.02,
         dropout_burst_min_len=2, dropout_burst_max_len=5, seed=20260905,
     ),
+    "morai_calibrated_robust": build_morai_calibrated_corruption_config(),
 }
 
 
@@ -67,7 +73,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--split-manifest", type=Path, required=True)
     parser.add_argument("--condition", choices=list(CONDITION_PRESETS), default="clean",
                          help="clean = no corruption; generic_robust = modest Gaussian noise + dropout + burst "
-                              "(NOT claimed MORAI-realistic -- a generic robustness sanity condition only)")
+                              "(NOT claimed MORAI-realistic -- a generic robustness sanity condition only); "
+                              "morai_calibrated_robust = bias+full-covariance noise and dropout/burst rates "
+                              "calibrated from MORAI TRAIN+VAL residuals only (never TEST)")
     parser.add_argument("--corruption-seed", type=int, default=None,
                          help="override the condition preset's corruption seed")
     parser.add_argument("--device", choices=["cuda", "cpu"], default="cpu")

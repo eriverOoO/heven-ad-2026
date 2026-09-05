@@ -356,18 +356,25 @@ class CoordinateConfig:
             )
 
 
+CORRUPTION_CONFIG_VERSION = "corruption_v2"  # v1 fields unchanged; v2 adds bias/full-covariance + empirical burst-length resampling, both opt-in and off by default
+
+
 @dataclass(frozen=True)
 class CorruptionConfig:
-    """Stage-0 minimal corruption only (task's own explicit scope: no
-    range-dependent noise, no heavy-tail tuning, no ID-switch injection,
-    no class-conditioned corruption, no MORAI-calibrated noise, no
-    outliers). Every knob is independently composable and default-off;
-    ``mode="none"`` (every numeric knob at its default) reproduces the
-    clean AV2 position exactly, with ``measurement_valid=True``
-    everywhere. Deterministic given ``seed`` -- see
+    """Stage-0 minimal corruption (``gaussian_noise_std_m``/``dropout_prob``/
+    ``dropout_burst_*``) plus an opt-in v2 extension: a constant bias vector,
+    a full 2x2 measurement-noise covariance (correlated, anisotropic --
+    supersedes ``gaussian_noise_std_m`` when set), and an empirical
+    burst-length resampling pool (supersedes the uniform
+    ``dropout_burst_min_len``/``dropout_burst_max_len`` draw when set).
+    Every v2 knob defaults to off/empty, so ``mode="custom"``
+    (GENERIC-ROBUST) is reproduced byte-for-byte unless a v2 field is
+    explicitly populated. ``mode`` is informational/provenance only (which
+    fields actually fire is what drives behaviour -- same convention
+    "custom" already established). Deterministic given ``seed`` -- see
     ``_segment_corruption_seed`` for the per-segment seed derivation."""
 
-    mode: str = "none"  # "none" | "gaussian" | "dropout" | "dropout_burst" | "custom" (informational only)
+    mode: str = "none"  # "none" | "gaussian" | "dropout" | "dropout_burst" | "custom" | "morai_calibrated" (informational only)
     gaussian_noise_std_m: float = 0.0
     dropout_prob: float = 0.0
     dropout_burst_enabled: bool = False
@@ -375,6 +382,10 @@ class CorruptionConfig:
     dropout_burst_min_len: int = 2
     dropout_burst_max_len: int = 5
     seed: int = 0
+    # -- v2 (opt-in, default-off) --
+    bias_xy: tuple[float, float] = (0.0, 0.0)
+    covariance_xy: tuple[tuple[float, float], tuple[float, float]] | None = None
+    dropout_burst_length_samples: tuple[int, ...] = ()
 
     def canonical_json(self) -> str:
         return json.dumps(
@@ -387,12 +398,15 @@ class CorruptionConfig:
                 "dropout_burst_min_len": self.dropout_burst_min_len,
                 "dropout_burst_max_len": self.dropout_burst_max_len,
                 "seed": self.seed,
+                "bias_xy": list(self.bias_xy),
+                "covariance_xy": ([list(row) for row in self.covariance_xy] if self.covariance_xy is not None else None),
+                "dropout_burst_length_samples": list(self.dropout_burst_length_samples),
             },
             sort_keys=True,
         )
 
     def validate(self) -> None:
-        if self.mode not in ("none", "gaussian", "dropout", "dropout_burst", "custom"):
+        if self.mode not in ("none", "gaussian", "dropout", "dropout_burst", "custom", "morai_calibrated"):
             raise AdapterError(f"unsupported corruption mode {self.mode!r}")
         if self.gaussian_noise_std_m < 0.0 or not math.isfinite(self.gaussian_noise_std_m):
             raise AdapterError("gaussian_noise_std_m must be finite and >= 0")
@@ -402,6 +416,21 @@ class CorruptionConfig:
             raise AdapterError("dropout_burst_prob must be in [0, 1]")
         if self.dropout_burst_min_len < 1 or self.dropout_burst_max_len < self.dropout_burst_min_len:
             raise AdapterError("dropout_burst_min_len must be >= 1 and <= dropout_burst_max_len")
+        if len(self.bias_xy) != 2 or not all(math.isfinite(v) for v in self.bias_xy):
+            raise AdapterError("bias_xy must be a finite (x, y) pair")
+        if self.covariance_xy is not None:
+            cov = np.array(self.covariance_xy, dtype=np.float64)
+            if cov.shape != (2, 2):
+                raise AdapterError("covariance_xy must be a 2x2 matrix")
+            if not np.all(np.isfinite(cov)):
+                raise AdapterError("covariance_xy must be finite")
+            if not np.allclose(cov, cov.T, atol=1e-9):
+                raise AdapterError("covariance_xy must be symmetric")
+            eigenvalues = np.linalg.eigvalsh(cov)
+            if np.any(eigenvalues < -1e-9):
+                raise AdapterError("covariance_xy must be positive semi-definite")
+        if any(length < 1 for length in self.dropout_burst_length_samples):
+            raise AdapterError("dropout_burst_length_samples entries must all be >= 1")
 
 
 def load_segment_config(path: Path | None) -> SegmentConfig:
@@ -436,6 +465,13 @@ def load_corruption_config(path: Path | None) -> CorruptionConfig:
         dropout_burst_min_len=int(data.get("dropout_burst_min_len", 2)),
         dropout_burst_max_len=int(data.get("dropout_burst_max_len", 5)),
         seed=int(data.get("seed", 0)),
+        bias_xy=tuple(float(v) for v in data.get("bias_xy", (0.0, 0.0))),
+        covariance_xy=(
+            tuple(tuple(float(v) for v in row) for row in data["covariance_xy"])
+            if data.get("covariance_xy") is not None
+            else None
+        ),
+        dropout_burst_length_samples=tuple(int(v) for v in data.get("dropout_burst_length_samples", ())),
     )
     config.validate()
     return config
@@ -637,16 +673,37 @@ def apply_corruption(
         i = 0
         while i < count:
             if rng.random_sample() < config.dropout_burst_prob:
-                burst_len = int(rng.randint(config.dropout_burst_min_len, config.dropout_burst_max_len + 1))
+                if config.dropout_burst_length_samples:
+                    # empirical resampling (v2, e.g. MORAI-calibrated): draw
+                    # one observed burst length uniformly with replacement,
+                    # rather than a synthetic uniform(min, max) draw -- lets
+                    # a heavy-tailed real gap-length distribution be
+                    # reproduced without inventing a parametric family.
+                    burst_len = int(rng.choice(np.asarray(config.dropout_burst_length_samples)))
+                else:
+                    burst_len = int(rng.randint(config.dropout_burst_min_len, config.dropout_burst_max_len + 1))
                 valid[i : i + burst_len] = False
                 i += burst_len
             else:
                 i += 1
 
     measurement = np.full((count, KNET_MEAS_DIM), np.nan, dtype=np.float64)
-    if config.gaussian_noise_std_m > 0.0:
+    if config.covariance_xy is not None:
+        # v2 correlated/anisotropic noise: z = clean + bias + L @ epsilon,
+        # epsilon ~ N(0, I), L L^T = covariance_xy (Cholesky). Supersedes
+        # the isotropic gaussian_noise_std_m path below when set.
+        cholesky_l = np.linalg.cholesky(np.array(config.covariance_xy, dtype=np.float64))
+        epsilon = rng.normal(0.0, 1.0, size=(count, 2))
+        noise = epsilon @ cholesky_l.T
+        bias = np.array(config.bias_xy, dtype=np.float64)
+        measurement[valid] = (clean + bias + noise)[valid]
+    elif config.gaussian_noise_std_m > 0.0:
         noise = rng.normal(0.0, config.gaussian_noise_std_m, size=(count, 2))
-        measurement[valid] = (clean + noise)[valid]
+        bias = np.array(config.bias_xy, dtype=np.float64)
+        measurement[valid] = (clean + bias + noise)[valid]
+    elif config.bias_xy != (0.0, 0.0):
+        bias = np.array(config.bias_xy, dtype=np.float64)
+        measurement[valid] = (clean + bias)[valid]
     else:
         measurement[valid] = clean[valid]
 
