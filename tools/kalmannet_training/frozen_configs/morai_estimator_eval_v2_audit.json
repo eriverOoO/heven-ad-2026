@@ -1,0 +1,289 @@
+{
+  "actor_leakage_audit": [
+    {
+      "actor_id": 1,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 2,
+      "eligible_for_v2": false,
+      "reason": "actor 2 (obstacle) and actor 3 (pedestrian) show vehicle-speed kinematics inconsistent with their class label -- a GT-quality defect (per motion_gt_expansion/canonical/split_policy.json's own excluded_reason), NOT a leakage exclusion. Their GT is not trusted enough to serve as new held-out evaluation data either.",
+      "role": "excluded_data_quality",
+      "used_in": []
+    },
+    {
+      "actor_id": 3,
+      "eligible_for_v2": false,
+      "reason": "actor 2 (obstacle) and actor 3 (pedestrian) show vehicle-speed kinematics inconsistent with their class label -- a GT-quality defect (per motion_gt_expansion/canonical/split_policy.json's own excluded_reason), NOT a leakage exclusion. Their GT is not trusted enough to serve as new held-out evaluation data either.",
+      "role": "excluded_data_quality",
+      "used_in": []
+    },
+    {
+      "actor_id": 13,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 15,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 16,
+      "eligible_for_v2": false,
+      "reason": "already the frozen V1 test set -- reused as-is in V2, not counted as new data",
+      "role": "test",
+      "used_in": [
+        "MORAI_ESTIMATOR_EVAL_V1 (frozen, T-11/T-12)"
+      ]
+    },
+    {
+      "actor_id": 18,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 20,
+      "eligible_for_v2": false,
+      "reason": "already the frozen V1 test set -- reused as-is in V2, not counted as new data",
+      "role": "test",
+      "used_in": [
+        "MORAI_ESTIMATOR_EVAL_V1 (frozen, T-11/T-12)"
+      ]
+    },
+    {
+      "actor_id": 21,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for model/hyperparameter selection",
+      "role": "val",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 23,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for model/hyperparameter selection",
+      "role": "val",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 27,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for model/hyperparameter selection",
+      "role": "val",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 30,
+      "eligible_for_v2": false,
+      "reason": "already the frozen V1 test set -- reused as-is in V2, not counted as new data",
+      "role": "test",
+      "used_in": [
+        "MORAI_ESTIMATOR_EVAL_V1 (frozen, T-11/T-12)"
+      ]
+    },
+    {
+      "actor_id": 31,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for model/hyperparameter selection",
+      "role": "val",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 34,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 35,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 36,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 38,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 40,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 44,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 46,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    },
+    {
+      "actor_id": 48,
+      "eligible_for_v2": false,
+      "reason": "leakage -- used for training/calibration",
+      "role": "train",
+      "used_in": [
+        "T-9A.1 Tuned Linear KF calibration (selected_kf_config.json)",
+        "T-12 KalmanNet training (kalmannet_training_provenance.json)",
+        "T-12.2/T-12.3 dense-v2 KalmanNet training (frozen_model_v2_manifest.json)",
+        "This project's MORAI-Calibrated AV2 Corruption v1 task (morai_calibration.py residual/gap calibration, PR #52)"
+      ]
+    }
+  ],
+  "conclusion": "0 new actor trajectories are available from existing local MORAI data -- every actor in the sole captured MORAI run is already assigned to TRAIN/VAL/TEST or excluded for GT-quality reasons. New MORAI simulator collection is required to grow V2 beyond V1's existing 3 sequences. See docs/perception/morai_estimator_eval_v2.md for the collection checklist.",
+  "git_sha": "764b4f82ebff57712ad25502982662617ce55a20",
+  "n_eligible_new_actors": 0,
+  "schema_version": "morai_estimator_eval_v2_audit",
+  "source_runs": [
+    {
+      "actor_count": 21,
+      "date_or_run_id": "static_20260805_003151",
+      "detector_source": "none in this export (LiDAR raw points + GT boxes only)",
+      "frame_range": "0-1763",
+      "gt_source": "/ad/dev/objects (MORAI dev-mode actor GT), target_frame=lidar_link",
+      "previously_used_for": [
+        "T-9A/T-9A.1/T-11/T-12/T-12.x/T-13/ros_gt_crosscheck/kf_calibration/kalmannet_ablation/kalmannet_dense_baseline/kalmannet_training_stability/MORAI-Calibrated AV2 Corruption v1 (this project's own corruption calibration)"
+      ],
+      "scene_or_run_identity": "ad_data/morai/SaveFile/Scenario/R_KR_PR_K-city_2025/checkpoint14.json",
+      "source_path": "~/datasets/morai_heven",
+      "suitability_reason": "This is the ONLY MORAI run with actor GT ever captured in this project. Every one of its 21 actors is already assigned to TRAIN, VAL, TEST, or excluded-for-GT-quality (see audit_actor_leakage) -- zero actors remain unconsumed. The existing frozen V1 TEST actors [16,20,30] may be REUSED (not counted as new), but no additional actor from this run can serve as new held-out data without violating the leakage boundary.",
+      "suitable_as_new_v2_test_data": false
+    },
+    {
+      "actor_count": 21,
+      "date_or_run_id": "motion_gt_expansion_v1 (T-11)",
+      "detector_source": "fresh ROS replay this session: euclidean_clustering.launch.py (finite_filter_enabled=false) + ad_publish_morai_frames --split train --count 1764 --interval-sec 0.08, recorded on /ad/perception/objects/detected",
+      "frame_range": "0-1763",
+      "gt_source": "MORAI ground_truth.boxes[], independent of detector, target_frame=lidar_link",
+      "previously_used_for": [
+        "source material for state_estimator_gt_comparison/sequences.pkl (the exact pickle morai_frozen_stream.py loads)"
+      ],
+      "scene_or_run_identity": "static_20260805_003151",
+      "source_path": "~/heven_presentation_assets/motion_gt_expansion/canonical",
+      "suitability_reason": "Derived from the same single scene/run as morai_heven above -- not an independent source, same leakage conclusion applies.",
+      "suitable_as_new_v2_test_data": false
+    },
+    {
+      "actor_count": null,
+      "date_or_run_id": "static_20260805_003151",
+      "detector_source": "metadata claims /ad/perception/objects/detected present (1796 msgs) but the underlying data is unrecoverable",
+      "frame_range": "unknown (raw .mcap file absent from disk, metadata.yaml only)",
+      "gt_source": "metadata claims /ad/dev/objects present (9711 msgs) but the underlying data is unrecoverable",
+      "previously_used_for": [],
+      "scene_or_run_identity": "same scene as morai_heven (confirmed: starting_time within ~2s of the first exported label's own source stamp, message counts consistent)",
+      "source_path": "bags/static_20260805_003151/metadata.yaml",
+      "suitability_reason": "The .mcap payload is missing from disk (metadata-only remnant) -- unreplayable. Even if it were recoverable, it is the same run as morai_heven, not a new independent one.",
+      "suitable_as_new_v2_test_data": false
+    }
+  ],
+  "split_role": "test",
+  "v1_frozen_test_actor_ids_reused_unchanged": [
+    16,
+    20,
+    30
+  ]
+}
