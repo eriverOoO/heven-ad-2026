@@ -1,0 +1,701 @@
+{
+  "av2_clean_regression_regime_gain": {
+    "C_stage0_av2_on_av2_clean": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.9193642134232132,
+        "n": 10540,
+        "posterior_pos_rmse": 0.03549000994500407,
+        "posterior_vel_rmse": 0.7711153009820249,
+        "prior_pos_rmse": 0.10360097040519992,
+        "prior_to_posterior_improvement": 0.06811096046019585
+      }
+    },
+    "D_stage1_av2_on_av2_clean": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.8182947913087322,
+        "n": 9902,
+        "posterior_pos_rmse": 0.06893804664982589,
+        "posterior_vel_rmse": 1.3153677557609822,
+        "prior_pos_rmse": 0.17619942446069883,
+        "prior_to_posterior_improvement": 0.10726137781087294
+      }
+    }
+  },
+  "corruption_exposure": {
+    "av2_stage1_train_generic_robust": {
+      "clean_fraction": 0.8416016963106768,
+      "dropout_burst_fraction": 0.08497032308778076,
+      "dropout_single_fraction": 0.07342798060154242,
+      "n_frames_total": 4457674,
+      "post_gap_reacquisition_fraction": 0.09644962821417627
+    },
+    "morai_frozen_eval_real": {
+      "clean_fraction": 0.8441558441558441,
+      "dropout_burst_fraction": 0.15584415584415584,
+      "dropout_single_fraction": 0.0,
+      "n_frames_total": 154,
+      "post_gap_reacquisition_fraction": 0.0
+    }
+  },
+  "distribution_comparison": {
+    "A_av2_stage0_test": {
+      "accel_mps2": {
+        "p50": 5.104705391898133e-05,
+        "p90": 1.24692878808017,
+        "p95": 2.0951302103677247,
+        "p99": 6.485482359364647
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 103.49278100940455,
+        "max_abs_y": 142.93997764962182
+      },
+      "displacement_per_step_m": {
+        "p50": 1.4416900775776098e-06,
+        "p90": 0.5920059125868715,
+        "p95": 0.8528397799813208,
+        "p99": 1.3184804692615575
+      },
+      "dt": {
+        "p50": 0.1,
+        "p90": 0.1,
+        "p95": 0.1,
+        "p99": 0.1
+      },
+      "gap_length_frames": {
+        "p50": NaN,
+        "p90": NaN,
+        "p95": NaN,
+        "p99": NaN
+      },
+      "measurement_available_fraction": 1.0,
+      "missing_measurement_fraction": 0.0,
+      "n_frames_total": 39339,
+      "n_gaps": 0,
+      "n_sequences": 724,
+      "seq_length": {
+        "p50": 42.5,
+        "p90": 110.0,
+        "p95": 110.0,
+        "p99": 110.0
+      },
+      "speed_mps": {
+        "p50": 1.4416900775776096e-05,
+        "p90": 5.920059125868716,
+        "p95": 8.528397799813206,
+        "p99": 13.184804692615574
+      },
+      "stationary_fraction": 0.720531787793284,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.1504845727576143,
+        "p90": 3.1843222436103265,
+        "p95": 12.129031498989622,
+        "p99": 30.38656028058915
+      },
+      "velocity_change_mps": {
+        "p50": 5.104705391898133e-06,
+        "p90": 0.12469287880801702,
+        "p95": 0.20951302103677247,
+        "p99": 0.6485482359364647
+      }
+    },
+    "B_av2_stage1_test": {
+      "accel_mps2": {
+        "p50": 0.0015901013789524003,
+        "p90": 1.730345374836435,
+        "p95": 2.753385779368504,
+        "p99": 8.429337965527143
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 222.93413615270856,
+        "max_abs_y": 170.1678657031526
+      },
+      "displacement_per_step_m": {
+        "p50": 3.4452258112600054e-05,
+        "p90": 1.056662653294346,
+        "p95": 1.3131711064680394,
+        "p99": 1.7450049285736622
+      },
+      "dt": {
+        "p50": 0.1,
+        "p90": 0.1,
+        "p95": 0.1,
+        "p99": 0.1
+      },
+      "gap_length_frames": {
+        "p50": NaN,
+        "p90": NaN,
+        "p95": NaN,
+        "p99": NaN
+      },
+      "measurement_available_fraction": 1.0,
+      "missing_measurement_fraction": 0.0,
+      "n_frames_total": 550693,
+      "n_gaps": 0,
+      "n_sequences": 10731,
+      "seq_length": {
+        "p50": 38.0,
+        "p90": 110.0,
+        "p95": 110.0,
+        "p99": 110.0
+      },
+      "speed_mps": {
+        "p50": 0.0003445225811260005,
+        "p90": 10.566626532943458,
+        "p95": 13.131711064680392,
+        "p99": 17.450049285736622
+      },
+      "stationary_fraction": 0.6383774625789687,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.11455592252757718,
+        "p90": 3.0992848128488544,
+        "p95": 9.71261351770927,
+        "p99": 29.68712500025367
+      },
+      "velocity_change_mps": {
+        "p50": 0.00015901013789524005,
+        "p90": 0.1730345374836435,
+        "p95": 0.27533857793685046,
+        "p99": 0.8429337965527144
+      }
+    },
+    "C_morai_dense_v2_train": {
+      "accel_mps2": {
+        "p50": 2.2199068315091455,
+        "p90": 6.72174548982062,
+        "p95": 11.148755120766987,
+        "p99": 29.39928617859247
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 63.04415845275656,
+        "max_abs_y": 20.582571904255857
+      },
+      "displacement_per_step_m": {
+        "p50": 0.662107608238816,
+        "p90": 1.387505184530879,
+        "p95": 1.68696019010744,
+        "p99": 2.7054308323717606
+      },
+      "dt": {
+        "p50": 0.11568379402160645,
+        "p90": 0.22092127799987793,
+        "p95": 0.23908019065856934,
+        "p99": 0.3257567882537842
+      },
+      "gap_length_frames": {
+        "p50": NaN,
+        "p90": NaN,
+        "p95": NaN,
+        "p99": NaN
+      },
+      "measurement_available_fraction": 1.0,
+      "missing_measurement_fraction": 0.0,
+      "n_frames_total": 1310,
+      "n_gaps": 0,
+      "n_sequences": 37,
+      "seq_length": {
+        "p50": 33.0,
+        "p90": 60.19999999999998,
+        "p95": 68.99999999999997,
+        "p99": 73.0
+      },
+      "speed_mps": {
+        "p50": 5.7522913126008515,
+        "p90": 9.63072007962239,
+        "p95": 10.740955275192029,
+        "p99": 15.955509893322713
+      },
+      "stationary_fraction": 0.01984732824427481,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.31598289710311933,
+        "p90": 0.7193993569002863,
+        "p95": 1.3366839178334489,
+        "p99": 3.493421082927835
+      },
+      "velocity_change_mps": {
+        "p50": 0.26146020455828717,
+        "p90": 0.7831889640376768,
+        "p95": 1.3447026764710948,
+        "p99": 3.0330451190138734
+      }
+    },
+    "D_morai_frozen_eval": {
+      "accel_mps2": {
+        "p50": 3.0903414241049596,
+        "p90": 8.549150336835352,
+        "p95": 18.37060979106274,
+        "p99": 29.396241853423643
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 101.55383991204722,
+        "max_abs_y": 7.1958908986105
+      },
+      "displacement_per_step_m": {
+        "p50": 1.1131708531785058,
+        "p90": 1.7377987109074968,
+        "p95": 2.2890390619683414,
+        "p99": 3.2862037081530846
+      },
+      "dt": {
+        "p50": 0.1295480728149414,
+        "p90": 0.24334094524383548,
+        "p95": 0.2581079244613647,
+        "p99": 0.2837845396995544
+      },
+      "gap_length_frames": {
+        "p50": 24.0,
+        "p90": 24.0,
+        "p95": 24.0,
+        "p99": 24.0
+      },
+      "measurement_available_fraction": 0.8471337579617835,
+      "missing_measurement_fraction": 0.15286624203821653,
+      "n_frames_total": 157,
+      "n_gaps": 1,
+      "n_sequences": 3,
+      "seq_length": {
+        "p50": 64.0,
+        "p90": 71.2,
+        "p95": 72.1,
+        "p99": 72.82
+      },
+      "speed_mps": {
+        "p50": 8.615973782560907,
+        "p90": 12.78047707959617,
+        "p95": 13.169394843247808,
+        "p99": 14.961914270075397
+      },
+      "stationary_fraction": 0.012738853503184714,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.03393905352911342,
+        "p90": 0.8678085755184056,
+        "p95": 1.7914829800714462,
+        "p99": 6.027480237572382
+      },
+      "velocity_change_mps": {
+        "p50": 0.4276547841619558,
+        "p90": 0.9799729945842883,
+        "p95": 2.2240713516656605,
+        "p99": 3.515835610070375
+      }
+    }
+  },
+  "distribution_comparison_generic_robust": {
+    "A_av2_stage0_test_gr": {
+      "accel_mps2": {
+        "p50": 5.120683687220169e-05,
+        "p90": 1.241532817919427,
+        "p95": 2.085662872443741,
+        "p99": 6.408229189549526
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 103.49278100940455,
+        "max_abs_y": 142.93997764962182
+      },
+      "displacement_per_step_m": {
+        "p50": 1.4495939167182084e-06,
+        "p90": 0.5935827267944206,
+        "p95": 0.8544063488349252,
+        "p99": 1.318507936984428
+      },
+      "dt": {
+        "p50": 0.1,
+        "p90": 0.1,
+        "p95": 0.1,
+        "p99": 0.1
+      },
+      "gap_length_frames": {
+        "p50": 1.0,
+        "p90": 3.0,
+        "p95": 5.0,
+        "p99": 6.0
+      },
+      "measurement_available_fraction": 0.8417089916030729,
+      "missing_measurement_fraction": 0.1582910083969271,
+      "n_frames_total": 39181,
+      "n_gaps": 3898,
+      "n_sequences": 724,
+      "seq_length": {
+        "p50": 42.0,
+        "p90": 110.0,
+        "p95": 110.0,
+        "p99": 110.0
+      },
+      "speed_mps": {
+        "p50": 1.4495939167182082e-05,
+        "p90": 5.935827267944206,
+        "p95": 8.54406348834925,
+        "p99": 13.185079369844278
+      },
+      "stationary_fraction": 0.7203491488221332,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.15064751713671054,
+        "p90": 3.1729724211224726,
+        "p95": 12.061749955274584,
+        "p99": 30.39929528702797
+      },
+      "velocity_change_mps": {
+        "p50": 5.120683687220169e-06,
+        "p90": 0.1241532817919427,
+        "p95": 0.20856628724437412,
+        "p99": 0.6408229189549526
+      }
+    },
+    "B_av2_stage1_test_gr": {
+      "accel_mps2": {
+        "p50": 0.0015938251480045263,
+        "p90": 1.7243893358595273,
+        "p95": 2.737701629856261,
+        "p99": 8.245392501650995
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 222.93413615270856,
+        "max_abs_y": 170.1678657031526
+      },
+      "displacement_per_step_m": {
+        "p50": 3.451431129253025e-05,
+        "p90": 1.0572960842041619,
+        "p95": 1.3136009582066572,
+        "p99": 1.745117771437307
+      },
+      "dt": {
+        "p50": 0.1,
+        "p90": 0.1,
+        "p95": 0.1,
+        "p99": 0.1
+      },
+      "gap_length_frames": {
+        "p50": 1.0,
+        "p90": 3.0,
+        "p95": 5.0,
+        "p99": 6.0
+      },
+      "measurement_available_fraction": 0.844922593452024,
+      "missing_measurement_fraction": 0.15507740654797597,
+      "n_frames_total": 548597,
+      "n_gaps": 53582,
+      "n_sequences": 10731,
+      "seq_length": {
+        "p50": 38.0,
+        "p90": 110.0,
+        "p95": 110.0,
+        "p99": 110.0
+      },
+      "speed_mps": {
+        "p50": 0.0003451431129253025,
+        "p90": 10.57296084204162,
+        "p95": 13.136009582066572,
+        "p99": 17.451177714373067
+      },
+      "stationary_fraction": 0.6382754553889285,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.11480504874380015,
+        "p90": 3.0930509286143364,
+        "p95": 9.690545856778515,
+        "p99": 29.68832047660691
+      },
+      "velocity_change_mps": {
+        "p50": 0.00015938251480045263,
+        "p90": 0.17243893358595275,
+        "p95": 0.2737701629856261,
+        "p99": 0.8245392501650995
+      }
+    },
+    "D_morai_frozen_eval_real": {
+      "accel_mps2": {
+        "p50": 3.0903414241049596,
+        "p90": 8.549150336835352,
+        "p95": 18.37060979106274,
+        "p99": 29.396241853423643
+      },
+      "coordinate_range_m": {
+        "max_abs_x": 101.55383991204722,
+        "max_abs_y": 7.1958908986105
+      },
+      "displacement_per_step_m": {
+        "p50": 1.1131708531785058,
+        "p90": 1.7377987109074968,
+        "p95": 2.2890390619683414,
+        "p99": 3.2862037081530846
+      },
+      "dt": {
+        "p50": 0.1295480728149414,
+        "p90": 0.24334094524383548,
+        "p95": 0.2581079244613647,
+        "p99": 0.2837845396995544
+      },
+      "gap_length_frames": {
+        "p50": 24.0,
+        "p90": 24.0,
+        "p95": 24.0,
+        "p99": 24.0
+      },
+      "measurement_available_fraction": 0.8471337579617835,
+      "missing_measurement_fraction": 0.15286624203821653,
+      "n_frames_total": 157,
+      "n_gaps": 1,
+      "n_sequences": 3,
+      "seq_length": {
+        "p50": 64.0,
+        "p90": 71.2,
+        "p95": 72.1,
+        "p99": 72.82
+      },
+      "speed_mps": {
+        "p50": 8.615973782560907,
+        "p90": 12.78047707959617,
+        "p95": 13.169394843247808,
+        "p99": 14.961914270075397
+      },
+      "stationary_fraction": 0.012738853503184714,
+      "stationary_speed_threshold_mps": 0.5,
+      "turn_rate_radps": {
+        "p50": 0.03393905352911342,
+        "p90": 0.8678085755184056,
+        "p95": 1.7914829800714462,
+        "p99": 6.027480237572382
+      },
+      "velocity_change_mps": {
+        "p50": 0.4276547841619558,
+        "p90": 0.9799729945842883,
+        "p95": 2.2240713516656605,
+        "p99": 3.515835610070375
+      }
+    }
+  },
+  "label": "AV2->MORAI Domain-Gap Analysis v1 -- diagnostic only, no new training",
+  "morai_bootstrap_uncertainty": {
+    "D_stage1_vs_A_tuned_kf": {
+      "ci_high": 0.14900250533530812,
+      "ci_low": -3.799366544093855,
+      "fraction_bootstrap_same_sign": 0.7074,
+      "n_bootstrap": 5000,
+      "observed_diff": -1.2094851167346188,
+      "stable": false
+    },
+    "D_stage1_vs_B_dense_v2": {
+      "ci_high": 0.1470266365364301,
+      "ci_low": -0.24473961992274695,
+      "fraction_bootstrap_same_sign": 0.5938,
+      "n_bootstrap": 5000,
+      "observed_diff": -0.017635877411920076,
+      "stable": false
+    },
+    "D_stage1_vs_C_stage0": {
+      "ci_high": 0.10525905550822312,
+      "ci_low": -1.1922185402346455,
+      "fraction_bootstrap_same_sign": 0.7434,
+      "n_bootstrap": 5000,
+      "observed_diff": -0.3644224478979896,
+      "stable": false
+    }
+  },
+  "morai_per_sequence_pos_rmse": {
+    "A_tuned_kf": [
+      7.196835615546881,
+      1.5946624918541032,
+      0.44444516742445467
+    ],
+    "B_dense_v2": [
+      3.642208691375773,
+      1.596638360652981,
+      0.4215485048285887
+    ],
+    "C_stage0_av2": [
+      4.589687611687672,
+      1.6384059416811882,
+      0.4726617149466929
+    ],
+    "D_stage1_av2": [
+      3.3974690714530262,
+      1.7436649971894111,
+      0.4663538559791452
+    ]
+  },
+  "morai_regime_gain_prior_posterior": {
+    "A_tuned_kf": {
+      "matched": {
+        "mean_gain_frobenius_norm": null,
+        "n": 130,
+        "posterior_pos_rmse": 1.4555029268211082,
+        "posterior_vel_rmse": 2.416395111375808,
+        "prior_pos_rmse": 1.6137034629280407,
+        "prior_to_posterior_improvement": 0.15820053610693252
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 11.500890815364802,
+        "posterior_vel_rmse": 5.215845542416666,
+        "prior_pos_rmse": 11.500890815364802,
+        "prior_to_posterior_improvement": 0.0
+      }
+    },
+    "B_dense_v2": {
+      "matched": {
+        "mean_gain_frobenius_norm": 3.3085996499428383,
+        "n": 130,
+        "posterior_pos_rmse": 1.467388205660588,
+        "posterior_vel_rmse": 2.4622466107528718,
+        "prior_pos_rmse": 1.6617482063346214,
+        "prior_to_posterior_improvement": 0.19436000067403336
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 5.563051823518357,
+        "posterior_vel_rmse": 2.0449890784554006,
+        "prior_pos_rmse": 5.563051823518357,
+        "prior_to_posterior_improvement": 0.0
+      }
+    },
+    "C_stage0_av2": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.8410986395982596,
+        "n": 130,
+        "posterior_pos_rmse": 1.4729939138909285,
+        "posterior_vel_rmse": 2.2003314644647585,
+        "prior_pos_rmse": 1.7042599600007993,
+        "prior_to_posterior_improvement": 0.23126604610987078
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 7.195388868702621,
+        "posterior_vel_rmse": 3.171796420490249,
+        "prior_pos_rmse": 7.195388868702621,
+        "prior_to_posterior_improvement": 0.0
+      }
+    },
+    "D_stage1_av2": {
+      "matched": {
+        "mean_gain_frobenius_norm": 1.6018046544148372,
+        "n": 130,
+        "posterior_pos_rmse": 1.555124616831225,
+        "posterior_vel_rmse": 2.233919651058006,
+        "prior_pos_rmse": 1.7911310684934185,
+        "prior_to_posterior_improvement": 0.23600645166219358
+      },
+      "missing": {
+        "mean_gain_frobenius_norm": null,
+        "n": 24,
+        "posterior_pos_rmse": 5.1471724456038075,
+        "posterior_vel_rmse": 2.1573632991573493,
+        "prior_pos_rmse": 5.1471724456038075,
+        "prior_to_posterior_improvement": 0.0
+      }
+    }
+  },
+  "residual_comparison": {
+    "av2_clean_stage0_test": {
+      "n": 39339,
+      "radial_error": {
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "x_bias": 0.0,
+      "x_residual": {
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "x_std": 0.0,
+      "xy_correlation": NaN,
+      "y_bias": 0.0,
+      "y_residual": {
+        "p50": 0.0,
+        "p90": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
+      "y_std": 0.0
+    },
+    "av2_generic_robust_stage0_test": {
+      "n": 32979,
+      "radial_error": {
+        "p50": 0.35329177860558003,
+        "p90": 0.6454379041924148,
+        "p95": 0.7429729517865481,
+        "p99": 0.9170682187743766
+      },
+      "x_bias": 0.0028132105751166904,
+      "x_residual": {
+        "p50": 0.20155130694306467,
+        "p90": 0.49446772404531525,
+        "p95": 0.589169751379161,
+        "p99": 0.7886829443880323
+      },
+      "x_std": 0.3011284719386713,
+      "xy_correlation": -0.0008805815923225224,
+      "y_bias": -0.0013820374871687318,
+      "y_residual": {
+        "p50": 0.2016583379322946,
+        "p90": 0.4951570087916993,
+        "p95": 0.5914349058815149,
+        "p99": 0.7766539195214356
+      },
+      "y_std": 0.30078626065380165
+    },
+    "morai_dense_v2_train": {
+      "n": 1310,
+      "radial_error": {
+        "p50": 1.0847649863747924,
+        "p90": 1.7968331478090658,
+        "p95": 2.0882559140063877,
+        "p99": 2.6606417060631227
+      },
+      "x_bias": -0.6775601273288768,
+      "x_residual": {
+        "p50": 0.6610293227719506,
+        "p90": 1.4176254210801686,
+        "p95": 1.8023408294324617,
+        "p99": 2.3129820792617535
+      },
+      "x_std": 0.5557125794133516,
+      "xy_correlation": -0.2191363223488027,
+      "y_bias": 0.6773539833027853,
+      "y_residual": {
+        "p50": 0.6816106749670183,
+        "p90": 1.361523135114155,
+        "p95": 1.4903277242094313,
+        "p99": 1.736755194281586
+      },
+      "y_std": 0.5416486650848381
+    },
+    "morai_frozen_eval": {
+      "n": 133,
+      "radial_error": {
+        "p50": 1.3190366442658397,
+        "p90": 2.1262200868389556,
+        "p95": 2.3952460416008066,
+        "p99": 2.7363444127208667
+      },
+      "x_bias": 0.05826641246033147,
+      "x_residual": {
+        "p50": 1.1493505222269067,
+        "p90": 2.05884746700132,
+        "p95": 2.3177277245928427,
+        "p99": 2.561128596383455
+      },
+      "x_std": 1.3406424479305294,
+      "xy_correlation": 0.11502573481598533,
+      "y_bias": 0.43186321961632057,
+      "y_residual": {
+        "p50": 0.4665127190054603,
+        "p90": 0.7157105685643006,
+        "p95": 0.8388581932260503,
+        "p99": 1.0650396938872364
+      },
+      "y_std": 0.286347284461327
+    }
+  },
+  "schema_version": "kalmannet_av2_morai_domain_gap_v1_summary"
+}
