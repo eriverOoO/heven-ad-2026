@@ -34,14 +34,15 @@ from batched_kalmannet import (
     make_length_buckets,
     run_batch,
 )
+from nonfinite_guard import MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH, safe_clip_and_step
 from resume_state import load_resume_state, save_resume_state
 from trainer_core import (
     FAILURE_VAL_LOSS_THRESHOLD,
     EpochRecord,
     TrainResult,
-    _grad_norm,
     set_all_seeds,
 )
+from training_forensics import BatchObservation, ForensicRecorder, hidden_state_stats, summarize_sequence
 
 from ad_lidar_perception.kalmannet_core import KalmanNetGRU  # noqa: E402  (path added by batched_kalmannet's own import)
 
@@ -84,6 +85,7 @@ def train_one_run_batched(
     resume_checkpoint_path: Path | None = None,
     resume_validation_key: dict[str, Any] | None = None,
     checkpoint_every_epochs: int = 1,
+    forensic_recorder: ForensicRecorder | None = None,
 ) -> TrainResult:
     """THROUGHPUT MODE training loop. Same seeds/hyperparameter contract
     and ``TrainResult`` shape as ``trainer_core.train_one_run`` (so
@@ -155,8 +157,9 @@ def train_one_run_batched(
         epoch_train_losses: list[float] = []
         grad_norms: list[float] = []
         any_nan_train = False
+        nonfinite_grad_skips_this_epoch = 0
 
-        for idx_group in batch_index_groups:
+        for batch_index, idx_group in enumerate(batch_index_groups):
             if len(idx_group) == 0:
                 continue
             batch_seqs = [train_seqs[i] for i in idx_group]
@@ -165,21 +168,95 @@ def train_one_run_batched(
             batch_result: BatchLossResult = run_batch(net, padded, device, loss_on_predict_only)
             if batch_result.n_loss_terms == 0:
                 continue
-            if not torch.isfinite(batch_result.loss):
+
+            loss_finite = bool(torch.isfinite(batch_result.loss))
+
+            if not loss_finite:
                 any_nan_train = True
                 result.nonfinite_step_count += 1
                 epoch_train_losses.append(float("nan"))
+                if forensic_recorder is not None:
+                    h_mean, h_max, h_p95 = hidden_state_stats(net.h)
+                    forensic_recorder.observe(BatchObservation(
+                        epoch=epoch, batch_index=batch_index, n_sequences=len(batch_seqs),
+                        loss_value=float(batch_result.loss.item()),
+                        loss_finite=False, grad_norm_pre_clip=float("nan"), grad_nonfinite_pre_clip=False,
+                        hidden_state_mean_abs=h_mean, hidden_state_max_abs=h_max, hidden_state_p95_abs=h_p95,
+                        sequences=[summarize_sequence(s) for s in batch_seqs],
+                    ))
                 continue
             batch_result.loss.backward()
-            gnorm = _grad_norm(net.parameters())
-            grad_norms.append(gnorm)
-            if grad_clip is not None:
-                torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
-            opt.step()
+
+            # SAFE STEP GUARD (see nonfinite_guard.py / docs/perception/
+            # kalmannet_training_instability_v1.md): a FINITE loss can
+            # still backward() into a non-finite gradient -- this is the
+            # exact, root-caused mechanism that permanently corrupted the
+            # AV2 10k GENERIC-ROBUST run's weights from epoch 16 onward.
+            # clip_grad_norm_ does NOT neutralize a non-finite gradient
+            # into a safe update; calling optimizer.step() with one
+            # permanently poisons Adam's moment buffers. This guard
+            # inspects the gradient BEFORE clipping and refuses to step
+            # at all if it is non-finite.
+            outcome = safe_clip_and_step(net, opt, grad_clip)
+            grad_norms.append(outcome.grad_norm_pre_clip)
+
+            if forensic_recorder is not None:
+                h_mean, h_max, h_p95 = hidden_state_stats(net.h)
+                forensic_recorder.observe(BatchObservation(
+                    epoch=epoch, batch_index=batch_index, n_sequences=len(batch_seqs),
+                    loss_value=float(batch_result.loss.item()), loss_finite=True,
+                    grad_norm_pre_clip=outcome.grad_norm_pre_clip,
+                    grad_nonfinite_pre_clip=outcome.grad_nonfinite_pre_clip,
+                    hidden_state_mean_abs=h_mean, hidden_state_max_abs=h_max, hidden_state_p95_abs=h_p95,
+                    sequences=[summarize_sequence(s) for s in batch_seqs],
+                ))
+
+            if not outcome.applied:
+                any_nan_train = True
+                result.nonfinite_step_count += 1
+                result.grad_skip_count += 1
+                nonfinite_grad_skips_this_epoch += 1
+                epoch_train_losses.append(float("nan"))
+                continue
+
+            if outcome.collapsed:
+                # Escalation policy tier 3 (immediate): parameters or
+                # optimizer state became non-finite despite the pre-step
+                # guard -- an invariant this design should make
+                # unreachable, so treat it as an unrecoverable, immediate
+                # failure rather than continuing to train on a corrupted
+                # model. FAIL FAST: mark collapsed and stop training now,
+                # mid-epoch, rather than producing further NaN epochs.
+                any_nan_train = True
+                result.training_collapsed = True
+                result.abort_reason = "params_or_optimizer_state_nonfinite_after_step"
+                epoch_train_losses.append(float("nan"))
+                break
+
             epoch_train_losses.append(batch_result.loss.item())
             if batch_result.nan_inf:
                 any_nan_train = True
                 result.nonfinite_step_count += 1
+
+        if result.training_collapsed:
+            record = EpochRecord(
+                epoch=epoch,
+                train_loss=(float(np.nanmean(epoch_train_losses)) if epoch_train_losses else float("nan")),
+                val_loss=float("nan"), grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
+                grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
+                any_nan_train=True, any_nan_val=False,
+            )
+            result.history.append(record)
+            break
+
+        # Escalation policy tier 2 (per-epoch): repeated non-finite
+        # gradients within one epoch, well beyond an isolated outlier
+        # batch, signal systematic instability rather than one unlucky
+        # sequence -- abort after this epoch (its own EpochRecord is
+        # still recorded truthfully below) rather than continuing to burn
+        # further epochs of compute on a run that keeps re-triggering the
+        # guard.
+        epoch_unstable = nonfinite_grad_skips_this_epoch > MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH
 
         net.eval()
         val_losses: list[float] = []
@@ -217,7 +294,14 @@ def train_one_run_batched(
         else:
             epochs_since_improve += 1
 
-        stop_early = epochs_since_improve >= patience
+        if epoch_unstable:
+            result.training_unstable = True
+            result.abort_reason = (
+                f"repeated_nonfinite_gradients: {nonfinite_grad_skips_this_epoch} skips in epoch {epoch} "
+                f"(threshold {MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH})"
+            )
+
+        stop_early = epochs_since_improve >= patience or epoch_unstable
 
         if resume_checkpoint_path is not None and (
             (epoch + 1) % checkpoint_every_epochs == 0 or epoch == max_epochs - 1 or stop_early
@@ -246,9 +330,22 @@ def train_one_run_batched(
     result.best_val = best_val
     result.best_epoch = best_epoch
     result.best_state_dict = best_state
+    # Fixed catastrophic-flag semantics (see docs/perception/
+    # kalmannet_training_instability_v1.md "Catastrophic-Flag Bug"): the
+    # ORIGINAL definition below only reflected whether the SELECTED
+    # (best-epoch) checkpoint was itself degenerate -- a run whose weights
+    # permanently went non-finite mid-run but which had ALREADY locked in
+    # a good best_epoch before that point (exactly what happened in the
+    # real AV2 10k GENERIC-ROBUST run) reported catastrophic=False despite
+    # the model having numerically collapsed. `training_collapsed` now
+    # captures that failure mode directly and unconditionally forces
+    # catastrophic=True, regardless of whether an earlier checkpoint was
+    # already secured -- "the model numerically collapsed" is no longer
+    # allowed to silently coexist with catastrophic=False.
     result.catastrophic = (
         not math.isfinite(best_val)
         or best_val > FAILURE_VAL_LOSS_THRESHOLD
         or best_state is None
+        or result.training_collapsed
     )
     return result

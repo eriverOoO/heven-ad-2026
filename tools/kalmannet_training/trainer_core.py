@@ -106,6 +106,11 @@ from ad_lidar_perception.kalmannet_core import (  # noqa: E402
     KalmanNetGRU,
 )
 
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from nonfinite_guard import MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH, safe_clip_and_step  # noqa: E402
+
 FAILURE_VAL_LOSS_THRESHOLD = 100.0  # matches instrumented_train.py's own frozen QC threshold
 STATE_BLOWUP_THRESHOLD = 1e4        # matches instrumented_train.py's own frozen QC threshold
 
@@ -212,6 +217,14 @@ class TrainResult:
     n_epochs_run: int = 0
     nonfinite_step_count: int = 0
     train_time_s: float = 0.0
+    # Added by the training-instability-safety fix (see
+    # docs/perception/kalmannet_training_instability_v1.md). All default
+    # to their "nothing happened" value, so any existing caller
+    # constructing a TrainResult without these kwargs is unaffected.
+    grad_skip_count: int = 0            # isolated non-finite-gradient steps skipped (tier 1)
+    training_unstable: bool = False     # tier 2: repeated non-finite gradients in one epoch -> aborted
+    training_collapsed: bool = False    # tier 3: parameters/optimizer state went non-finite -> aborted, always catastrophic
+    abort_reason: str | None = None     # human-readable reason for tier-2/tier-3 abort, else None
 
 
 def _grad_norm(params) -> float:
@@ -272,6 +285,7 @@ def train_one_run(
         grad_norms: list[float] = []
         any_nan_train = False
 
+        nonfinite_grad_skips_this_epoch = 0
         for idx in order:
             seq = train_seqs[idx]
             opt.zero_grad()
@@ -284,15 +298,49 @@ def train_one_run(
                 epoch_train_losses.append(float("nan"))
                 continue
             seq_result.loss.backward()
-            gnorm = _grad_norm(net.parameters())
-            grad_norms.append(gnorm)
-            if grad_clip is not None:
-                torch.nn.utils.clip_grad_norm_(net.parameters(), grad_clip)
-            opt.step()
+
+            # SAFE STEP GUARD -- see nonfinite_guard.py / docs/perception/
+            # kalmannet_training_instability_v1.md. Identical fix to
+            # batched_trainer.train_one_run_batched's own guard, applied
+            # here for the same reason: a finite loss can still backward()
+            # into a non-finite gradient, and clip_grad_norm_ does not
+            # neutralize one -- it converts it into a permanently
+            # Adam-state-poisoning NaN.
+            outcome = safe_clip_and_step(net, opt, grad_clip)
+            grad_norms.append(outcome.grad_norm_pre_clip)
+
+            if not outcome.applied:
+                any_nan_train = True
+                result.nonfinite_step_count += 1
+                result.grad_skip_count += 1
+                nonfinite_grad_skips_this_epoch += 1
+                epoch_train_losses.append(float("nan"))
+                continue
+
+            if outcome.collapsed:
+                any_nan_train = True
+                result.training_collapsed = True
+                result.abort_reason = "params_or_optimizer_state_nonfinite_after_step"
+                epoch_train_losses.append(float("nan"))
+                break
+
             epoch_train_losses.append(seq_result.loss.item())
             if seq_result.nan_inf:
                 any_nan_train = True
                 result.nonfinite_step_count += 1
+
+        if result.training_collapsed:
+            record = EpochRecord(
+                epoch=epoch,
+                train_loss=(float(np.nanmean(epoch_train_losses)) if epoch_train_losses else float("nan")),
+                val_loss=float("nan"), grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
+                grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
+                any_nan_train=True, any_nan_val=False,
+            )
+            result.history.append(record)
+            break
+
+        epoch_unstable = nonfinite_grad_skips_this_epoch > MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH
 
         net.eval()
         val_losses: list[float] = []
@@ -325,17 +373,32 @@ def train_one_run(
             epochs_since_improve = 0
         else:
             epochs_since_improve += 1
-            if epochs_since_improve >= patience:
-                break
+
+        if epoch_unstable:
+            result.training_unstable = True
+            result.abort_reason = (
+                f"repeated_nonfinite_gradients: {nonfinite_grad_skips_this_epoch} skips in epoch {epoch} "
+                f"(threshold {MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH})"
+            )
+
+        if epochs_since_improve >= patience or epoch_unstable:
+            break
 
     result.train_time_s = time.time() - t_start
     result.n_epochs_run = len(result.history)
     result.best_val = best_val
     result.best_epoch = best_epoch
     result.best_state_dict = best_state
+    # See batched_trainer.train_one_run_batched's identical comment: the
+    # ORIGINAL definition below only reflected whether the SELECTED
+    # checkpoint was itself degenerate. `training_collapsed` now forces
+    # catastrophic=True unconditionally the moment the model's own
+    # parameters/optimizer state go permanently non-finite, regardless of
+    # whether an earlier checkpoint was already secured.
     result.catastrophic = (
         not math.isfinite(best_val)
         or best_val > FAILURE_VAL_LOSS_THRESHOLD
         or best_state is None
+        or result.training_collapsed
     )
     return result

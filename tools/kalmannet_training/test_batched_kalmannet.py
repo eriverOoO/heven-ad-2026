@@ -478,3 +478,73 @@ def test_mixed_batch_all_three_cases_no_nan_inf():
     r = run_batch(net, batch, "cpu", True)
     assert torch.isfinite(r.loss)
     assert not r.nan_inf
+
+
+# ---------------------------------------------------------------------------
+# Re-audit (kalmannet_training_instability_v1): does row-level isolation
+# hold even once one row's OWN state has gone non-finite, mid-batch,
+# mid-sequence? Distinct from the SHARED-WEIGHT poisoning mechanism that
+# actually caused the real 10k collapse (docs/perception/
+# kalmannet_training_instability_v1.md) -- this specifically tests
+# whether the masking/scatter-gather logic itself could let a corrupted
+# ROW's hidden-state slice bleed into another row's slice within the SAME
+# batch, a different, additional concern this task's own re-audit raised.
+# ---------------------------------------------------------------------------
+
+
+def test_one_row_going_nan_mid_sequence_does_not_leak_into_other_rows():
+    """Directly poisons row 1's hidden state to NaN mid-sequence (as
+    would happen if that row's own recursion produced a non-finite
+    result), then continues stepping the SAME batch and confirms row 0's
+    output stays completely finite and identical to running it alone --
+    the padding/masking-based subset scatter-gather never lets a
+    corrupted row's state leak into a healthy neighbor's slice."""
+    seq0 = _make_sequence(n=14, x0=0.0, vx=3.0, seed=1)
+    seq1 = _make_sequence(n=14, x0=100.0, vx=-4.0, vy=6.0, seed=2)
+
+    net = _fresh_net(seed=42)
+    batch = build_padded_batch([seq0, seq1], device="cpu")
+    bkf = BatchedKalmanNetFilter(net, device="cpu")
+    x0 = torch.stack([
+        torch.tensor([seq0["z_meas"][0][0], seq0["z_meas"][0][1], 0.0, 0.0]),
+        torch.tensor([seq1["z_meas"][0][0], seq1["z_meas"][0][1], 0.0, 0.0]),
+    ])
+    bkf.init_batch(x0)
+
+    row0_states = []
+    poison_at_t = 5
+    for t in range(1, batch.t_max):
+        out = bkf.step_masked(
+            batch.z_meas[:, t, :], batch.dt[:, t], batch.measurement_valid[:, t], batch.sequence_valid[:, t]
+        )
+        row0_states.append(out[0].detach().clone())
+        if t == poison_at_t:
+            # Simulate row 1's own state (and its hidden-state slice)
+            # having gone permanently non-finite -- inject NaN directly
+            # into row 1's rows of every tracked state tensor, mirroring
+            # what a poisoned shared weight would eventually produce for
+            # that row's own recursion.
+            bkf.x_post[1] = float("nan")
+            bkf.x_post_prev[1] = float("nan")
+            bkf.x_prior_prev[1] = float("nan")
+            bkf.y_prev[1] = float("nan")
+            bkf.net.h[:, 1, :] = float("nan")
+
+    # Row 0 alone, for comparison.
+    net_alone = _fresh_net(seed=42)
+    bkf_alone = BatchedKalmanNetFilter(net_alone, device="cpu")
+    bkf_alone.init_batch(x0[0:1])
+    b0 = build_padded_batch([seq0], device="cpu")
+    alone_states = []
+    for t in range(1, b0.t_max):
+        out = bkf_alone.step_masked(
+            b0.z_meas[:, t, :], b0.dt[:, t], b0.measurement_valid[:, t], b0.sequence_valid[:, t]
+        )
+        alone_states.append(out[0].detach().clone())
+
+    for i, (a, b) in enumerate(zip(row0_states, alone_states)):
+        assert torch.isfinite(a).all(), f"row 0 became non-finite at t={i + 1} after row 1 was poisoned at t={poison_at_t}"
+        assert torch.allclose(a, b, atol=1e-5), (
+            f"row 0's output at t={i + 1} diverged from the alone-run after row 1's hidden state "
+            f"was poisoned to NaN at t={poison_at_t} -- state leaked across rows"
+        )
