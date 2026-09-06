@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -33,6 +34,7 @@ from batched_kalmannet import (
     make_length_buckets,
     run_batch,
 )
+from resume_state import load_resume_state, save_resume_state
 from trainer_core import (
     FAILURE_VAL_LOSS_THRESHOLD,
     EpochRecord,
@@ -79,13 +81,27 @@ def train_one_run_batched(
     order_seed: int | None = None,
     deterministic_cuda: bool = False,
     progress_callback=None,
+    resume_checkpoint_path: Path | None = None,
+    resume_validation_key: dict[str, Any] | None = None,
+    checkpoint_every_epochs: int = 1,
 ) -> TrainResult:
     """THROUGHPUT MODE training loop. Same seeds/hyperparameter contract
     and ``TrainResult`` shape as ``trainer_core.train_one_run`` (so
     downstream checkpoint/reporting code needs no change) -- the only
     behavioral difference is the batched forward/backward path and,
     ONLY when ``batch_size>1``, mini-batch (not per-sequence) gradient
-    averaging."""
+    averaging.
+
+    ``resume_checkpoint_path`` (optional, default ``None`` -- fully
+    backward compatible, identical behavior to before this parameter
+    existed): when given, a resume checkpoint is written after every
+    ``checkpoint_every_epochs`` completed epoch(s). If a checkpoint
+    already exists at that path when this function is called, training
+    resumes from it instead of starting fresh (``resume_validation_key``
+    -- e.g. seed/lr/batch_size/hidden_size/dataset+split content hashes
+    -- must match exactly what produced that checkpoint, or
+    ``resume_state.ResumeValidationError`` is raised rather than silently
+    continuing under a different configuration)."""
     init_seed = seed if init_seed is None else init_seed
     order_seed = seed if order_seed is None else order_seed
 
@@ -103,11 +119,28 @@ def train_one_run_batched(
     best_state = None
     best_epoch = None
     epochs_since_improve = 0
+    start_epoch = 0
+    cumulative_train_time_s = 0.0
+
+    if resume_checkpoint_path is not None and Path(resume_checkpoint_path).is_file():
+        payload = load_resume_state(resume_checkpoint_path, expected_validation_key=resume_validation_key or {})
+        net.load_state_dict(payload["model_state_dict"])
+        opt.load_state_dict(payload["optimizer_state_dict"])
+        rng.set_state(payload["rng_state"])
+        start_epoch = payload["epoch_next"]
+        best_val = payload["best_val"]
+        best_epoch = payload["best_epoch"]
+        best_state = payload["best_state_dict"]
+        epochs_since_improve = payload["epochs_since_improve"]
+        result.history = [EpochRecord(**rec) for rec in payload["history"]]
+        result.nonfinite_step_count = payload["nonfinite_step_count"]
+        cumulative_train_time_s = payload["cumulative_train_time_s"]
+
     t_start = time.time()
 
     val_batch_idx = _val_batches(val_seqs, batch_size, n_buckets) if val_seqs else []
 
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         if use_length_bucketing:
             batch_index_groups = bucketed_epoch_batch_order(train_seqs, rng, batch_size, n_buckets)
         else:
@@ -174,7 +207,7 @@ def train_one_run_batched(
         )
         result.history.append(record)
         if progress_callback is not None:
-            progress_callback(record, time.time() - t_start)
+            progress_callback(record, cumulative_train_time_s + (time.time() - t_start))
 
         if math.isfinite(val_loss) and val_loss < best_val - 1e-6:
             best_val = val_loss
@@ -183,10 +216,32 @@ def train_one_run_batched(
             epochs_since_improve = 0
         else:
             epochs_since_improve += 1
-            if epochs_since_improve >= patience:
-                break
 
-    result.train_time_s = time.time() - t_start
+        stop_early = epochs_since_improve >= patience
+
+        if resume_checkpoint_path is not None and (
+            (epoch + 1) % checkpoint_every_epochs == 0 or epoch == max_epochs - 1 or stop_early
+        ):
+            save_resume_state(
+                resume_checkpoint_path,
+                model_state_dict=net.state_dict(),
+                optimizer_state_dict=opt.state_dict(),
+                rng_state=rng.get_state(),
+                epoch_next=epoch + 1,
+                best_val=best_val,
+                best_epoch=best_epoch,
+                best_state_dict=best_state,
+                epochs_since_improve=epochs_since_improve,
+                history=[asdict(r) for r in result.history],
+                nonfinite_step_count=result.nonfinite_step_count,
+                cumulative_train_time_s=cumulative_train_time_s + (time.time() - t_start),
+                validation_key=resume_validation_key or {},
+            )
+
+        if stop_early:
+            break
+
+    result.train_time_s = cumulative_train_time_s + (time.time() - t_start)
     result.n_epochs_run = len(result.history)
     result.best_val = best_val
     result.best_epoch = best_epoch

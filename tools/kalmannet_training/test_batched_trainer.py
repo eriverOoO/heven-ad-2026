@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import checkpoint_utils  # noqa: E402
 from batched_kalmannet import bucketed_epoch_batch_order, padding_waste_fraction  # noqa: E402
 from batched_trainer import train_one_run_batched  # noqa: E402
+from resume_state import ResumeValidationError  # noqa: E402
 from trainer_core import run_sequence, train_one_run  # noqa: E402
 
 
@@ -169,3 +171,98 @@ def test_batched_trained_checkpoint_is_evaluator_compatible():
     r = run_sequence(net, test_seq, "cpu", loss_on_predict_only=True)
     assert torch.isfinite(r.loss)
     assert not r.nan_inf
+
+
+def _resume_run_config(tmp_path):
+    train_seqs = [_make_sequence(n=10, x0=float(i), seed=i) for i in range(6)]
+    val_seqs = [_make_sequence(n=8, x0=float(i) + 0.5, seed=100 + i) for i in range(3)]
+    common = dict(
+        train_seqs=train_seqs, val_seqs=val_seqs, seed=0, device="cpu", batch_size=2,
+        use_length_bucketing=False, lr=0.01, max_epochs=6, patience=6, hidden_size=4,
+        grad_clip=10.0, loss_on_predict_only=True,
+    )
+    validation_key = {"seed": 0, "lr": 0.01, "batch_size": 2, "hidden_size": 4, "max_epochs": 6}
+    return common, validation_key
+
+
+def test_resume_from_checkpoint_reaches_the_same_final_result_as_uninterrupted_run(tmp_path):
+    """The core resumability guarantee: crashing after epoch K and
+    resuming must reach the same final best_val/best_epoch/history length
+    as never having crashed at all -- not merely 'produces some output'."""
+    common, validation_key = _resume_run_config(tmp_path)
+
+    uninterrupted = train_one_run_batched(**common)
+
+    # Simulate a crash: run only 3 epochs with checkpointing enabled by
+    # capping max_epochs, capture the resume checkpoint, then continue
+    # from it with the FULL max_epochs.
+    resume_path = tmp_path / "resume.pt"
+    part1 = train_one_run_batched(
+        **{**common, "max_epochs": 3}, resume_checkpoint_path=resume_path, resume_validation_key=validation_key,
+    )
+    assert resume_path.is_file()
+    assert part1.n_epochs_run == 3
+
+    resumed = train_one_run_batched(
+        **common, resume_checkpoint_path=resume_path, resume_validation_key=validation_key,
+    )
+
+    assert resumed.n_epochs_run == uninterrupted.n_epochs_run
+    assert resumed.best_epoch == uninterrupted.best_epoch
+    assert resumed.best_val == pytest.approx(uninterrupted.best_val, abs=1e-6)
+    assert len(resumed.history) == len(uninterrupted.history)
+    for a, b in zip(resumed.history, uninterrupted.history):
+        assert a.epoch == b.epoch
+        assert a.train_loss == pytest.approx(b.train_loss, abs=1e-5)
+        assert a.val_loss == pytest.approx(b.val_loss, abs=1e-6)
+
+
+def test_resume_refuses_mismatched_validation_key(tmp_path):
+    common, validation_key = _resume_run_config(tmp_path)
+    resume_path = tmp_path / "resume.pt"
+    train_one_run_batched(
+        **{**common, "max_epochs": 2}, resume_checkpoint_path=resume_path, resume_validation_key=validation_key,
+    )
+    with pytest.raises(ResumeValidationError):
+        train_one_run_batched(
+            **common, resume_checkpoint_path=resume_path,
+            resume_validation_key={**validation_key, "lr": 0.999},
+        )
+
+
+def test_no_resume_path_behaves_exactly_as_before(tmp_path):
+    """Default (resume_checkpoint_path=None) must not write any file and
+    must not change training outcome vs. calling without the new kwargs
+    at all."""
+    common, _ = _resume_run_config(tmp_path)
+    a = train_one_run_batched(**common)
+    b = train_one_run_batched(**common, resume_checkpoint_path=None)
+    assert list(tmp_path.iterdir()) == []
+    assert a.best_val == pytest.approx(b.best_val, abs=1e-9)
+    assert a.n_epochs_run == b.n_epochs_run
+
+
+def test_checkpoint_every_epochs_controls_write_frequency(tmp_path):
+    common, validation_key = _resume_run_config(tmp_path)
+    resume_path = tmp_path / "resume.pt"
+
+    import batched_trainer
+    calls = []
+    orig_save = batched_trainer.save_resume_state
+
+    def spy(*args, **kwargs):
+        calls.append(1)
+        return orig_save(*args, **kwargs)
+
+    batched_trainer.save_resume_state = spy
+    try:
+        train_one_run_batched(
+            **common, resume_checkpoint_path=resume_path, resume_validation_key=validation_key,
+            checkpoint_every_epochs=3,
+        )
+    finally:
+        batched_trainer.save_resume_state = orig_save
+    # 6 epochs, checkpoint every 3 -> saves at epoch index 2 (epoch+1=3) and
+    # epoch index 5 (epoch+1=6, also the final epoch) = 2 saves, never once
+    # per epoch.
+    assert len(calls) == 2
