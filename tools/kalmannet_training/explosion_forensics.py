@@ -1,23 +1,29 @@
-"""Bounded (<=12 epoch) forensic reproduction of the real AV2 Scale-Up
+"""Bounded (<=20 epoch) forensic reproduction of the real AV2 Scale-Up
 v2 10k GENERIC-ROBUST seed-0 run's gradient explosion, using the frozen
-dataset/split/config and the PR #56 safe-step guard.
+dataset/split/config and the PR #56/PR #58 safe-step guard.
 
 **Analysis run, not model training.** Stops the moment a genuine
-(element-level) non-finite gradient is captured, or after epoch 12
-completes with none observed -- never trains to completion, never
-starts a new seed, never touches model architecture/hyperparameters.
+(element-level, STATE C) non-finite gradient is captured, or after
+``max_epochs`` completes with none observed -- never trains to
+completion, never starts a new seed, never touches model architecture/
+hyperparameters.
 
 Maintains a lightweight ring buffer of COMPACT per-batch summaries (never
-full tensors) for the ~20 batches preceding a failure, and performs a
-detailed one-shot capture (per-sequence statistics, first non-finite
-parameter, individual-sequence replay) only for the actual failing
-batch.
+full tensors) for the ``ring_buffer_size`` batches preceding a failure,
+performs a detailed one-shot capture (per-sequence statistics, first
+non-finite parameter, individual-sequence replay) only for the actual
+failing batch, AND -- new in this task -- separately captures every
+STATE B (aggregate gradient-norm overflow, every element still finite)
+event with its own compact forensic snapshot, plus per-epoch Adam-state
+and parameter-magnitude trajectories, per
+``docs/perception/kalmannet_gradient_norm_overflow_v1.md``.
 """
 
 from __future__ import annotations
 
+import math
 from collections import deque
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import numpy as np
@@ -28,7 +34,7 @@ from batched_kalmannet import (
     build_padded_batch,
     run_batch,
 )
-from nonfinite_guard import safe_clip_and_step
+from nonfinite_guard import SafeStepOutcome, safe_clip_and_step
 from trainer_core import set_all_seeds
 from training_forensics import _gap_stats
 
@@ -73,6 +79,14 @@ class RingBufferEntry:
     max_posterior_state_abs: float
     max_hidden_state_abs: float
     max_gain_abs: float
+    # New in this task (see docs/perception/kalmannet_gradient_norm_overflow_v1.md):
+    # every entry now also records which of the three nonfinite_guard.py
+    # gradient states this batch was in, plus the overflow-resistant
+    # float64 diagnostic norm and the single largest individual gradient
+    # element magnitude across all parameters.
+    gradient_state: str = "healthy"      # "healthy" | "norm_overflow" | "element_nonfinite" | "loss_nonfinite_no_gradient"
+    grad_norm_robust: float = math.nan
+    max_individual_abs_gradient: float = math.nan
 
 
 @dataclass
@@ -113,6 +127,65 @@ class EpochTrajectoryPoint:
     grad_norm_max: float
     n_batches: int
     n_nonfinite_loss_batches: int
+    # New: per-epoch counts broken out by gradient state (see
+    # nonfinite_guard.py's three-state classification) -- so a norm-
+    # overflow-heavy epoch is never indistinguishable from a genuinely
+    # healthy one just by looking at `n_nonfinite_loss_batches` (which
+    # only ever counts the loss-itself-nonfinite case, a fourth,
+    # even-earlier failure point).
+    n_norm_overflow_batches: int = 0
+    n_element_nonfinite_batches: int = 0
+
+
+@dataclass
+class NormOverflowEvent:
+    """One STATE B occurrence: every gradient element finite, but the
+    aggregate (ordinary, float32-native) L2 norm reduction overflowed to
+    ``inf``. Captured for EVERY occurrence (not just the first), since
+    section 10 of this task asks whether the recurring epoch 6-11
+    instability episodes share a common data pattern -- answering that
+    needs the full population, not one example."""
+
+    epoch: int
+    batch_index: int
+    grad_norm_pre_clip: float          # ordinary norm -- inf by definition of this event
+    grad_norm_robust: float            # float64 diagnostic norm; the true large-but-finite magnitude
+    robust_norm_also_overflowed: bool  # honest flag: even float64 overflowed (should be exceedingly rare)
+    max_individual_abs_gradient: float
+    largest_norm_parameter_name: str | None
+    batch_loss: float
+    missing_fraction: float
+    max_missing_gap: int
+    max_target_speed: float
+    max_target_accel_proxy: float
+    max_hidden_state_abs: float
+    max_gain_abs: float
+    top_loss_sequences: list[SequenceDetail] = field(default_factory=list)
+
+
+@dataclass
+class AdamStateSnapshot:
+    """Compact per-epoch Adam moment-buffer summary (never full tensors) --
+    section 12: "we need to know whether optimizer moments grow
+    progressively before the true per-element failure.\""""
+
+    epoch: int
+    max_abs_exp_avg: float
+    max_abs_exp_avg_sq: float
+    p99_abs_exp_avg: float
+    p99_abs_exp_avg_sq: float
+
+
+@dataclass
+class ParameterMagnitudeSnapshot:
+    """Compact per-epoch parameter-magnitude summary -- section 13:
+    "determine whether weights themselves grow before the instability
+    episodes.\""""
+
+    epoch: int
+    max_abs_parameter: float
+    gru_weight_norm: float
+    output_head_weight_norm: float
 
 
 @dataclass
@@ -127,6 +200,14 @@ class ForensicResult:
     param_grad_reports: list[ParamGradReport]
     first_nonfinite_param_name: str | None
     per_epoch_trajectory: list[EpochTrajectoryPoint]
+    # New in this task:
+    norm_overflow_events: list[NormOverflowEvent] = field(default_factory=list)
+    adam_state_trajectory: list[AdamStateSnapshot] = field(default_factory=list)
+    parameter_magnitude_trajectory: list[ParameterMagnitudeSnapshot] = field(default_factory=list)
+    # Section 11: was the true STATE-C event isolated, or the endpoint of
+    # accumulated STATE-B instability? None when not reproduced.
+    preceding_norm_overflow_count_in_ring_buffer: int | None = None
+    cumulative_norm_overflow_count_before_failure: int | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -140,6 +221,11 @@ class ForensicResult:
             "param_grad_reports": [asdict(p) for p in self.param_grad_reports],
             "first_nonfinite_param_name": self.first_nonfinite_param_name,
             "per_epoch_trajectory": [asdict(p) for p in self.per_epoch_trajectory],
+            "norm_overflow_events": [asdict(e) for e in self.norm_overflow_events],
+            "adam_state_trajectory": [asdict(a) for a in self.adam_state_trajectory],
+            "parameter_magnitude_trajectory": [asdict(p) for p in self.parameter_magnitude_trajectory],
+            "preceding_norm_overflow_count_in_ring_buffer": self.preceding_norm_overflow_count_in_ring_buffer,
+            "cumulative_norm_overflow_count_before_failure": self.cumulative_norm_overflow_count_before_failure,
         }
 
 
@@ -177,7 +263,7 @@ def _per_sequence_loss(seq: dict[str, Any], net: KalmanNetGRU, device: str, loss
 
 
 # ---------------------------------------------------------------------------
-# Parameter-level non-finite localization
+# Parameter-level non-finite localization (STATE C)
 # ---------------------------------------------------------------------------
 
 
@@ -211,15 +297,132 @@ def localize_first_nonfinite_parameter(net: torch.nn.Module) -> tuple[list[Param
 
 
 # ---------------------------------------------------------------------------
-# Ring-buffer entry construction
+# Parameter-level magnitude ranking (STATE B -- every element finite)
+# ---------------------------------------------------------------------------
+
+
+def largest_gradient_parameter(net: torch.nn.Module) -> tuple[str | None, float, float]:
+    """Returns ``(name_of_largest_robust_norm_param,
+    max_individual_abs_gradient_overall, largest_param_robust_norm)``.
+
+    Uses the SAME float64-upcast-before-square technique as
+    ``nonfinite_guard._grad_norm_robust_float64`` -- computed
+    PER-PARAMETER this time, so ranking parameters by gradient magnitude
+    on a STATE-B batch doesn't ALSO silently overflow in float32. Only
+    meaningful when every gradient element is already known finite
+    (callers must check this first)."""
+    best_name: str | None = None
+    best_norm = -1.0
+    max_abs_overall = 0.0
+    for name, p in net.named_parameters():
+        if p.grad is None:
+            continue
+        g = p.grad.detach()
+        max_abs_overall = max(max_abs_overall, float(g.abs().max().item()))
+        robust_norm = float(torch.sqrt(torch.sum(g.to(torch.float64) ** 2)).item())
+        if robust_norm > best_norm:
+            best_norm = robust_norm
+            best_name = name
+    return best_name, max_abs_overall, best_norm
+
+
+def max_individual_abs_gradient(net: torch.nn.Module) -> float:
+    """Single largest |gradient element| across every parameter -- cheap,
+    used to populate every ring-buffer entry (not just STATE B ones)."""
+    max_abs = 0.0
+    for p in net.parameters():
+        if p.grad is not None:
+            max_abs = max(max_abs, float(p.grad.detach().abs().max().item()))
+    return max_abs
+
+
+# ---------------------------------------------------------------------------
+# Adam-state / parameter-magnitude per-epoch snapshots (sections 12/13)
+# ---------------------------------------------------------------------------
+
+
+def adam_state_snapshot(epoch: int, opt: torch.optim.Optimizer) -> AdamStateSnapshot:
+    """Compact per-epoch summary of Adam's moment buffers -- max and p99
+    absolute value of ``exp_avg``/``exp_avg_sq`` across every tracked
+    parameter, never the full tensors. Non-finite entries (should be
+    unreachable given the guard) are excluded from both stats rather than
+    silently propagating a NaN into a percentile computation; an entirely
+    non-finite buffer reports 0.0 for both (a fresh/uninitialized
+    optimizer -- ``opt.state`` empty -- reports the same)."""
+    all_ea: list[torch.Tensor] = []
+    all_eas: list[torch.Tensor] = []
+    for state in opt.state.values():
+        ea = state.get("exp_avg")
+        eas = state.get("exp_avg_sq")
+        if ea is not None:
+            flat = ea.detach().flatten().abs().double()
+            all_ea.append(flat[torch.isfinite(flat)])
+        if eas is not None:
+            flat = eas.detach().flatten().abs().double()
+            all_eas.append(flat[torch.isfinite(flat)])
+
+    def _max_and_p99(chunks: list[torch.Tensor]) -> tuple[float, float]:
+        nonempty = [c for c in chunks if c.numel() > 0]
+        if not nonempty:
+            return 0.0, 0.0
+        cat = torch.cat(nonempty)
+        return float(cat.max().item()), float(torch.quantile(cat, 0.99).item())
+
+    max_ea, p99_ea = _max_and_p99(all_ea)
+    max_eas, p99_eas = _max_and_p99(all_eas)
+    return AdamStateSnapshot(
+        epoch=epoch, max_abs_exp_avg=max_ea, max_abs_exp_avg_sq=max_eas,
+        p99_abs_exp_avg=p99_ea, p99_abs_exp_avg_sq=p99_eas,
+    )
+
+
+def parameter_magnitude_snapshot(epoch: int, net: torch.nn.Module) -> ParameterMagnitudeSnapshot:
+    """Compact per-epoch summary of the model's own parameter magnitudes
+    -- max |parameter| overall, plus the combined (float64-robust) norm
+    of the GRU's own parameters (``gru.*``) and the gain output head's
+    parameters (``output_fc.*``) separately, per ``KalmanNetGRU``'s own
+    submodule names (``input_fc``/``gru``/``output_fc``)."""
+    max_abs = 0.0
+    gru_sq = 0.0
+    out_sq = 0.0
+    for name, p in net.named_parameters():
+        v = p.detach()
+        max_abs = max(max_abs, float(v.abs().max().item()))
+        sq = float(torch.sum(v.to(torch.float64) ** 2).item())
+        if name.startswith("gru."):
+            gru_sq += sq
+        elif name.startswith("output_fc."):
+            out_sq += sq
+    return ParameterMagnitudeSnapshot(
+        epoch=epoch, max_abs_parameter=max_abs,
+        gru_weight_norm=math.sqrt(gru_sq), output_head_weight_norm=math.sqrt(out_sq),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ring-buffer / norm-overflow-event entry construction
 # ---------------------------------------------------------------------------
 
 
 def build_ring_buffer_entry(
     epoch: int, batch_index: int, batch_seqs: list[dict[str, Any]],
-    batch_loss: float, grad_norm_pre_clip: float, grad_nonfinite_pre_clip: bool,
+    batch_loss: float, outcome: SafeStepOutcome | None, net: torch.nn.Module | None,
     diagnostics: dict[str, Any],
+    max_individual_abs_gradient_override: float | None = None,
 ) -> RingBufferEntry:
+    """``outcome=None`` represents the "loss itself was already
+    non-finite, backward() was never called" case (no gradient exists at
+    all) -- distinct from all three ``nonfinite_guard`` states, which all
+    presuppose a real gradient was computed.
+
+    ``max_individual_abs_gradient_override``, when given, is used
+    verbatim instead of re-inspecting ``net``'s current gradients --
+    REQUIRED for a correct value on any STATE-B/STATE-C batch, since
+    ``safe_clip_and_step`` already zeroes gradients before returning
+    (callers must snapshot this immediately after ``backward()``, before
+    calling ``safe_clip_and_step``; see ``run_bounded_forensic_search``).
+    Falls back to a live (net) inspection only when no override is given
+    (e.g. direct unit-test calls against a still-populated ``net``)."""
     total_valid = 0
     total_meas_valid = 0
     max_gap = 0
@@ -244,6 +447,22 @@ def build_ring_buffer_entry(
     else:
         per_seq_losses_arr = np.array([batch_loss])
 
+    if outcome is None:
+        gradient_state = "loss_nonfinite_no_gradient"
+        grad_norm_pre_clip = float("nan")
+        grad_nonfinite_pre_clip = False
+        grad_norm_robust = float("nan")
+        max_abs_grad = float("nan")
+    else:
+        gradient_state = outcome.gradient_state
+        grad_norm_pre_clip = outcome.grad_norm_pre_clip
+        grad_nonfinite_pre_clip = outcome.grad_nonfinite_pre_clip
+        grad_norm_robust = outcome.grad_norm_robust
+        if max_individual_abs_gradient_override is not None:
+            max_abs_grad = max_individual_abs_gradient_override
+        else:
+            max_abs_grad = max_individual_abs_gradient(net) if net is not None else float("nan")
+
     return RingBufferEntry(
         epoch=epoch, batch_index=batch_index,
         sequence_ids=[s.get("actor_id") for s in batch_seqs],
@@ -261,6 +480,8 @@ def build_ring_buffer_entry(
         max_posterior_state_abs=diagnostics.get("max_posterior_state_abs", 0.0),
         max_hidden_state_abs=diagnostics.get("max_hidden_state_abs", 0.0),
         max_gain_abs=diagnostics.get("max_gain_abs", 0.0),
+        gradient_state=gradient_state, grad_norm_robust=grad_norm_robust,
+        max_individual_abs_gradient=max_abs_grad,
     )
 
 
@@ -277,6 +498,65 @@ def build_sequence_detail(
         length_frames=n, per_sequence_loss=per_seq_loss, n_valid=n, n_missing=n_missing,
         longest_gap=longest_gap, speed_p50=speed_p50, speed_p90=speed_p90, speed_max=speed_max,
         accel_p90=accel_p90, accel_max=accel_max,
+    )
+
+
+def build_norm_overflow_event(
+    epoch: int, batch_index: int, batch_seqs: list[dict[str, Any]], batch_loss: float,
+    outcome: SafeStepOutcome, net: KalmanNetGRU, device: str, loss_on_predict_only: bool,
+    top_n_sequences: int = 3,
+    largest_norm_parameter_name_override: str | None = None,
+    max_individual_abs_gradient_override: float | None = None,
+) -> NormOverflowEvent:
+    """Full compact forensic snapshot for ONE STATE-B (norm overflow)
+    occurrence -- section 10. Per-sequence loss requires one extra
+    forward pass per sequence in the batch (no backward, no
+    optimizer.step); called for every STATE-B event, not just the first,
+    since section 10 asks whether the recurring episodes share a common
+    data pattern across the whole population.
+
+    ``*_override``, when given, are used verbatim instead of
+    re-inspecting ``net``'s current gradients -- REQUIRED for a correct
+    value, since ``safe_clip_and_step`` already zeroes gradients before
+    returning (callers must snapshot this immediately after
+    ``backward()``, before calling ``safe_clip_and_step``; see
+    ``run_bounded_forensic_search``). Falls back to a live (net)
+    inspection only when no override is given (e.g. direct unit-test
+    calls against a still-populated ``net``)."""
+    if largest_norm_parameter_name_override is not None or max_individual_abs_gradient_override is not None:
+        largest_name = largest_norm_parameter_name_override
+        max_abs_grad = max_individual_abs_gradient_override if max_individual_abs_gradient_override is not None else 0.0
+    else:
+        largest_name, max_abs_grad, _largest_norm = largest_gradient_parameter(net)
+
+    total_valid = 0
+    total_meas_valid = 0
+    max_gap = 0
+    max_speed = 0.0
+    max_accel = 0.0
+    for seq in batch_seqs:
+        n = len(seq["frames"])
+        n_missing, gap, _ = _gap_stats(seq["z_meas"])
+        total_valid += n
+        total_meas_valid += (n - n_missing)
+        max_gap = max(max_gap, gap)
+        _, _, speed_max, _, accel_max = _speed_and_accel_stats(seq)
+        max_speed = max(max_speed, speed_max)
+        max_accel = max(max_accel, accel_max)
+    missing_fraction = 1.0 - (total_meas_valid / total_valid) if total_valid else 0.0
+
+    details = [build_sequence_detail(seq, net, device, loss_on_predict_only) for seq in batch_seqs]
+    details.sort(key=lambda d: d.per_sequence_loss, reverse=True)
+
+    return NormOverflowEvent(
+        epoch=epoch, batch_index=batch_index,
+        grad_norm_pre_clip=outcome.grad_norm_pre_clip, grad_norm_robust=outcome.grad_norm_robust,
+        robust_norm_also_overflowed=outcome.robust_norm_also_overflowed,
+        max_individual_abs_gradient=max_abs_grad, largest_norm_parameter_name=largest_name,
+        batch_loss=batch_loss, missing_fraction=missing_fraction, max_missing_gap=max_gap,
+        max_target_speed=max_speed, max_target_accel_proxy=max_accel,
+        max_hidden_state_abs=0.0, max_gain_abs=0.0,  # populated by caller from the batch's own diagnostics
+        top_loss_sequences=details[:top_n_sequences],
     )
 
 
@@ -327,12 +607,15 @@ def run_bounded_forensic_search(
     progress_every_n_batches: int = 500,
 ) -> ForensicResult:
     """Bounded, analysis-only reproduction. Stops the moment a genuine
-    (element-level) non-finite PRE-CLIP gradient is detected (the exact
-    ``safe_clip_and_step`` signal PR #56 uses to skip a step), or after
-    ``max_epochs`` complete with none observed. Never calls
-    ``optimizer.step()`` on a non-finite gradient (the guard already
-    guarantees this) and never continues training after the event is
-    captured.
+    STATE-C (element-level non-finite PRE-CLIP) gradient is detected (the
+    exact ``safe_clip_and_step`` signal PR #56 uses to skip a step), or
+    after ``max_epochs`` complete with none observed. Never calls
+    ``optimizer.step()`` on a STATE-B (norm-overflow) or STATE-C
+    (element-nonfinite) gradient -- ``safe_clip_and_step`` (PR #58)
+    already guarantees both are skipped -- and never continues training
+    after a STATE-C event is captured. STATE-B events do NOT stop the
+    search; every occurrence is captured into ``norm_overflow_events``
+    and the search continues.
 
     ``progress_callback(epoch, batch_index, n_batches_this_epoch,
     running_train_loss_mean, running_grad_norm_max)``, optional, default
@@ -347,6 +630,10 @@ def run_bounded_forensic_search(
 
     ring_buffer: deque[RingBufferEntry] = deque(maxlen=ring_buffer_size)
     per_epoch_trajectory: list[EpochTrajectoryPoint] = []
+    norm_overflow_events: list[NormOverflowEvent] = []
+    adam_state_trajectory: list[AdamStateSnapshot] = []
+    parameter_magnitude_trajectory: list[ParameterMagnitudeSnapshot] = []
+    cumulative_norm_overflow_count = 0
 
     failure_entry: RingBufferEntry | None = None
     failure_batch_seqs: list[dict[str, Any]] | None = None
@@ -354,6 +641,8 @@ def run_bounded_forensic_search(
     first_event_batch_index: int | None = None
     param_grad_reports: list[ParamGradReport] = []
     first_nonfinite_param_name: str | None = None
+    preceding_norm_overflow_count_in_ring_buffer: int | None = None
+    cumulative_norm_overflow_count_before_failure: int | None = None
 
     for epoch in range(max_epochs):
         if use_length_bucketing:
@@ -365,6 +654,8 @@ def run_bounded_forensic_search(
         epoch_losses: list[float] = []
         grad_norms: list[float] = []
         n_nonfinite_loss = 0
+        n_norm_overflow = 0
+        n_element_nonfinite = 0
 
         for batch_index, idx_group in enumerate(batch_index_groups):
             if len(idx_group) == 0:
@@ -383,20 +674,37 @@ def run_bounded_forensic_search(
                 epoch_losses.append(float("nan"))
                 entry = build_ring_buffer_entry(
                     epoch, batch_index, batch_seqs, float(batch_result.loss.item()),
-                    grad_norm_pre_clip=float("nan"), grad_nonfinite_pre_clip=False, diagnostics=diag,
+                    outcome=None, net=None, diagnostics=diag,
                 )
                 ring_buffer.append(entry)
                 continue
 
             batch_result.loss.backward()
+
+            # CRITICAL ORDERING: snapshot gradient diagnostics BEFORE
+            # calling safe_clip_and_step -- its STATE-B and STATE-C skip
+            # paths both call opt.zero_grad() before returning, so any
+            # per-parameter inspection done AFTER that call sees only
+            # zeros (a real bug found and fixed during this task's own
+            # 20-epoch run: pre-fix, every captured norm_overflow_event's
+            # `largest_norm_parameter_name`/`max_individual_abs_gradient`
+            # trivially showed the first-declared parameter / 0.0, since
+            # the true gradient had already been zeroed by the time it
+            # was inspected). Both snapshots are cheap (this model has
+            # only ~7,016 scalar parameters across ~10 tensors) and are
+            # computed unconditionally so they are available regardless
+            # of which state this batch turns out to be.
+            pre_guard_param_reports, pre_guard_first_nonfinite_name = localize_first_nonfinite_parameter(net)
+            pre_guard_largest_name, pre_guard_max_abs_grad, _pre_guard_largest_norm = largest_gradient_parameter(net)
+
             outcome = safe_clip_and_step(net, opt, grad_clip)
             grad_norms.append(outcome.grad_norm_pre_clip)
             epoch_losses.append(float(batch_result.loss.item()))
 
             entry = build_ring_buffer_entry(
                 epoch, batch_index, batch_seqs, float(batch_result.loss.item()),
-                grad_norm_pre_clip=outcome.grad_norm_pre_clip,
-                grad_nonfinite_pre_clip=outcome.grad_nonfinite_pre_clip, diagnostics=diag,
+                outcome=outcome, net=net, diagnostics=diag,
+                max_individual_abs_gradient_override=pre_guard_max_abs_grad,
             )
             ring_buffer.append(entry)
 
@@ -408,17 +716,46 @@ def run_bounded_forensic_search(
                 )
 
             if outcome.grad_nonfinite_pre_clip:
-                # THE EVENT -- genuine (element-level) non-finite
+                # THE EVENT -- genuine STATE-C (element-level) non-finite
                 # gradient, caught BEFORE clip_grad_norm_/optimizer.step
-                # by the PR #56 guard (no step was applied; parameters/
+                # by the safe-step guard (no step was applied; parameters/
                 # optimizer state remain exactly as they were before this
-                # batch). Capture and stop immediately.
+                # batch). Capture and stop immediately. Uses the PRE-guard
+                # snapshot (see comment above) -- the guard has already
+                # zeroed the real gradient by this point.
+                n_element_nonfinite += 1
                 failure_entry = entry
                 failure_batch_seqs = batch_seqs
                 first_event_epoch = epoch
                 first_event_batch_index = batch_index
-                param_grad_reports, first_nonfinite_param_name = localize_first_nonfinite_parameter(net)
+                param_grad_reports = pre_guard_param_reports
+                first_nonfinite_param_name = pre_guard_first_nonfinite_name
+                # Section 11: was this isolated, or the endpoint of
+                # accumulated STATE-B instability? Look at the ring
+                # buffer's own recent history (up to ring_buffer_size
+                # entries preceding this one) and the running total.
+                preceding_norm_overflow_count_in_ring_buffer = sum(
+                    1 for e in ring_buffer if e.gradient_state == "norm_overflow"
+                )
+                cumulative_norm_overflow_count_before_failure = cumulative_norm_overflow_count
                 break
+
+            if outcome.norm_overflow:
+                # STATE B -- capture the full forensic snapshot (section
+                # 10) for EVERY occurrence, not just the first, and
+                # continue (never stops the search). Uses the PRE-guard
+                # largest-parameter snapshot (see comment above).
+                n_norm_overflow += 1
+                cumulative_norm_overflow_count += 1
+                event = build_norm_overflow_event(
+                    epoch, batch_index, batch_seqs, float(batch_result.loss.item()),
+                    outcome, net, device, loss_on_predict_only, replay_top_n_sequences,
+                    largest_norm_parameter_name_override=pre_guard_largest_name,
+                    max_individual_abs_gradient_override=pre_guard_max_abs_grad,
+                )
+                event.max_hidden_state_abs = diag.get("max_hidden_state_abs", 0.0)
+                event.max_gain_abs = diag.get("max_gain_abs", 0.0)
+                norm_overflow_events.append(event)
 
         epoch_point = EpochTrajectoryPoint(
             epoch=epoch,
@@ -426,8 +763,11 @@ def run_bounded_forensic_search(
             grad_norm_mean=float(np.mean(grad_norms)) if grad_norms else 0.0,
             grad_norm_max=float(np.max(grad_norms)) if grad_norms else 0.0,
             n_batches=len(epoch_losses), n_nonfinite_loss_batches=n_nonfinite_loss,
+            n_norm_overflow_batches=n_norm_overflow, n_element_nonfinite_batches=n_element_nonfinite,
         )
         per_epoch_trajectory.append(epoch_point)
+        adam_state_trajectory.append(adam_state_snapshot(epoch, opt))
+        parameter_magnitude_trajectory.append(parameter_magnitude_snapshot(epoch, net))
         if progress_callback is not None:
             progress_callback(epoch, -1, len(batch_index_groups), epoch_point.train_loss_mean, epoch_point.grad_norm_max)
 
@@ -465,4 +805,9 @@ def run_bounded_forensic_search(
         failure_sequence_details=failure_sequence_details,
         param_grad_reports=param_grad_reports, first_nonfinite_param_name=first_nonfinite_param_name,
         per_epoch_trajectory=per_epoch_trajectory,
+        norm_overflow_events=norm_overflow_events,
+        adam_state_trajectory=adam_state_trajectory,
+        parameter_magnitude_trajectory=parameter_magnitude_trajectory,
+        preceding_norm_overflow_count_in_ring_buffer=preceding_norm_overflow_count_in_ring_buffer,
+        cumulative_norm_overflow_count_before_failure=cumulative_norm_overflow_count_before_failure,
     )
