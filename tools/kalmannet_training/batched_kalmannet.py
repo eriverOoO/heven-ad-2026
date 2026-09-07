@@ -134,6 +134,7 @@ class BatchedKalmanNetFilter:
         dt: torch.Tensor,
         measurement_valid: torch.Tensor,
         sequence_valid: torch.Tensor,
+        diagnostics_out: dict | None = None,
     ) -> torch.Tensor:
         """One global timestep across the whole batch.
 
@@ -150,6 +151,15 @@ class BatchedKalmanNetFilter:
         ``sequence_valid``: ``[B]`` bool -- this row actually HAS a real
         timestep here (True) vs. is padding past its own sequence's end
         (CASE A, False).
+        ``diagnostics_out``: optional, default ``None`` (zero behavior
+        change when omitted -- purely additive). If given a dict, this
+        call populates it in place with this timestep's intermediate
+        quantities (``meas_idx``, ``predict_only_idx``, ``x_prior``,
+        ``innovation``, ``gain`` -- all detached, on the ``meas``/
+        ``predict_only`` subset's own rows) for forensic instrumentation
+        (see ``explosion_forensics.py``) -- these are read directly from
+        THIS execution, never recomputed by a second, potentially
+        divergent replay.
 
         Returns the POST state at this timestep for every row
         (``[B, STATE_DIM]``) -- rows where ``sequence_valid`` is False are
@@ -174,7 +184,11 @@ class BatchedKalmanNetFilter:
         # network call at all).
         if bool(predict_only.any()):
             idx = predict_only.nonzero(as_tuple=True)[0]
-            new_x_post[idx] = f_batched(self.x_post[idx], dt[idx])
+            x_prior_predict_only = f_batched(self.x_post[idx], dt[idx])
+            new_x_post[idx] = x_prior_predict_only
+            if diagnostics_out is not None:
+                diagnostics_out["predict_only_idx"] = idx.detach().clone()
+                diagnostics_out["predict_only_x_prior"] = x_prior_predict_only.detach().clone()
 
         # CASE C: real timestep, measurement present -> full predict +
         # learned-gain update, exactly mirroring
@@ -213,6 +227,13 @@ class BatchedKalmanNetFilter:
             innovation = z_sub - y_pred_sub
             correction = torch.bmm(gain, innovation.unsqueeze(-1)).squeeze(-1)
             x_post_result = x_prior_sub + correction
+
+            if diagnostics_out is not None:
+                diagnostics_out["meas_idx"] = idx.detach().clone()
+                diagnostics_out["meas_x_prior"] = x_prior_sub.detach().clone()
+                diagnostics_out["innovation"] = innovation.detach().clone()
+                diagnostics_out["gain"] = gain.detach().clone()
+                diagnostics_out["meas_x_post"] = x_post_result.detach().clone()
 
             new_x_post[idx] = x_post_result
             new_x_post_prev[idx] = x_post_sub
@@ -290,7 +311,8 @@ class BatchLossResult:
 
 
 def run_batch(
-    net: KalmanNetGRU, batch: PaddedBatch, device: str, loss_on_predict_only: bool
+    net: KalmanNetGRU, batch: PaddedBatch, device: str, loss_on_predict_only: bool,
+    diagnostics_out: dict | None = None,
 ) -> BatchLossResult:
     """Batched equivalent of ``trainer_core.run_sequence``, run once per
     ``PaddedBatch`` instead of once per sequence. At ``batch.batch_size ==
@@ -308,6 +330,17 @@ def run_batch(
     ``docs/perception/kalmannet_batched_training_v1.md`` as
     THROUGHPUT MODE, never claimed numerically identical to the
     historical per-sequence optimizer path at ``batch_size>1``.
+
+    ``diagnostics_out``: optional, default ``None`` (zero behavior change
+    when omitted). If given a dict, populated in place with SCALAR
+    running-max diagnostics across the whole batch/sequence
+    (``max_innovation_abs``, ``max_prior_state_abs``,
+    ``max_posterior_state_abs``, ``max_hidden_state_abs``,
+    ``max_gain_abs``) -- read directly from THIS execution's own
+    ``step_masked(..., diagnostics_out=...)`` calls (see
+    ``explosion_forensics.py``), never a second, potentially divergent
+    replay. Kept scalar-only (not per-timestep/per-row) so this stays
+    cheap enough to enable on every batch of a bounded forensic run.
     """
     # Mirrors trainer_core.run_sequence's own x0 construction exactly:
     # x0 = [first_meas.x, first_meas.y, 0.0, 0.0] -- t=0 is guaranteed to
@@ -324,6 +357,17 @@ def run_batch(
     all_losses: list[torch.Tensor] = []
     nan_inf = False
 
+    def _running_max(key: str, tensor: torch.Tensor) -> None:
+        if diagnostics_out is None or tensor.numel() == 0:
+            return
+        val = float(tensor.detach().abs().max().item())
+        prev = diagnostics_out.get(key, 0.0)
+        # NaN comparisons are always False, so max(nan, x) would silently
+        # drop a NaN -- propagate it explicitly instead (a NaN magnitude
+        # IS the signal a forensic run needs to see, not something to
+        # discard via an unlucky comparison order).
+        diagnostics_out[key] = val if (val != val or val > prev) else prev
+
     for t in range(1, batch.t_max):
         z_t = batch.z_meas[:, t, :]
         dt_t = batch.dt[:, t]
@@ -331,7 +375,18 @@ def run_batch(
         seq_valid_t = batch.sequence_valid[:, t]
         gt_t = batch.x_true[:, t, :]
 
-        x_post_t = bkf.step_masked(z_t, dt_t, meas_valid_t, seq_valid_t)
+        step_diag: dict | None = {} if diagnostics_out is not None else None
+        x_post_t = bkf.step_masked(z_t, dt_t, meas_valid_t, seq_valid_t, diagnostics_out=step_diag)
+        if step_diag:
+            if "innovation" in step_diag:
+                _running_max("max_innovation_abs", step_diag["innovation"])
+                _running_max("max_gain_abs", step_diag["gain"])
+                _running_max("max_prior_state_abs", step_diag["meas_x_prior"])
+                _running_max("max_posterior_state_abs", step_diag["meas_x_post"])
+            if "predict_only_x_prior" in step_diag:
+                _running_max("max_prior_state_abs", step_diag["predict_only_x_prior"])
+            if bkf.net.h is not None:
+                _running_max("max_hidden_state_abs", bkf.net.h)
 
         if loss_on_predict_only:
             counted = seq_valid_t
@@ -344,8 +399,29 @@ def run_batch(
             if not torch.isfinite(per_row_sq_err).all():
                 nan_inf = True
             all_losses.append(per_row_sq_err)
+            if diagnostics_out is not None:
+                # Cheap per-ROW loss accumulation (sum + count), reusing
+                # the SAME per_row_sq_err just computed above -- avoids a
+                # second, separate per-sequence forward pass just to get
+                # a per-sequence loss breakdown (see explosion_forensics.py
+                # "RingBufferEntry" -- per-sequence loss min/median/p90/max
+                # for a bounded forensic run's per-batch summary).
+                row_loss_sum = diagnostics_out.setdefault(
+                    "_per_row_loss_sum", torch.zeros(batch.batch_size, device=device)
+                )
+                row_loss_count = diagnostics_out.setdefault(
+                    "_per_row_loss_count", torch.zeros(batch.batch_size, device=device)
+                )
+                row_loss_sum.index_add_(0, idx, per_row_sq_err.detach())
+                row_loss_count.index_add_(0, idx, torch.ones_like(per_row_sq_err))
         if bkf.net.h is not None and not torch.isfinite(bkf.net.h).all():
             nan_inf = True
+
+    if diagnostics_out is not None and "_per_row_loss_sum" in diagnostics_out:
+        row_sum = diagnostics_out.pop("_per_row_loss_sum")
+        row_count = diagnostics_out.pop("_per_row_loss_count")
+        safe_count = torch.where(row_count > 0, row_count, torch.ones_like(row_count))
+        diagnostics_out["per_row_loss"] = (row_sum / safe_count).cpu().numpy()
 
     if not all_losses:
         return BatchLossResult(torch.tensor(0.0, device=device), 0, False)

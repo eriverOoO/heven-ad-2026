@@ -1,5 +1,81 @@
 # STATUS
 
+## KalmanNet 10k GENERIC-ROBUST Seed-0 Explosion Forensics v1 — NOT REPRODUCED (analysis only, PR open, do not merge)
+
+Branch `analysis/kalmannet-10k-explosion-forensics-v1`, from merged PR #56
+`fix(kalmannet): harden training against numerical collapse` (verified
+`MERGED` via `gh pr view 56` before branching). **Analysis-only task: no
+training run to completion, no new seed, no official AV2 VAL evaluation,
+no architecture/hyperparameter change. The PR #56 safe-step guard stayed
+enabled throughout. PR opened but not merged, per this task's own scope.**
+
+Bounded (<=12 epoch) forensic reproduction of the real AV2 Scale-Up v2 10k
+GENERIC-ROBUST seed-0 run's documented **epoch-16** gradient-explosion
+collapse (`docs/perception/kalmannet_av2_10k_generic_v1.md`), using the
+exact frozen dataset (`~/datasets/av2/processed/kalmannet_scaleup_v2/train`,
+496,434 internal-TRAIN sequences), split
+(`scaleup_v2_internal_split_9k1k.json`), config (batch_size=64, lr=0.004,
+grad_clip=10.0, hidden_size=32, `generic_robust` corruption, seed=0), and
+new instrumentation (`explosion_forensics.py`: ring buffer, parameter-level
+non-finite localization, individual-sequence replay, all additive-only via
+new `diagnostics_out` plumbing on `batched_kalmannet.run_batch`/
+`step_masked`).
+
+**Result: NOT reproduced within the 12-epoch bound** -- zero of 93,084
+processed batches ever produced a genuine per-element non-finite gradient
+(`grad_nonfinite_pre_clip` stayed `False` throughout). However, the run
+closely reproduces the original run's own documented qualitative pattern:
+instability onset at **epoch 6** (matching the original's own "From epoch 6
+onward, every subsequent epoch hit at least one batch with an inf ...
+gradient norm" finding exactly), six recurring large-gradient episodes
+(peak `grad_norm_pre_clip` up to `inf` via L2-norm-squaring overflow, loss
+running-mean spikes as high as `1.75e25`), and clean self-recovery to the
+~0.73-0.76 baseline loss every single time -- directly analogous to the
+original run's own documented "contained through epoch 15" phase. **Most
+likely explanation: the 12-epoch bound stopped 4 epochs short of the
+original's documented epoch-16 collapse**, not a failure of the mechanism
+to reproduce.
+
+**Mechanistic distinction found**: every observed episode here was an
+**aggregate L2-norm overflow with every individual gradient element still
+finite** (`torch.isfinite(p.grad).all() == True`) -- `clip_grad_norm_`'s
+zero clip-coefficient (`max_norm / (inf + eps) == 0`) safely zeroes a
+still-finite value (`0 * finite == 0`), a self-neutralizing no-op, distinct
+from Task 2's proven poisoning mechanism (`0 * inf == nan`), which
+specifically requires a literal per-element non-finite gradient -- never
+observed in this run. This is consistent with, not contradictory to, PR
+#56's fix: the guard's protective value is for the rarer, stronger
+per-element case, which simply did not occur in the tested window.
+
+**Tests**: `test_explosion_forensics.py` (new, 12), `test_batched_kalmannet.py`
+(+5, additive `diagnostics_out` plumbing, default `None`, zero behavior
+change verified). Full `tools/kalmannet_training/` suite **216/216 pass**.
+`pyflakes`/`py_compile`/`git diff --check` clean.
+
+**Files**: `tools/kalmannet_training/{explosion_forensics.py,
+run_10k_explosion_forensics.py,test_explosion_forensics.py}` (new),
+`tools/kalmannet_training/{batched_kalmannet.py,test_batched_kalmannet.py}`
+(additive `diagnostics_out` param), `docs/perception/
+kalmannet_10k_explosion_forensics_v1.md` (new, full analysis), this file.
+No `kalmannet_core.py`/`trainer_core.py`/`batched_trainer.py`/
+`nonfinite_guard.py` change -- PR #56's safety fix reused completely
+unmodified. No checkpoint/dataset/raw-JSON-dump committed (194 KB forensic
+JSON stays machine-local at
+`~/datasets/av2/checkpoints/kalmannet_10k_explosion_forensics_seed0.json`).
+
+**Recommended next task**: re-run this exact same bounded forensic search
+extended to ~18-20 epochs (comfortably past the original run's own
+epoch-16 collapse, still short of its full 60-epoch budget), same frozen
+dataset/seed/config, guard still active -- only `MAX_EPOCHS` in
+`run_10k_explosion_forensics.py` needs to change, every other tool from
+this task reuses unchanged. Not started here, per this task's own explicit
+12-epoch bound. **Do NOT start another training run as part of closing out
+this task.**
+
+## KalmanNet 10k Explosion Forensics v1 result: **NOT REPRODUCED (PR open, not merged)**
+
+---
+
 ## AV2 KalmanNet Scale-Up Dataset v2 — COMPLETE (data acquisition/preparation only, no training)
 
 Branch `data/av2-kalmannet-scaleup-v2`, from merged PR #53
