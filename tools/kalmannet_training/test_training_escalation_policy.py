@@ -58,6 +58,15 @@ def _collapsed_outcome():
     )
 
 
+def _norm_overflow_outcome():
+    return SafeStepOutcome(
+        applied=False, grad_norm_pre_clip=float("inf"),
+        grad_nonfinite_pre_clip=False, grad_nonfinite_post_clip=False,
+        gradient_state="norm_overflow", norm_overflow=True,
+        grad_norm_robust=1.2e20,
+    )
+
+
 def _applied_outcome(real_outcome):
     return real_outcome
 
@@ -191,6 +200,123 @@ def test_batched_collapse_forces_catastrophic_true_even_with_a_good_earlier_chec
     assert math.isfinite(result.best_val)
     assert result.training_collapsed is True
     assert result.catastrophic is True  # <-- the bug: this used to be False in this exact scenario
+
+
+# ---------------------------------------------------------------------------
+# STATE B (norm overflow) accounting -- must NOT feed the STATE-C-specific
+# tier-2 escalation counter (see docs/perception/
+# kalmannet_gradient_norm_overflow_v1.md section 4/5).
+# ---------------------------------------------------------------------------
+
+def test_batched_repeated_norm_overflow_events_do_not_trigger_state_c_escalation(monkeypatch):
+    """Many STATE-B (norm-overflow) skips in one epoch -- well beyond the
+    STATE-C tier-2 threshold of 5 -- must NOT mark training_unstable or
+    abort, since STATE B is self-neutralizing and has no proven Adam-
+    poisoning risk. Only STATE C escalates."""
+    train_seqs = [_make_sequence(n=8, x0=float(i), seed=i) for i in range(20)]
+    val_seqs = [_make_sequence(n=6, x0=float(i) + 0.5, seed=100 + i) for i in range(2)]
+
+    def always_norm_overflow(net, opt, grad_clip):
+        return _norm_overflow_outcome()
+
+    monkeypatch.setattr(batched_trainer, "safe_clip_and_step", always_norm_overflow)
+    result = batched_trainer.train_one_run_batched(
+        train_seqs, val_seqs, seed=0, device="cpu", batch_size=2, use_length_bucketing=False,
+        lr=0.01, max_epochs=4, patience=10, hidden_size=4,
+    )
+    assert result.training_unstable is False
+    assert result.training_collapsed is False
+    assert result.n_epochs_run == 4  # ran the full budget -- STATE B never aborts
+    assert result.norm_overflow_count == 10 * 4  # 20 seqs / batch_size=2 = 10 batches/epoch, 4 epochs
+    assert result.norm_overflow_skip_count == result.norm_overflow_count
+    assert result.per_element_nonfinite_gradient_count == 0
+    assert result.nonfinite_gradient_skip_count == 0
+    assert result.grad_skip_count == result.norm_overflow_count  # combined counter includes STATE B
+
+
+def test_batched_norm_overflow_and_element_nonfinite_are_tracked_in_separate_counters(monkeypatch):
+    """A mix of STATE-B and STATE-C events must never let one hide inside
+    the other's dedicated counter."""
+    train_seqs = [_make_sequence(n=8, x0=float(i), seed=i) for i in range(20)]
+    val_seqs = [_make_sequence(n=6, x0=float(i) + 0.5, seed=100 + i) for i in range(2)]
+
+    call_count = {"n": 0}
+
+    def alternating(net, opt, grad_clip):
+        call_count["n"] += 1
+        return _norm_overflow_outcome() if call_count["n"] % 2 == 0 else _skip_outcome()
+
+    monkeypatch.setattr(batched_trainer, "safe_clip_and_step", alternating)
+    result = batched_trainer.train_one_run_batched(
+        train_seqs, val_seqs, seed=0, device="cpu", batch_size=2, use_length_bucketing=False,
+        lr=0.01, max_epochs=1, patience=10, hidden_size=4,
+    )
+    # 10 batches in this one epoch: 5 STATE C (odd calls), 5 STATE B (even calls).
+    # STATE C alone (5) does not exceed the >5 threshold, so no abort.
+    assert result.per_element_nonfinite_gradient_count == 5
+    assert result.norm_overflow_count == 5
+    assert result.nonfinite_gradient_skip_count == 5
+    assert result.norm_overflow_skip_count == 5
+    assert result.grad_skip_count == 10
+    assert result.training_unstable is False
+
+
+def test_batched_large_finite_gradient_count_tracks_actual_clipping(monkeypatch):
+    """STATE A steps whose grad_norm_pre_clip exceeds grad_clip (i.e.
+    clip_grad_norm_ actually rescaled something) are counted distinctly
+    from trivially-small-gradient healthy steps. Fully deterministic --
+    every call is mocked, so the count depends only on the fixed
+    grad_norm_pre_clip values chosen here, never on real gradient
+    magnitudes from synthetic data."""
+    train_seqs = [_make_sequence(n=8, x0=float(i), seed=i) for i in range(6)]
+    val_seqs = [_make_sequence(n=6, x0=float(i) + 0.5, seed=100 + i) for i in range(2)]
+
+    # 6 seqs / batch_size=2 = 3 batches/epoch, 1 epoch -> exactly 3 calls.
+    reported_norms = [3.0, 10.0, 25.0]  # below, exactly at, above grad_clip=10.0
+    call_count = {"n": 0}
+
+    def fixed_norms(net, opt, grad_clip):
+        norm = reported_norms[call_count["n"]]
+        call_count["n"] += 1
+        return SafeStepOutcome(
+            applied=True, grad_norm_pre_clip=norm,
+            grad_nonfinite_pre_clip=False, grad_nonfinite_post_clip=False,
+            gradient_state="healthy", grad_norm_robust=norm,
+        )
+
+    monkeypatch.setattr(batched_trainer, "safe_clip_and_step", fixed_norms)
+    result = batched_trainer.train_one_run_batched(
+        train_seqs, val_seqs, seed=0, device="cpu", batch_size=2, use_length_bucketing=False,
+        lr=0.01, max_epochs=1, patience=10, hidden_size=4, grad_clip=10.0,
+    )
+    # Strictly greater than grad_clip only -- 25.0 counts, 3.0 and the
+    # exactly-at-threshold 10.0 do not.
+    assert result.large_finite_gradient_count == 1
+
+
+def test_batched_parameter_and_optimizer_state_collapse_counted_separately(monkeypatch):
+    """Section 5: parameter_collapse_count and optimizer_state_collapse_count
+    must be tracked independently -- a collapse event may set either or
+    both flags, and a caller diagnosing WHICH failed should not have to
+    guess from a single combined boolean."""
+    train_seqs = [_make_sequence(n=8, x0=float(i), seed=i) for i in range(6)]
+    val_seqs = [_make_sequence(n=6, x0=float(i) + 0.5, seed=100 + i) for i in range(2)]
+
+    def optimizer_only_collapse(net, opt, grad_clip):
+        return SafeStepOutcome(
+            applied=True, grad_norm_pre_clip=1.0,
+            grad_nonfinite_pre_clip=False, grad_nonfinite_post_clip=False,
+            params_nonfinite_after_step=False, optimizer_state_nonfinite_after_step=True,
+        )
+
+    monkeypatch.setattr(batched_trainer, "safe_clip_and_step", optimizer_only_collapse)
+    result = batched_trainer.train_one_run_batched(
+        train_seqs, val_seqs, seed=0, device="cpu", batch_size=2, use_length_bucketing=False,
+        lr=0.01, max_epochs=10, patience=10, hidden_size=4,
+    )
+    assert result.training_collapsed is True
+    assert result.optimizer_state_collapse_count == 1
+    assert result.parameter_collapse_count == 0
 
 
 # ---------------------------------------------------------------------------

@@ -211,10 +211,31 @@ def train_one_run_batched(
                     sequences=[summarize_sequence(s) for s in batch_seqs],
                 ))
 
-            if not outcome.applied:
+            if outcome.gradient_state == "norm_overflow":
+                # STATE B: every gradient element finite, but the
+                # aggregate norm reduction overflowed. Self-neutralizing
+                # (never poisons Adam), so this deliberately does NOT
+                # feed the STATE-C-specific tier-2 escalation counter
+                # (`nonfinite_grad_skips_this_epoch`) -- it is tracked in
+                # its own dedicated counters instead (section 5 of
+                # docs/perception/kalmannet_gradient_norm_overflow_v1.md).
                 any_nan_train = True
                 result.nonfinite_step_count += 1
                 result.grad_skip_count += 1
+                result.norm_overflow_count += 1
+                result.norm_overflow_skip_count += 1
+                epoch_train_losses.append(float("nan"))
+                continue
+
+            if not outcome.applied:
+                # Remaining not-applied case: STATE C (element-nonfinite),
+                # possibly the defensive post-clip path (unreachable in
+                # practice now that STATE B is routed away above).
+                any_nan_train = True
+                result.nonfinite_step_count += 1
+                result.grad_skip_count += 1
+                result.per_element_nonfinite_gradient_count += 1
+                result.nonfinite_gradient_skip_count += 1
                 nonfinite_grad_skips_this_epoch += 1
                 epoch_train_losses.append(float("nan"))
                 continue
@@ -227,11 +248,18 @@ def train_one_run_batched(
                 # failure rather than continuing to train on a corrupted
                 # model. FAIL FAST: mark collapsed and stop training now,
                 # mid-epoch, rather than producing further NaN epochs.
+                if outcome.params_nonfinite_after_step:
+                    result.parameter_collapse_count += 1
+                if outcome.optimizer_state_nonfinite_after_step:
+                    result.optimizer_state_collapse_count += 1
                 any_nan_train = True
                 result.training_collapsed = True
                 result.abort_reason = "params_or_optimizer_state_nonfinite_after_step"
                 epoch_train_losses.append(float("nan"))
                 break
+
+            if grad_clip is not None and outcome.grad_norm_pre_clip > grad_clip:
+                result.large_finite_gradient_count += 1
 
             epoch_train_losses.append(batch_result.loss.item())
             if batch_result.nan_inf:

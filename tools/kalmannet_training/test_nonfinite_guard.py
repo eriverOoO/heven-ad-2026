@@ -6,6 +6,7 @@ moment buffers if fed one directly."""
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -197,3 +198,169 @@ def test_grad_clip_none_still_guards_against_nonfinite_gradient():
     outcome = safe_clip_and_step(net, opt, grad_clip=None)
     assert outcome.applied is False
     assert torch.isfinite(net.weight).all()
+
+
+# ---------------------------------------------------------------------------
+# Three-state classification (see docs/perception/
+# kalmannet_gradient_norm_overflow_v1.md): STATE A (healthy), STATE B
+# (aggregate norm overflow, every element finite), STATE C (element
+# non-finite). Section 6's four exact numerical cases: A, B, C, D.
+# ---------------------------------------------------------------------------
+
+
+def test_state_a_ordinary_finite_gradients_and_finite_norm():
+    """Case A: ordinary finite gradients + finite norm -- healthy step."""
+    net, opt = _linear_with_adam()
+    xx = torch.randn(1, 4)
+    (net(xx) ** 2).mean().backward()
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+    assert outcome.gradient_state == "healthy"
+    assert outcome.norm_overflow is False
+    assert outcome.grad_nonfinite_pre_clip is False
+    assert outcome.applied is True
+    assert math.isfinite(outcome.grad_norm_pre_clip)
+    assert math.isfinite(outcome.grad_norm_robust)
+    assert outcome.robust_norm_also_overflowed is False
+
+
+def test_state_b_finite_elements_whose_float32_aggregate_norm_overflows():
+    """Case B: every individual gradient element is finite (well within
+    float32's representable range, ~3.4e38), but the ordinary (float32-
+    native) L2-norm REDUCTION overflows to inf because squaring an
+    element as small as ~1.9e19 already exceeds float32's max. Empirically
+    verified threshold (see task session): a 4x4 tensor filled with 1e19
+    triggers this deterministically."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    huge_but_finite = 1e19
+    net.weight.grad = torch.full_like(net.weight, huge_but_finite)
+    net.bias.grad = torch.full_like(net.bias, huge_but_finite)
+
+    # Prove every element is individually finite BEFORE calling the guard.
+    assert torch.isfinite(net.weight.grad).all()
+    assert torch.isfinite(net.bias.grad).all()
+    # Prove the ordinary float32 norm reduction itself overflows.
+    assert not math.isfinite(float(net.weight.grad.norm(2).item()))
+
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+
+    # Classified as STATE B, never STATE C.
+    assert outcome.gradient_state == "norm_overflow"
+    assert outcome.norm_overflow is True
+    assert outcome.grad_nonfinite_pre_clip is False
+    assert outcome.applied is False
+    # Ordinary norm reports inf (the defect this task fixes visibility for).
+    assert not math.isfinite(outcome.grad_norm_pre_clip)
+    # The robust float64 diagnostic recognizes the true large FINITE
+    # magnitude instead of also reporting inf/nan.
+    assert math.isfinite(outcome.grad_norm_robust)
+    assert outcome.grad_norm_robust > 1e19
+    assert outcome.robust_norm_also_overflowed is False
+    # Optimizer state / parameters must be completely untouched -- no
+    # step was ever attempted.
+    assert torch.isfinite(net.weight).all()
+    assert len(opt.state) == 0
+    assert outcome.skipped_reason == "norm_overflow"
+
+
+def test_state_b_reported_via_grad_norm_safe_matches_ordinary_norm():
+    """The ordinary norm the guard reports for a STATE-B event is exactly
+    what a plain (non-upcast) per-tensor float32 norm combination would
+    give -- confirms the guard isn't silently using the robust value in
+    place of the ordinary one."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    net.weight.grad = torch.full_like(net.weight, 1e19)
+    net.bias.grad = torch.zeros_like(net.bias)
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+    assert outcome.gradient_state == "norm_overflow"
+    assert outcome.grad_norm_pre_clip == float("inf")
+
+
+def test_state_c_one_gradient_element_is_inf():
+    """Case C: at least one gradient element is inf -- must classify as
+    element_nonfinite (STATE C), not norm_overflow, and skip exactly like
+    the pre-existing behavior."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    net.weight.grad = torch.full_like(net.weight, float("inf"))
+    net.bias.grad = torch.zeros_like(net.bias)
+
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+    assert outcome.gradient_state == "element_nonfinite"
+    assert outcome.norm_overflow is False
+    assert outcome.grad_nonfinite_pre_clip is True
+    assert outcome.applied is False
+    assert torch.isfinite(net.weight).all()
+    assert len(opt.state) == 0
+    assert outcome.skipped_reason == "nonfinite_gradient_pre_clip"
+
+
+def test_state_c_one_gradient_element_is_nan():
+    """Case D: one gradient element is nan -- same classification/skip as
+    the inf case (both are STATE C)."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    net.weight.grad = torch.full_like(net.weight, float("nan"))
+    net.bias.grad = torch.zeros_like(net.bias)
+
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+    assert outcome.gradient_state == "element_nonfinite"
+    assert outcome.norm_overflow is False
+    assert outcome.grad_nonfinite_pre_clip is True
+    assert outcome.applied is False
+    assert torch.isfinite(net.weight).all()
+    assert len(opt.state) == 0
+
+
+def test_state_b_never_calls_clip_grad_norm_and_reports_event_before_zeroing():
+    """Directly proves the danger this task's policy avoids: if
+    clip_grad_norm_ WERE called on a STATE-B gradient, it would silently
+    zero it (0 * finite == 0) with NO event ever recorded. This guard
+    skips BEFORE that call, reports the event with the TRUE (robust)
+    pre-zero magnitude in ``outcome.grad_norm_robust``, and only THEN
+    zeroes the gradient (per section 3's own "skip the optimizer step ...
+    zero gradients" policy) -- the same explicit-zero-after-skip
+    convention already used for STATE C, just now also visible via a
+    dedicated, correctly-classified event rather than hiding inside an
+    apparently-successful clipped step."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    huge = 1e19
+    net.weight.grad = torch.full_like(net.weight, huge)
+    net.bias.grad = torch.full_like(net.bias, huge)
+
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+
+    # The event itself reports the TRUE robust magnitude, not a zero.
+    assert outcome.gradient_state == "norm_overflow"
+    assert outcome.grad_norm_robust > 1e19
+    # Gradients are explicitly zeroed AFTER the event is reported (same
+    # convention as STATE C) -- never left dangling for a caller to
+    # accidentally step on.
+    assert torch.equal(net.weight.grad, torch.zeros_like(net.weight))
+    assert torch.equal(net.bias.grad, torch.zeros_like(net.bias))
+
+
+def test_repeated_state_b_events_never_poison_adam_across_finite_steps():
+    """A STATE-B event followed by ordinary finite steps must behave
+    exactly like the STATE-C recovery test -- no lasting damage,
+    regardless of how the event is classified."""
+    net, opt = _linear_with_adam()
+    net.zero_grad()
+    net.weight.grad = torch.full_like(net.weight, 1e19)
+    net.bias.grad = torch.zeros_like(net.bias)
+    outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+    assert outcome.applied is False
+    assert torch.isfinite(net.weight).all()
+
+    for _ in range(5):
+        opt.zero_grad()
+        xx = torch.randn(1, 4)
+        yy = (net(xx) ** 2).mean()
+        yy.backward()
+        outcome = safe_clip_and_step(net, opt, grad_clip=10.0)
+        assert outcome.applied is True
+        assert outcome.collapsed is False
+        assert torch.isfinite(net.weight).all()
+        assert optimizer_state_finite(opt)
