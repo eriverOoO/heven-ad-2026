@@ -11,6 +11,7 @@ handling, padding semantics, missing-vs-present-measurement masking, and
 from __future__ import annotations
 
 import copy
+import math
 import sys
 from pathlib import Path
 
@@ -548,3 +549,104 @@ def test_one_row_going_nan_mid_sequence_does_not_leak_into_other_rows():
             f"row 0's output at t={i + 1} diverged from the alone-run after row 1's hidden state "
             f"was poisoned to NaN at t={poison_at_t} -- state leaked across rows"
         )
+
+
+# ---------------------------------------------------------------------------
+# Optional diagnostics_out hook (kalmannet_10k_explosion_forensics_v1):
+# purely additive, must never change step_masked's own output or behavior
+# when omitted, and must report values consistent with that same execution
+# when provided.
+# ---------------------------------------------------------------------------
+
+
+def test_step_masked_diagnostics_out_does_not_change_output():
+    seq = _make_sequence(n=10, x0=0.0, vx=2.0, seed=5)
+    x0 = torch.tensor([[seq["z_meas"][0][0], seq["z_meas"][0][1], 0.0, 0.0]])
+    batch = build_padded_batch([seq], device="cpu")
+
+    net_a = _fresh_net(seed=9)
+    bkf_a = BatchedKalmanNetFilter(net_a, device="cpu")
+    bkf_a.init_batch(x0)
+    states_a = []
+    for t in range(1, batch.t_max):
+        out = bkf_a.step_masked(batch.z_meas[:, t, :], batch.dt[:, t],
+                                 batch.measurement_valid[:, t], batch.sequence_valid[:, t])
+        states_a.append(out.detach().clone())
+
+    net_b = _fresh_net(seed=9)
+    bkf_b = BatchedKalmanNetFilter(net_b, device="cpu")
+    bkf_b.init_batch(x0)
+    states_b = []
+    for t in range(1, batch.t_max):
+        diag: dict = {}
+        out = bkf_b.step_masked(batch.z_meas[:, t, :], batch.dt[:, t],
+                                 batch.measurement_valid[:, t], batch.sequence_valid[:, t],
+                                 diagnostics_out=diag)
+        states_b.append(out.detach().clone())
+        assert "meas_idx" in diag  # this sequence has a measurement present every step
+
+    for a, b in zip(states_a, states_b):
+        assert torch.equal(a, b), "passing diagnostics_out changed step_masked's own output"
+
+
+def test_step_masked_diagnostics_out_reports_consistent_values():
+    seq = _make_sequence(n=6, x0=0.0, vx=2.0, seed=3)
+    x0 = torch.tensor([[seq["z_meas"][0][0], seq["z_meas"][0][1], 0.0, 0.0]])
+    batch = build_padded_batch([seq], device="cpu")
+    net = _fresh_net(seed=11)
+    bkf = BatchedKalmanNetFilter(net, device="cpu")
+    bkf.init_batch(x0)
+
+    diag: dict = {}
+    out = bkf.step_masked(batch.z_meas[:, 1, :], batch.dt[:, 1],
+                           batch.measurement_valid[:, 1], batch.sequence_valid[:, 1],
+                           diagnostics_out=diag)
+    # This sequence's measurement is present at every step -> "meas" branch only.
+    assert diag["meas_idx"].tolist() == [0]
+    assert torch.allclose(diag["meas_x_post"], out)
+    assert diag["gain"].shape[0] == 1
+    assert torch.isfinite(diag["innovation"]).all()
+
+
+def test_step_masked_diagnostics_out_none_default_is_unaffected():
+    """Default (diagnostics_out=None) must behave exactly as before this
+    parameter existed -- covered implicitly by every other test in this
+    file (all call step_masked without the kwarg), asserted explicitly
+    here for clarity."""
+    seq = _make_sequence(n=5, x0=0.0, seed=1)
+    x0 = torch.tensor([[seq["z_meas"][0][0], seq["z_meas"][0][1], 0.0, 0.0]])
+    batch = build_padded_batch([seq], device="cpu")
+    net = _fresh_net(seed=1)
+    bkf = BatchedKalmanNetFilter(net, device="cpu")
+    bkf.init_batch(x0)
+    out = bkf.step_masked(batch.z_meas[:, 1, :], batch.dt[:, 1],
+                           batch.measurement_valid[:, 1], batch.sequence_valid[:, 1])
+    assert torch.isfinite(out).all()
+
+
+def test_run_batch_diagnostics_out_does_not_change_loss_and_reports_finite_maxes():
+    seqs = [_make_sequence(n=8, x0=float(i), seed=i) for i in range(3)]
+    net_a = _fresh_net(seed=20)
+    batch_a = build_padded_batch(seqs, device="cpu")
+    result_a = run_batch(net_a, batch_a, "cpu", True)
+
+    net_b = _fresh_net(seed=20)
+    batch_b = build_padded_batch(seqs, device="cpu")
+    diag: dict = {}
+    result_b = run_batch(net_b, batch_b, "cpu", True, diagnostics_out=diag)
+
+    assert torch.equal(result_a.loss, result_b.loss)
+    assert result_a.n_loss_terms == result_b.n_loss_terms
+    for key in ("max_innovation_abs", "max_prior_state_abs", "max_posterior_state_abs",
+                "max_hidden_state_abs", "max_gain_abs"):
+        assert key in diag
+        assert math.isfinite(diag[key])
+        assert diag[key] >= 0.0
+
+
+def test_run_batch_diagnostics_out_none_default_unaffected():
+    seqs = [_make_sequence(n=6, x0=0.0, seed=2)]
+    net = _fresh_net(seed=5)
+    batch = build_padded_batch(seqs, device="cpu")
+    result = run_batch(net, batch, "cpu", True)  # no diagnostics_out
+    assert torch.isfinite(result.loss)
