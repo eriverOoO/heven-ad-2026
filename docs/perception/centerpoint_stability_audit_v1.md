@@ -173,3 +173,75 @@ No held-out MORAI scene with both LiDAR and actor GT is available. Local labels 
 3. Stricter secondary NMS cuts IDSW 443→273 and raises HOTA 0.05293→0.12750 at 80.59% recall.
 4. No held-out scene exists to justify a model-quality or domain-generalization training claim.
 5. A production decision still requires fresh raw-model NMS 0.10 replay and a sequence-disjoint MORAI evaluation.
+
+## 19. Fresh raw-model NMS experiment
+
+`infer_fresh_nms.py` performs fresh CUDA inference from the same historical checkpoint and input for each requested threshold. It changes only the instantiated `model.dense_head.model_cfg.POST_PROCESSING.NMS_CONFIG.NMS_THRESH`; it does not write the YAML, OpenPCDet checkout, ROS node, or tracker configuration. The default requested threshold is the historical 0.70. Every run has score threshold 0.10, `nms_gpu`, pre-max 4096, post-max 500, batch 1, and workers 0. Per-run external metadata records the requested/actual in-model threshold.
+
+The fresh 0.70 output reproduces the historical baseline exactly at reported precision (29,056 detections, 81.05% recall, 7.17 predictions/GT, IDSW 443, HOTA 0.05293), validating the default path. Each of the other settings is independently generated from a separate model forward over the same 1,764 frames, not chained from another NMS output.
+
+| fresh NMS IoU | recall | mean position error | predictions/GT | >=2 / >=5 duplicates | unmatched/frame | residual-centre jitter |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.70 | 81.05% | 0.370 m | 7.17 | 79.75% / 75.14% | 15.16 | 0.464 m |
+| 0.50 | 80.94% | 0.494 m | 4.45 | 78.52% / 57.03% | 9.55 | 0.573 m |
+| 0.30 | 80.84% | 0.692 m | 1.97 | 62.31% / 3.20% | 4.23 | 0.682 m |
+| 0.20 | 80.66% | 0.767 m | 1.38 | 42.37% / 0.07% | 2.82 | 0.650 m |
+| 0.10 | 80.59% | 0.802 m | 0.96 | 13.82% / 0.00% | 1.58 | 0.583 m |
+
+## 20. Secondary-vs-fresh NMS comparison
+
+Fresh 0.10 and historical-0.70-plus-secondary-0.10 are close but **not identical**: fresh has 5,071 detections versus secondary 5,069; only 1,066/1,764 frames have exactly the same `(x,y,score)` candidate set, with 1,212 fresh-only and 1,210 secondary-only rounded candidates. This is expected from score-ordered greedy NMS: suppressing at 0.70 before a second 0.10 pass changes the available suppression graph.
+
+| method at 0.10 | recall | predictions/GT | >=2 rate | IDSW | fragmentation | HOTA |
+|---|---:|---:|---:|---:|---:|---:|
+| historical 0.70 + secondary 0.10 | 80.59% | 0.96 | 13.82% | 273 | 235 | 0.12750 |
+| fresh raw-model 0.10 | 80.59% | 0.96 | 13.82% | 273 | 235 | 0.12755 |
+
+Thus the practical conclusion holds under actual model-time NMS, while the two procedures must not be described as mathematically equivalent.
+
+## 21. Tracker replay and fragmentation analysis
+
+The tracker remains fixed: 3 m Euclidean gate, Hungarian, linear KF, detector yaw, `min_hits=1`, `max_age=2`. TrackEval decomposition is available and was used.
+
+| fresh NMS | IDSW | fragmentation | tracker IDs | HOTA | DetA | AssA | LocA |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.70 | 443 | 73 | 5,916 | 0.05293 | 0.04843 | 0.05817 | 0.80311 |
+| 0.50 | 520 | 106 | 4,362 | 0.06412 | 0.06552 | 0.06307 | 0.77564 |
+| 0.30 | 468 | 184 | 2,728 | 0.08430 | 0.10754 | 0.06640 | 0.74860 |
+| 0.20 | 375 | 213 | 2,150 | 0.09949 | 0.13397 | 0.07435 | 0.74100 |
+| 0.10 | **273** | **235** | **1,674** | **0.12755** | **0.17778** | **0.09218** | 0.73652 |
+
+DetA and AssA increase monotonically, while LocA falls because stronger NMS retains the highest-score rather than GT-nearest candidate. Fragmentation increases monotonically, confirming the stated continuity trade-off.
+
+For event inspection, all 13 actor-frames that were officially matched at 0.70 but missed at fresh 0.10 were enumerated (actors 48, 31, 18, 20; examples frame indices 435, 980, 1008, 1014–1024, 1298–1301). These are category A: a true match was removed by NMS. There are 539 actor-frames missed by both 0.70 and 0.10: score is fixed at 0.10, so they are pre-existing model/score-stage temporary misses, not new NMS suppressions. The 162-fragmentation increase cannot be explained by only 13 removed official matches; the 0.370→0.802 m localization degradation and retained-score behavior support category C (wrong duplicate retained) as the main remaining mechanism. Direct tracker assignment provenance was not logged, so no unsupported exact C/E percentage is claimed; tracker `max_age` is unchanged.
+
+## 22. Pareto post-processing candidates
+
+| role | candidate | reason |
+|---|---|---|
+| Conservative | fresh 0.50 | recall loss 0.11 pp, substantial candidate reduction; fragmentation +33 and IDSW worse, so it is conservative detection-side only. |
+| Balanced | fresh 0.20 | duplicate >=2 drops 46.9 points, IDSW 443→375, HOTA nearly doubles; fragmentation +140. |
+| Aggressive | fresh 0.10 | largest duplicate/IDSW/HOTA improvement; fragmentation 73→235 and localization degradation make continuity cost explicit. |
+
+There is no candidate that simultaneously improves every metric. On this tracker/evaluation, 0.10 is the strongest practical duplicate/identity remedy; 0.20 is the appropriate balanced candidate for a continuity-sensitive follow-up.
+
+## 23. Sequence-disjoint MORAI validation
+
+No new actor-GT-qualified sequence was acquired: MORAI simulator capture is not safely unattended in the current environment, and local storage has no suitable second scene. `morai_cam4_20260813_163222` is sequence-disjoint and replayable but has LiDAR/camera/localization data without `/ad/dev/objects` actor truth; it cannot support recall, duplicate-per-GT, IDSW, or HOTA evaluation.
+
+Capture a new route/traffic/spawn arrangement for 2–5 minutes with a distinct bag basename and record at minimum:
+
+```bash
+export ROS_DOMAIN_ID=<unused-id>
+ros2 bag record -o <new_scene_id> \
+  /ad/sensors/lidar/points /ad/dev/objects /ad/dev/vehicle/ego_status \
+  /tf /tf_static /clock
+```
+
+Required types/contracts are: PointCloud2, `ad_morai_interfaces_dev/msg/ObjectStatusArray`, `ad_morai_interfaces/msg/EgoVehicleStatus`, and TFMessage for both TF topics. The exporter requires lidar frame `lidar_link`, map frame `map`, the documented `odom→base_link→rear_axle_link→lidar_link` transform chain, and 30 ms actor/ego/TF alignment. Add the bag as a whole-scene `test` entry with scenario class evidence in a new dataset config, then run the exporter and evaluate only 0.70, 0.20, and 0.10; never train on it.
+
+## 24. Final retraining decision
+
+**NO — defer retraining.** Actual fresh in-model NMS 0.10 retains recall (−0.46 pp), reduces duplicate >=2 by 82.7%, cuts IDSW by 38.4%, and improves HOTA 141%. The remaining fragmentation/localization trade-off requires postprocessing selection and sequence-disjoint validation, not ungrounded model training. Fine-tuning becomes justified only if the capture above shows that no fresh NMS candidate retains a reasonable recall/fragmentation trade-off on a disjoint scene.
+
+OpenPCDet’s 0.10 result cannot be copied directly into Autoware: Autoware uses separate TensorRT models, circle and IoU stages, search-distance logic, and optional densification. A separate Autoware audit must first dump its own raw/post-circle/post-IoU/final candidates and reproduce the same GT metrics.
