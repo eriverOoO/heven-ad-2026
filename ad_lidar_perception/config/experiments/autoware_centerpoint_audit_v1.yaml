@@ -1,0 +1,14 @@
+# Explicit research-only selection for the Autoware CenterPoint audit.
+# This file is never the production default; it requires the verified external
+# Autoware package and licensed model artifacts before it can be launched.
+schema_version: 1
+detector:
+  backend: centerpoint
+  model_subdir: models/autoware
+  build_only: false
+tracker:
+  backend: autoware
+occupancy:
+  static_enabled: true
+  dynamic_enabled: true
+  publish_combined: true
