@@ -1,5 +1,102 @@
 # STATUS
 
+## KalmanNet Gradient-Norm Overflow Guard + Extended 10K Forensics v1 — NOT REPRODUCED THROUGH EPOCH 16 (PR open, do not merge)
+
+Branch `fix/kalmannet-gradient-norm-overflow-v1`, from merged PR #57
+`analysis(kalmannet): 10k gradient explosion forensics` (verified `MERGED`
+via `gh pr view 57` before branching). **Training safety/diagnostics only.
+No `KalmanNetGRU`/`KalmanNetFilter`/F/Q/H/AB3DMOT/CenterPoint/ROS/
+prediction/planner change, no new production checkpoint trained.**
+
+PR #57 found that the 12-epoch bounded reproduction of the real 10k run's
+epoch-16 collapse revealed a SECOND, previously-undocumented failure mode:
+every observed instability episode had every individual gradient element
+finite, but the aggregate L2 gradient norm (computed by PyTorch's native
+float32 reduction) overflowed to `inf` -- `clip_grad_norm_`'s `clip_coef =
+max_norm/(inf+eps) == 0` then silently zeroed the update (`0*finite==0`,
+never `nan`), an invisible, unreported no-op step. This task makes that
+event ("STATE B") explicit and correctly accounted, distinct from the
+already-guarded "STATE C" (element-level non-finite, PR #56's Adam-
+poisoning hazard), then re-runs the exact forensic replay extended from
+12 to 20 epochs.
+
+**`nonfinite_guard.safe_clip_and_step`** now classifies every gradient
+into three states (A healthy / B norm-overflow / C element-nonfinite),
+computes a float64-upcast-before-square "robust" diagnostic norm
+(recovers the true large-but-finite magnitude a STATE-B event's ordinary
+float32 norm hides), and skips+zeroes explicitly on STATE B (previously
+STATE B silently fell through to an implicit zero-update via
+`clip_grad_norm_`). `TrainResult` gained 7 new accounting fields
+(`norm_overflow_count`/`_skip_count`, `per_element_nonfinite_gradient_
+count`/`nonfinite_gradient_skip_count`, `parameter_collapse_count`,
+`optimizer_state_collapse_count`, `large_finite_gradient_count`) --
+critically, STATE-B occurrences do NOT feed the STATE-C-specific tier-2
+escalation counter (`MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH=5`), since
+treating them the same would have aborted a run like the original 10k one
+around epoch 6-7, defeating the extended-forensics goal.
+
+**Extended 20-epoch result: `reproduced=False`.** Zero element-level
+(STATE C) non-finite gradients occurred anywhere across all 20 epochs
+(155,140 batches), including running directly through **epoch 16 -- the
+exact epoch where the original unguarded run permanently collapsed**.
+Epoch 16 had the single highest STATE-B event count of any epoch (6 of 15
+total across the whole run) -- every one was correctly classified and
+safely skipped. Adam moment estimates (`max_abs_exp_avg`/`_sq`) stayed in
+a tight bounded band across all 20 epochs with no progressive growth;
+parameter magnitudes grew smoothly and monotonically throughout, with no
+discontinuous jump at any epoch including 16. **Strong direct evidence
+the guard prevents the original collapse at the epoch it mattered most.**
+Root cause: closest to "(D) the original true failure does not reproduce
+once overflow batches are safely skipped."
+
+**A real diagnostic bug was found and fixed while inspecting this run's
+own output** (not before running it): `NormOverflowEvent.
+largest_norm_parameter_name`/`max_individual_abs_gradient` were computed
+by re-inspecting `net`'s gradients AFTER `safe_clip_and_step` already
+zeroed them on the STATE-B path -- so all 15 captured events' own reported
+values were trivially wrong (always `input_fc.0.weight`, the first
+parameter in declaration order; always `0.0`). Does NOT affect
+`grad_norm_pre_clip`/`grad_norm_robust`/the STATE classification/the skip
+decision/whether reproduction succeeded (all computed by
+`safe_clip_and_step` itself before its own zero). Fixed by snapshotting
+these two diagnostics immediately after `backward()`, before calling
+`safe_clip_and_step` at all; 2 new regression tests prove the fix. Did
+NOT require re-running the 20-epoch search (only two diagnostic fields
+were affected, not the central `reproduced=False` conclusion).
+
+**Tests**: 19 new (`test_nonfinite_guard.py` +7 for the 4 exact numerical
+cases A/B/C-inf/C-nan plus zero-after-report/no-lasting-damage;
+`test_training_escalation_policy.py` +4 for STATE-B-never-escalates,
+separate-counter tracking, `large_finite_gradient_count`, independent
+collapse-cause counters; `test_explosion_forensics.py` +8 including the
+2 pre-guard-snapshot-ordering regression tests). Full
+`tools/kalmannet_training/` suite **235/235 pass** (216 pre-existing +
+19 new). `pyflakes`/`py_compile`/`git diff --check` clean.
+
+**Files**: `tools/kalmannet_training/nonfinite_guard.py` (three-state
+classification, robust float64 norm, STATE-B skip policy),
+`tools/kalmannet_training/{trainer_core.py,batched_trainer.py}` (new
+accounting fields, STATE-B routed away from STATE-C escalation),
+`tools/kalmannet_training/explosion_forensics.py` (STATE-B event capture,
+Adam-state/parameter-magnitude trajectories, pre-guard snapshot ordering
+fix), `tools/kalmannet_training/run_10k_explosion_forensics_v2.py` (new,
+20-epoch driver; v1 kept unmodified), `tools/kalmannet_training/test_
+{nonfinite_guard,training_escalation_policy,explosion_forensics}.py`,
+`docs/perception/kalmannet_gradient_norm_overflow_v1.md` (new, full
+analysis), this file. No `kalmannet_core.py`/`KalmanNetFilter`/F/Q/H/
+AB3DMOT/CenterPoint/ROS/prediction/planner file changed.
+
+**Recommended next task**: proceed to 10k seeds 1/2 of the same GENERIC-
+ROBUST configuration with this guard active, to establish whether
+epoch-16-class instability recurs across seeds and whether the guard
+continues to prevent escalation to a genuine collapse. Not started here,
+per this task's own explicit scope ("Do NOT start another full training
+seed").
+
+## KalmanNet Gradient-Norm Overflow Guard v1 result: **NOT REPRODUCED THROUGH EPOCH 16 (PR open, not merged)**
+
+---
+
 ## KalmanNet 10k GENERIC-ROBUST Seed-0 Explosion Forensics v1 — NOT REPRODUCED (analysis only, PR open, do not merge)
 
 Branch `analysis/kalmannet-10k-explosion-forensics-v1`, from merged PR #56
