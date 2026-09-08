@@ -72,7 +72,17 @@ def save_resume_state(
     nonfinite_step_count: int,
     cumulative_train_time_s: float,
     validation_key: dict[str, Any],
+    extra_counters: dict[str, Any] | None = None,
 ) -> None:
+    """``extra_counters``, optional (default ``None`` -> stored as
+    ``{}``, fully backward compatible): a forward-compatible bag for
+    cumulative ``TrainResult`` counters added after this module's own
+    initial design (e.g. the PR #58 gradient-state health counters --
+    ``grad_skip_count``/``norm_overflow_count``/``training_unstable``/
+    etc.), added as one generic dict rather than a growing list of named
+    parameters so a future new counter needs no signature change here.
+    Restoring these onto a resumed ``TrainResult`` is the caller's
+    responsibility (see ``batched_trainer.train_one_run_batched``)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -89,6 +99,7 @@ def save_resume_state(
         "nonfinite_step_count": nonfinite_step_count,
         "cumulative_train_time_s": cumulative_train_time_s,
         "validation_key": validation_key,
+        "extra_counters": extra_counters or {},
     }
     tmp = path.with_suffix(path.suffix + ".tmp")
     torch.save(payload, tmp)

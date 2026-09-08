@@ -197,6 +197,15 @@ class EpochRecord:
     grad_norm_max: float
     any_nan_train: bool
     any_nan_val: bool
+    # Added by the gradient-norm-overflow fix (see docs/perception/
+    # kalmannet_gradient_norm_overflow_v1.md) -- per-EPOCH breakdown of
+    # the two gradient-skip states, mirroring TrainResult's own cumulative
+    # counters (the AV2 10k multi-seed task explicitly asks for a
+    # per-epoch record, not only a final cumulative total). Default 0 so
+    # any existing caller constructing an EpochRecord without these
+    # kwargs is unaffected.
+    n_norm_overflow_batches: int = 0
+    n_element_nonfinite_batches: int = 0
 
 
 @dataclass
@@ -299,6 +308,8 @@ def train_one_run(
         any_nan_train = False
 
         nonfinite_grad_skips_this_epoch = 0
+        epoch_norm_overflow_count = 0
+        epoch_element_nonfinite_count = 0
         for idx in order:
             seq = train_seqs[idx]
             opt.zero_grad()
@@ -335,6 +346,7 @@ def train_one_run(
                 result.grad_skip_count += 1
                 result.norm_overflow_count += 1
                 result.norm_overflow_skip_count += 1
+                epoch_norm_overflow_count += 1
                 epoch_train_losses.append(float("nan"))
                 continue
 
@@ -348,6 +360,7 @@ def train_one_run(
                 result.per_element_nonfinite_gradient_count += 1
                 result.nonfinite_gradient_skip_count += 1
                 nonfinite_grad_skips_this_epoch += 1
+                epoch_element_nonfinite_count += 1
                 epoch_train_losses.append(float("nan"))
                 continue
 
@@ -377,6 +390,8 @@ def train_one_run(
                 val_loss=float("nan"), grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
                 grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
                 any_nan_train=True, any_nan_val=False,
+                n_norm_overflow_batches=epoch_norm_overflow_count,
+                n_element_nonfinite_batches=epoch_element_nonfinite_count,
             )
             result.history.append(record)
             break
@@ -402,6 +417,8 @@ def train_one_run(
             grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
             grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
             any_nan_train=any_nan_train, any_nan_val=any_nan_val,
+            n_norm_overflow_batches=epoch_norm_overflow_count,
+            n_element_nonfinite_batches=epoch_element_nonfinite_count,
         )
         result.history.append(record)
         if progress_callback is not None:

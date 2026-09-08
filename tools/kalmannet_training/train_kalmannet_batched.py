@@ -154,7 +154,9 @@ def main(argv: list[str] | None = None) -> int:
             f"optimizer_steps_this_epoch~={n_batches_per_epoch} epoch_wall_time_s={epoch_wall_time_s:.1f} "
             f"cumulative_wall_time_s={cumulative_elapsed_s:.1f} best_epoch={progress_state['best_epoch']} "
             f"patience_remaining={patience_remaining} any_nan_train={record.any_nan_train} "
-            f"any_nan_val={record.any_nan_val}"
+            f"any_nan_val={record.any_nan_val} "
+            f"n_norm_overflow_batches={record.n_norm_overflow_batches} "
+            f"n_element_nonfinite_batches={record.n_element_nonfinite_batches}"
         )
         print(line, file=sys.stderr, flush=True)
         if log_file is not None:
@@ -197,14 +199,24 @@ def main(argv: list[str] | None = None) -> int:
     args.output_history.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output_history, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["epoch", "train_loss", "val_loss", "grad_norm_mean",
-                                                 "grad_norm_max", "any_nan_train", "any_nan_val"])
+                                                 "grad_norm_max", "any_nan_train", "any_nan_val",
+                                                 "n_norm_overflow_batches", "n_element_nonfinite_batches"])
         writer.writeheader()
         for record in result.history:
             writer.writerow(vars(record))
 
     if result.best_state_dict is None:
         print("training produced no valid checkpoint (catastrophic run) -- not saving", file=sys.stderr)
-        print(json.dumps({"catastrophic": True, "best_val": result.best_val}, indent=2))
+        print(json.dumps({
+            "catastrophic": True, "best_val": result.best_val,
+            "training_collapsed": result.training_collapsed, "training_unstable": result.training_unstable,
+            "abort_reason": result.abort_reason, "n_epochs_run": result.n_epochs_run,
+            "grad_skip_count": result.grad_skip_count,
+            "norm_overflow_count": result.norm_overflow_count,
+            "per_element_nonfinite_gradient_count": result.per_element_nonfinite_gradient_count,
+            "parameter_collapse_count": result.parameter_collapse_count,
+            "optimizer_state_collapse_count": result.optimizer_state_collapse_count,
+        }, indent=2))
         return 1
 
     manifest = checkpoint_utils.build_checkpoint_manifest(
@@ -221,6 +233,22 @@ def main(argv: list[str] | None = None) -> int:
                 "correctness_mode_equivalent_to_per_sequence_optimizer" if args.batch_size == 1
                 else "throughput_mode_mini_batch_gradient_averaging_not_equivalent_to_per_sequence_optimizer"
             ),
+            # PR #58 gradient-state health counters (see docs/perception/
+            # kalmannet_gradient_norm_overflow_v1.md) -- added as extra
+            # keys on this already-free-form dict rather than changing
+            # build_checkpoint_manifest's own signature (shared by other
+            # callers). Cumulative over the whole run, not per-epoch.
+            "training_unstable": result.training_unstable,
+            "abort_reason": result.abort_reason,
+            "grad_skip_count": result.grad_skip_count,
+            "large_finite_gradient_count": result.large_finite_gradient_count,
+            "norm_overflow_count": result.norm_overflow_count,
+            "norm_overflow_skip_count": result.norm_overflow_skip_count,
+            "per_element_nonfinite_gradient_count": result.per_element_nonfinite_gradient_count,
+            "nonfinite_gradient_skip_count": result.nonfinite_gradient_skip_count,
+            "parameter_collapse_count": result.parameter_collapse_count,
+            "optimizer_state_collapse_count": result.optimizer_state_collapse_count,
+            "training_collapsed": result.training_collapsed,
         },
         seed_info={"seed": args.seed, "init_seed": result.init_seed, "order_seed": result.order_seed},
         corruption_config=json.loads(corruption_config.canonical_json()),
@@ -240,8 +268,19 @@ def main(argv: list[str] | None = None) -> int:
         "best_val_loss": result.best_val,
         "n_epochs_run": result.n_epochs_run,
         "catastrophic": result.catastrophic,
+        "training_unstable": result.training_unstable,
+        "training_collapsed": result.training_collapsed,
+        "abort_reason": result.abort_reason,
         "train_time_s": result.train_time_s,
         "nonfinite_step_count": result.nonfinite_step_count,
+        "grad_skip_count": result.grad_skip_count,
+        "large_finite_gradient_count": result.large_finite_gradient_count,
+        "norm_overflow_count": result.norm_overflow_count,
+        "norm_overflow_skip_count": result.norm_overflow_skip_count,
+        "per_element_nonfinite_gradient_count": result.per_element_nonfinite_gradient_count,
+        "nonfinite_gradient_skip_count": result.nonfinite_gradient_skip_count,
+        "parameter_collapse_count": result.parameter_collapse_count,
+        "optimizer_state_collapse_count": result.optimizer_state_collapse_count,
         "n_train_sequences": len(train_seqs),
         "n_val_sequences": len(val_seqs),
         "batch_size": args.batch_size,

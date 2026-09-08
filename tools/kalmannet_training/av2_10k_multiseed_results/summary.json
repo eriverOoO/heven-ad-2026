@@ -1,0 +1,118 @@
+{
+  "schema_version": "av2_10k_generic_robust_multiseed_summary_v1",
+  "task": "AV2 10K GENERIC-ROBUST Multi-Seed Completion v1",
+  "seeds": [0, 1, 2],
+  "note_on_seed0": "seed0's checkpoint predates this task (git_sha ba35b513, PR #58's own bounded-replay validation was a SEPARATE 20-epoch replay of seed0's config, not a re-run of the real seed0 training). seed0's OWN original training log (av2_scaleup_v2_10k_generic_robust_bs64_lr004_seed0_train.log) shows the real run permanently collapsed to NaN at epoch 16 (val_loss=nan, grad_norm=nan) and stayed NaN through patience exhaustion at epoch 21. Its retained checkpoint (best_epoch=6) is safe only because the best-checkpoint mechanism saved it BEFORE the later collapse -- it is not evidence the PR#58 guard survived a real full run. Only seed1 and seed2 (trained under this task, with the finalized guard active throughout) demonstrate a complete run reaching natural patience-based early stopping with zero catastrophic/permanent collapse despite repeated STATE B (norm-overflow) and STATE C (element-nonfinite) events.",
+  "per_seed": {
+    "0": {
+      "checkpoint_sha256": "30e0902ef91d2e8f189db163a2ec636d39a7ad9d4f5abc414b8aaa8ae873a778",
+      "best_epoch": 6,
+      "internal_validation_best_loss": 0.7451300733912749,
+      "n_epochs_run": 22,
+      "train_time_s": 23237.0,
+      "catastrophic": false,
+      "training_unstable": false,
+      "note": "health counters (norm_overflow_count etc.) not recorded -- predates this task's instrumentation fix. Original log shows real NaN collapse at epoch 16-21 (see note_on_seed0)."
+    },
+    "1": {
+      "checkpoint_sha256": "a9a19353ddb272d3fc0ac3ad7c6754239ef3d8dd00acd3c52a59193d98dc5ee5",
+      "best_epoch": 7,
+      "internal_validation_best_loss": 0.7458607519010171,
+      "n_epochs_run": 23,
+      "train_time_s": 26843.46667289734,
+      "catastrophic": false,
+      "training_unstable": false,
+      "training_collapsed": false,
+      "norm_overflow_count": 78,
+      "norm_overflow_skip_count": 78,
+      "per_element_nonfinite_gradient_count": 1,
+      "nonfinite_gradient_skip_count": 1,
+      "parameter_collapse_count": 0,
+      "optimizer_state_collapse_count": 0,
+      "large_finite_gradient_count": 11989
+    },
+    "2": {
+      "checkpoint_sha256": "a005efc54b63ad92f4972a2731bc4ff1e5e1d9cc7c45e7e18f3030c0bfe91e51",
+      "best_epoch": 4,
+      "internal_validation_best_loss": 0.7468887660922348,
+      "n_epochs_run": 20,
+      "train_time_s": 23410.165625333786,
+      "catastrophic": false,
+      "training_unstable": false,
+      "training_collapsed": false,
+      "norm_overflow_count": 36,
+      "norm_overflow_skip_count": 36,
+      "per_element_nonfinite_gradient_count": 1,
+      "nonfinite_gradient_skip_count": 1,
+      "parameter_collapse_count": 0,
+      "optimizer_state_collapse_count": 0,
+      "large_finite_gradient_count": 9118
+    }
+  },
+  "multi_seed_internal_validation": {
+    "best_epoch_mean": 5.666666666666667,
+    "best_epoch_std": 1.247219128924647,
+    "best_epoch_min": 4,
+    "best_epoch_max": 7,
+    "val_loss_mean": 0.7459598637948422,
+    "val_loss_std": 0.0007213955825230116,
+    "any_catastrophic": false,
+    "any_training_unstable": false,
+    "catastrophic_seeds": [],
+    "unstable_seeds": []
+  },
+  "official_val_by_condition": {
+    "A_clean_official_val": {
+      "position_rmse_m": {"mean": 0.042833, "std": 0.002699, "min": 0.039230, "max": 0.045723, "values": [0.043547, 0.039230, 0.045723]},
+      "velocity_rmse_mps": {"mean": 1.257158, "std": 0.004979, "min": 1.250579, "max": 1.262621, "values": [1.258274, 1.250579, 1.262621]},
+      "n": 2918906
+    },
+    "B_same_corruption_family": {
+      "position_rmse_m": {"mean": 0.308288, "std": 0.001398, "min": 0.306322, "max": 0.309452, "values": [0.309452, 0.306322, 0.309089]},
+      "velocity_rmse_mps": {"mean": 1.391835, "std": 0.003285, "min": 1.389182, "max": 1.396464, "values": [1.389857, 1.389182, 1.396464]},
+      "n": 2908189
+    },
+    "C_different_corruption_seed": {
+      "position_rmse_m": {"mean": 0.309574, "std": 0.001384, "min": 0.307617, "max": 0.310574, "values": [0.310574, 0.307617, 0.310531]},
+      "velocity_rmse_mps": {"mean": 1.395794, "std": 0.003556, "min": 1.392849, "max": 1.400797, "values": [1.393735, 1.392849, 1.400797]},
+      "n": 2908098
+    },
+    "D_morai_calibrated_diagnostic": {
+      "position_rmse_m": {"mean": 1.719093, "std": 0.005399, "min": 1.715080, "max": 1.726725, "values": [1.715474, 1.715080, 1.726725]},
+      "velocity_rmse_mps": {"mean": 2.063006, "std": 0.003178, "min": 2.059335, "max": 2.067087, "values": [2.062598, 2.059335, 2.067087]},
+      "n": 2899090,
+      "note": "AV2 diagnostic only (MORAI-calibrated corruption profile applied to AV2 scenario data). NOT a MORAI evaluation."
+    },
+    "divergence_count": 0,
+    "nonfinite_count_across_all_seeds_and_conditions": 0
+  },
+  "baseline_comparison": {
+    "linear_kf_av2_tuned": {
+      "params": {"sigma_a": 2.0, "r_std": 0.150005759181122, "p0_scale": 10.0},
+      "calibrated_on": "internal TRAIN+VAL only (9k/1k), never official VAL; reused verbatim across all 3 seeds via --precomputed-kf-calibration-json",
+      "official_val_position_rmse_m": {"A_clean": 0.1076424578112143, "B_generic": 0.34652505695550345, "C_diff_seed": 0.3477256794074653, "D_morai_calib": 1.9661920951527558}
+    },
+    "dense_v2_cross_domain_knet": {
+      "description": "DENSE-KALMANNET-v2 (MORAI-domain-trained checkpoint) evaluated cross-domain on AV2 official VAL, diagnostic only",
+      "official_val_position_rmse_m": {"A_clean": 0.06381793631004785, "B_generic": 0.44672580682177915, "C_diff_seed": 0.4468086119379399, "D_morai_calib": 2.9480683129818126}
+    },
+    "stage1_2k_generic_robust_knet": {
+      "checkpoint": "av2_stage1_pilot_generic_robust_bs64_lr004_seed0.pt",
+      "n_train_sequences": 88875,
+      "best_epoch": 16,
+      "internal_validation_best_loss": 0.7989848739490276,
+      "official_val_position_rmse_m": {"A_clean": 0.069127, "B_generic": 0.315745, "C_diff_seed": 0.317624},
+      "note": "single seed only (no 2k multi-seed sweep exists); D condition not evaluated for this older checkpoint"
+    },
+    "this_task_10k_generic_robust_knet_mean": {
+      "n_train_sequences": 496434,
+      "official_val_position_rmse_m": {"A_clean": 0.042833, "B_generic": 0.308288, "C_diff_seed": 0.309574, "D_morai_calib": 1.719093}
+    }
+  },
+  "2k_vs_10k_relative_change_position_rmse": {
+    "A_clean": "0.069127 -> 0.042833 (-38.0% relative, large improvement)",
+    "B_generic_robust": "0.315745 -> 0.308288 (-2.4% relative, marginal)",
+    "C_diff_seed": "0.317624 -> 0.309574 (-2.5% relative, marginal)",
+    "conclusion": "B (marginal improvement) -- the internal-validation-loss gap (0.799 -> 0.746, ~6.7% relative) and the CLEAN-condition gap (-38%) both substantially overstate the real-world-relevant GENERIC-ROBUST improvement (~2.4-2.5%). 10k does not regress vs 2k in any condition and all 3 10k seeds beat the single 2k seed on every condition, but the practically-relevant margin under corruption is small."
+  }
+}

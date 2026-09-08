@@ -33,13 +33,28 @@ class MultiSeedSummary:
     best_epoch_values: list[int]
     wall_s_total: float
     any_catastrophic: bool
+    # Added for the AV2 10k multi-seed task (docs/perception/
+    # kalmannet_av2_10k_multiseed_v1.md) -- per-seed numerical-health
+    # aggregation, sections 13/14 (norm-overflow/element-nonfinite counts,
+    # catastrophic/unstable seed identification). Sourced via ``.get()``
+    # with a 0/False default, so any EXISTING caller's minimal result
+    # dict (without these keys, e.g. the pre-existing calibration-sweep
+    # callers this function was originally built for) is unaffected.
+    norm_overflow_counts: list[int]
+    element_nonfinite_counts: list[int]
+    catastrophic_seeds: list[int]
+    unstable_seeds: list[int]
 
 
 def summarize_multi_seed_results(results: list[dict[str, Any]]) -> MultiSeedSummary:
     """``results``: one dict per seed, each with at minimum
     ``seed``, ``val_position_rmse``, ``val_velocity_rmse``, ``best_epoch``,
     ``wall_s``, ``catastrophic`` keys (the shape this task's own
-    calibration/confirmation scripts produce)."""
+    calibration/confirmation scripts produce). Optionally also
+    ``norm_overflow_count``, ``element_nonfinite_count``,
+    ``training_unstable`` -- when present, folded into the numerical-
+    health aggregation fields below; when absent, those default to
+    0/0/False per seed (never fabricated)."""
     if not results:
         raise ValueError("no results to summarize")
     pos = np.array([r["val_position_rmse"] for r in results], dtype=float)
@@ -56,4 +71,8 @@ def summarize_multi_seed_results(results: list[dict[str, Any]]) -> MultiSeedSumm
         best_epoch_values=[r["best_epoch"] for r in results],
         wall_s_total=float(sum(r["wall_s"] for r in results)),
         any_catastrophic=any(r["catastrophic"] for r in results),
+        norm_overflow_counts=[int(r.get("norm_overflow_count", 0)) for r in results],
+        element_nonfinite_counts=[int(r.get("element_nonfinite_count", 0)) for r in results],
+        catastrophic_seeds=[r["seed"] for r in results if r["catastrophic"]],
+        unstable_seeds=[r["seed"] for r in results if r.get("training_unstable", False)],
     )
