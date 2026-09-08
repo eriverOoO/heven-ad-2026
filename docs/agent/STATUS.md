@@ -1,5 +1,96 @@
 # STATUS
 
+## AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 — COMPLETE (3-seed evidence; PR open, do NOT merge)
+
+Branch `exp/kalmannet-av2-10k-multiseed-v1`, from merged PR #58 `754d6dc`
+(`fix(kalmannet): handle aggregate gradient norm overflow`, verified
+`MERGED` before branching). **Offline experiment only, isolated worktree.
+No `kalmannet_core.py`/`KalmanNetFilter`/AB3DMOT/CenterPoint/ROS/
+prediction/planner/occupancy-grid file changed. No MORAI evaluation, no
+MORAI/competition-performance claim — `MORAI_ESTIMATOR_EVAL_V2` still
+does not exist.**
+
+Trained seeds 1 and 2 of the frozen AV2 Scale-Up v2 10k GENERIC-ROBUST
+KalmanNet configuration (`hidden_size=32, batch_size=64, lr=0.004,
+max_epochs=60, patience=15, grad_clip=10.0`, GENERIC-ROBUST corruption,
+CPU) to completion under the finalized PR #58 three-state gradient guard,
+strictly sequentially (never concurrently). Seed 0's own real training
+log was audited for the first time in this task and found to have
+**permanently collapsed to NaN at epoch 16** (predates the guard — its
+retained checkpoint is safe only because the best-checkpoint mechanism
+saved epoch 6 before that collapse, not because any guard survived a real
+full run). **Seeds 1 and 2 are therefore the first two complete,
+guard-protected runs of this exact configuration**: seed 1 ran 23 epochs
+(best_epoch=7, val_loss 0.745861, 7.46 h, 78 norm-overflow + 1
+element-nonfinite event, both safely contained, 0
+parameter/optimizer-state collapse); seed 2 ran 20 epochs (best_epoch=4,
+val_loss 0.746889, 6.50 h, 36 norm-overflow + 1 element-nonfinite event,
+same safe containment). Both survived epoch 16 — the exact epoch that
+killed seed 0 — without incident. A real gap (missing health-counter
+persistence in the checkpoint manifest/summary, and a resume-state
+round-trip bug it exposed) was found and fixed ~30 s into the first
+launch attempt, before any real progress was lost; 245/245 tests pass.
+
+**Official AV2 VAL, 3-seed mean/std, 4 conditions** (0 divergence, 0
+non-finite, every seed/condition; cross-seed relative std ≤0.45% under
+corruption): A CLEAN pos-RMSE 0.0428 m; B GENERIC-ROBUST (training-matched
+corruption seed) 0.3083 m; C GENERIC-ROBUST (different corruption seed)
+0.3096 m; D MORAI-calibrated corruption (AV2 diagnostic only, **not** a
+MORAI evaluation) 1.7191 m. Beats the AV2-tuned Linear KF and the
+MORAI-domain DENSE-KALMANNET-v2 (evaluated cross-domain, diagnostic only)
+on every condition, every seed.
+
+**2k → 10k conclusion: B, marginal.** CLEAN improves a lot (0.0691→0.0428,
+−38%) and internal-val loss improves too (0.799→0.746, −6.6%), but the
+practically-relevant GENERIC-ROBUST improvement is small (0.3157→0.3083,
+−2.4%) — the CLEAN/internal-loss deltas visibly overstate the real,
+corruption-condition benefit. Reported as found, not spun toward a
+stronger claim.
+
+**Training-stability classification: B (norm-overflow-but-safe-recovery),
+with isolated, safely-contained C (element-nonfinite) events** — no seed
+reached D (permanent collapse) under the finalized guard. Checkpoint
+selection (internal-validation-only, always before any official-VAL read)
+is robust to seed variation: val-loss spread is 0.097% relative despite
+best_epoch varying 4/6/7 — a flat-optimum property, not instability. No
+seed declared a winner using official VAL, per instruction; all 3
+checkpoints/manifests/reports are committed for a future task to select
+from using internal validation only.
+
+**Selected future policy (chosen, not implemented):** freeze this 10k
+checkpoint family and prioritize building the still-missing
+`MORAI_ESTIMATOR_EVAL_V2` / a real MORAI-recorded fine-tuning dataset
+before further AV2-only seed/hyperparameter work, with motion-composition/
+stationary-vs-moving sampling flagged as the most evidence-grounded
+AV2-side lever if that AV2-only work continues first (AV2's train set
+mixes near-zero-velocity STATIC/BACKGROUND classes with fast VEHICLE/BUS/
+MOTORCYCLIST classes in the same batches — a plausible gradient-variance
+driver, not investigated here per this task's own scope).
+
+**Files:** `tools/kalmannet_training/{trainer_core.py,batched_trainer.py,
+resume_state.py,train_kalmannet_batched.py,multi_seed.py}` (per-epoch
+STATE-B/C counters, `extra_counters` resume bag, health counters surfaced
+end-to-end), `tools/kalmannet_training/{seed_artifacts.py,
+test_seed_artifacts.py}` (new), `tools/kalmannet_training/
+av2_10k_multiseed_results/` (new, 148 KB: summary.json + per-seed freeze
+manifests + official-VAL reports + seed0's train log + seed1/2 history
+CSVs — no checkpoints/resume binaries/AV2 data/long logs committed),
+`docs/perception/kalmannet_av2_10k_multiseed_v1.md` (new), this file.
+
+**Recommended next task:** capture at least one real MORAI-recorded
+scenario (GT actor trajectories + ego GT + TF, via the existing
+`ad_morai_dataset_capture`/`ad_morai_dataset_export_kalmannet`/
+`ad_morai_dataset_attach_kalmannet_measurements` pipeline, with real
+detector-attached measurements — not synthetic corruption) and use it to
+build the first `MORAI_ESTIMATOR_EVAL_V2`: zero-shot-evaluate these 3
+frozen AV2 checkpoints against the existing Tuned Linear KF baseline on
+real MORAI data, before any further AV2-only training. **Do NOT start
+further AV2 training as part of this task's own scope.**
+
+## AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 result: **COMPLETE**
+
+---
+
 ## KalmanNet Gradient-Norm Overflow Guard + Extended 10K Forensics v1 — NOT REPRODUCED THROUGH EPOCH 16 (PR open, do not merge)
 
 Branch `fix/kalmannet-gradient-norm-overflow-v1`, from merged PR #57

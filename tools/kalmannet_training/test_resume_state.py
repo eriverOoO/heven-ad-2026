@@ -83,3 +83,31 @@ def test_overwriting_resume_checkpoint_keeps_latest_state(tmp_path):
     loaded = load_resume_state(path, expected_validation_key=kwargs["validation_key"])
     assert loaded["epoch_next"] == 6
     assert loaded["best_val"] == pytest.approx(0.5)
+
+
+def test_extra_counters_round_trip(tmp_path):
+    """PR #58 gradient-state health counters (grad_skip_count/
+    norm_overflow_count/etc.) must survive a save/load round trip via
+    the generic extra_counters bag -- otherwise a resumed 60-epoch AV2
+    10k run would silently undercount these for its pre-crash epochs
+    (the exact real bug found and fixed during the multi-seed task)."""
+    path = tmp_path / "resume.pt"
+    kwargs = _dummy_payload_kwargs()
+    kwargs["extra_counters"] = {
+        "grad_skip_count": 3, "norm_overflow_count": 2, "training_unstable": False,
+        "training_collapsed": False, "abort_reason": None,
+    }
+    save_resume_state(path, **kwargs)
+    loaded = load_resume_state(path, expected_validation_key=kwargs["validation_key"])
+    assert loaded["extra_counters"]["grad_skip_count"] == 3
+    assert loaded["extra_counters"]["norm_overflow_count"] == 2
+
+
+def test_extra_counters_defaults_to_empty_dict_when_omitted(tmp_path):
+    """Default None -> {} (fully backward compatible with any caller that
+    predates this field, e.g. an OLDER resume checkpoint on disk)."""
+    path = tmp_path / "resume.pt"
+    kwargs = _dummy_payload_kwargs()
+    save_resume_state(path, **kwargs)  # no extra_counters kwarg at all
+    loaded = load_resume_state(path, expected_validation_key=kwargs["validation_key"])
+    assert loaded["extra_counters"] == {}

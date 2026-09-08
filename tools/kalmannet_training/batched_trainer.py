@@ -137,6 +137,29 @@ def train_one_run_batched(
         result.history = [EpochRecord(**rec) for rec in payload["history"]]
         result.nonfinite_step_count = payload["nonfinite_step_count"]
         cumulative_train_time_s = payload["cumulative_train_time_s"]
+        # PR #58 gradient-state health counters (see docs/perception/
+        # kalmannet_gradient_norm_overflow_v1.md) -- restored from the
+        # generic extra_counters bag so a resumed run's final cumulative
+        # counts include the pre-crash portion too, not just what
+        # accumulates after resuming. Missing keys (an OLDER resume
+        # checkpoint saved before this field existed) default to the
+        # TrainResult dataclass's own "nothing happened yet" values.
+        extra = payload.get("extra_counters", {})
+        result.grad_skip_count = extra.get("grad_skip_count", result.grad_skip_count)
+        result.training_unstable = extra.get("training_unstable", result.training_unstable)
+        result.training_collapsed = extra.get("training_collapsed", result.training_collapsed)
+        result.abort_reason = extra.get("abort_reason", result.abort_reason)
+        result.large_finite_gradient_count = extra.get(
+            "large_finite_gradient_count", result.large_finite_gradient_count)
+        result.norm_overflow_count = extra.get("norm_overflow_count", result.norm_overflow_count)
+        result.norm_overflow_skip_count = extra.get("norm_overflow_skip_count", result.norm_overflow_skip_count)
+        result.per_element_nonfinite_gradient_count = extra.get(
+            "per_element_nonfinite_gradient_count", result.per_element_nonfinite_gradient_count)
+        result.nonfinite_gradient_skip_count = extra.get(
+            "nonfinite_gradient_skip_count", result.nonfinite_gradient_skip_count)
+        result.parameter_collapse_count = extra.get("parameter_collapse_count", result.parameter_collapse_count)
+        result.optimizer_state_collapse_count = extra.get(
+            "optimizer_state_collapse_count", result.optimizer_state_collapse_count)
 
     t_start = time.time()
 
@@ -158,6 +181,8 @@ def train_one_run_batched(
         grad_norms: list[float] = []
         any_nan_train = False
         nonfinite_grad_skips_this_epoch = 0
+        epoch_norm_overflow_count = 0
+        epoch_element_nonfinite_count = 0
 
         for batch_index, idx_group in enumerate(batch_index_groups):
             if len(idx_group) == 0:
@@ -224,6 +249,7 @@ def train_one_run_batched(
                 result.grad_skip_count += 1
                 result.norm_overflow_count += 1
                 result.norm_overflow_skip_count += 1
+                epoch_norm_overflow_count += 1
                 epoch_train_losses.append(float("nan"))
                 continue
 
@@ -237,6 +263,7 @@ def train_one_run_batched(
                 result.per_element_nonfinite_gradient_count += 1
                 result.nonfinite_gradient_skip_count += 1
                 nonfinite_grad_skips_this_epoch += 1
+                epoch_element_nonfinite_count += 1
                 epoch_train_losses.append(float("nan"))
                 continue
 
@@ -273,6 +300,8 @@ def train_one_run_batched(
                 val_loss=float("nan"), grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
                 grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
                 any_nan_train=True, any_nan_val=False,
+                n_norm_overflow_batches=epoch_norm_overflow_count,
+                n_element_nonfinite_batches=epoch_element_nonfinite_count,
             )
             result.history.append(record)
             break
@@ -309,6 +338,8 @@ def train_one_run_batched(
             grad_norm_mean=(float(np.mean(grad_norms)) if grad_norms else 0.0),
             grad_norm_max=(float(np.max(grad_norms)) if grad_norms else 0.0),
             any_nan_train=any_nan_train, any_nan_val=any_nan_val,
+            n_norm_overflow_batches=epoch_norm_overflow_count,
+            n_element_nonfinite_batches=epoch_element_nonfinite_count,
         )
         result.history.append(record)
         if progress_callback is not None:
@@ -348,6 +379,19 @@ def train_one_run_batched(
                 nonfinite_step_count=result.nonfinite_step_count,
                 cumulative_train_time_s=cumulative_train_time_s + (time.time() - t_start),
                 validation_key=resume_validation_key or {},
+                extra_counters={
+                    "grad_skip_count": result.grad_skip_count,
+                    "training_unstable": result.training_unstable,
+                    "training_collapsed": result.training_collapsed,
+                    "abort_reason": result.abort_reason,
+                    "large_finite_gradient_count": result.large_finite_gradient_count,
+                    "norm_overflow_count": result.norm_overflow_count,
+                    "norm_overflow_skip_count": result.norm_overflow_skip_count,
+                    "per_element_nonfinite_gradient_count": result.per_element_nonfinite_gradient_count,
+                    "nonfinite_gradient_skip_count": result.nonfinite_gradient_skip_count,
+                    "parameter_collapse_count": result.parameter_collapse_count,
+                    "optimizer_state_collapse_count": result.optimizer_state_collapse_count,
+                },
             )
 
         if stop_early:

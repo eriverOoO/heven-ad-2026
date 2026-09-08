@@ -1,0 +1,1126 @@
+{
+  "checkpoint": "/home/didgang1203/datasets/av2/checkpoints/av2_scaleup_v2_10k_generic_robust_bs64_lr004_seed1.pt",
+  "checkpoint_manifest": {
+    "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+    "best_epoch": 7,
+    "best_val_loss": 0.7458607519010171,
+    "checkpoint_family": "av2_stage0_kalmannet_batched_v1",
+    "checkpoint_schema_version": "av2_stage0_kalmannet_checkpoint_v1",
+    "coordinate_mode": "first_state_relative",
+    "corruption_config": {
+      "bias_xy": [
+        0.0,
+        0.0
+      ],
+      "covariance_xy": null,
+      "dropout_burst_enabled": true,
+      "dropout_burst_length_samples": [],
+      "dropout_burst_max_len": 5,
+      "dropout_burst_min_len": 2,
+      "dropout_burst_prob": 0.02,
+      "dropout_prob": 0.1,
+      "gaussian_noise_std_m": 0.3,
+      "mode": "custom",
+      "seed": 20260905
+    },
+    "dataset_manifest_sha256": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+    "environment": {
+      "cuda_available": true,
+      "cuda_version": "12.1",
+      "gpu_name": "NVIDIA GeForce RTX 4060",
+      "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+      "python_version": "3.10.12",
+      "torch_version": "2.4.1+cu121"
+    },
+    "git_sha": "754d6dcb30afb186acadfba71114a18361090605",
+    "loss_on_predict_only": true,
+    "measurement_fields": [
+      "x",
+      "y"
+    ],
+    "model_config": {
+      "hidden_size": 32,
+      "measurement_dim": 2,
+      "state_dim": 4
+    },
+    "seed_info": {
+      "init_seed": 1,
+      "order_seed": 1,
+      "seed": 1
+    },
+    "split_manifest_sha256": "f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad",
+    "state_fields": [
+      "x",
+      "y",
+      "vx",
+      "vy"
+    ],
+    "training_config": {
+      "abort_reason": null,
+      "batch_size": 64,
+      "condition": "generic_robust",
+      "deviation_from_historical_max_epochs": false,
+      "grad_clip": 10.0,
+      "grad_skip_count": 79,
+      "large_finite_gradient_count": 11989,
+      "lr": 0.004,
+      "max_epochs": 60,
+      "mini_batch_semantics": "throughput_mode_mini_batch_gradient_averaging_not_equivalent_to_per_sequence_optimizer",
+      "n_buckets": 8,
+      "n_train_sequences": 496434,
+      "n_val_sequences": 57372,
+      "nonfinite_gradient_skip_count": 1,
+      "norm_overflow_count": 78,
+      "norm_overflow_skip_count": 78,
+      "optimizer": "Adam",
+      "optimizer_state_collapse_count": 0,
+      "parameter_collapse_count": 0,
+      "patience": 15,
+      "per_element_nonfinite_gradient_count": 1,
+      "sampler_version": "length_bucketed_v1",
+      "training_collapsed": false,
+      "training_unstable": false,
+      "use_length_bucketing": true
+    }
+  },
+  "conditions": {
+    "A_clean_official_val": {
+      "corruption_config": {
+        "bias_xy": [
+          0.0,
+          0.0
+        ],
+        "covariance_xy": null,
+        "dropout_burst_enabled": false,
+        "dropout_burst_length_samples": [],
+        "dropout_burst_max_len": 5,
+        "dropout_burst_min_len": 2,
+        "dropout_burst_prob": 0.0,
+        "dropout_prob": 0.0,
+        "gaussian_noise_std_m": 0.0,
+        "mode": "none",
+        "seed": 0
+      },
+      "dense_v2_cross_domain_diagnostic": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 350055,
+            "position_rmse_m": 0.05348966035732179,
+            "velocity_rmse_mps": 1.0660834864545097
+          },
+          "class::PEDESTRIAN": {
+            "n": 213522,
+            "position_rmse_m": 0.024652528942259614,
+            "velocity_rmse_mps": 0.48814832884021336
+          },
+          "class::VEHICLE": {
+            "n": 2355329,
+            "position_rmse_m": 0.06757895597525312,
+            "velocity_rmse_mps": 1.3812505935498558
+          },
+          "gap::matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.06381793631004785,
+            "velocity_rmse_mps": 1.3012380388590383
+          },
+          "matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.06381793631004785,
+            "velocity_rmse_mps": 1.3012380388590383
+          },
+          "overall": {
+            "n": 2918906,
+            "position_rmse_m": 0.06381793631004785,
+            "velocity_rmse_mps": 1.3012380388590383
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 350055,
+            "position_rmse_m": 0.03145480408080949,
+            "velocity_rmse_mps": 0.8028952511717481
+          },
+          "class::PEDESTRIAN": {
+            "n": 213522,
+            "position_rmse_m": 0.01621205775734801,
+            "velocity_rmse_mps": 0.42915343482978513
+          },
+          "class::VEHICLE": {
+            "n": 2355329,
+            "position_rmse_m": 0.041669129282611406,
+            "velocity_rmse_mps": 1.3511697277269044
+          },
+          "gap::matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.03922950584859011,
+            "velocity_rmse_mps": 1.2505785897351809
+          },
+          "matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.03922950584859011,
+            "velocity_rmse_mps": 1.2505785897351809
+          },
+          "overall": {
+            "n": 2918906,
+            "position_rmse_m": 0.03922950584859011,
+            "velocity_rmse_mps": 1.2505785897351809
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet_motion_stratified": {
+        "moving": {
+          "n": 1033487,
+          "position_rmse_m": 0.06058324484640683,
+          "velocity_rmse_mps": 1.8909521090844228
+        },
+        "near_stationary": {
+          "n": 1885419,
+          "position_rmse_m": 0.01925219004033047,
+          "velocity_rmse_mps": 0.6791245484216573
+        }
+      },
+      "linear_kf_av2_tuned": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 350055,
+            "position_rmse_m": 0.12075391802039903,
+            "velocity_rmse_mps": 1.0707256900742828
+          },
+          "class::PEDESTRIAN": {
+            "n": 213522,
+            "position_rmse_m": 0.04916869382325259,
+            "velocity_rmse_mps": 0.48090134395387757
+          },
+          "class::VEHICLE": {
+            "n": 2355329,
+            "position_rmse_m": 0.10942155705922776,
+            "velocity_rmse_mps": 1.4242304932013434
+          },
+          "gap::matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.1076424578112143,
+            "velocity_rmse_mps": 1.338355108174782
+          },
+          "matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.1076424578112143,
+            "velocity_rmse_mps": 1.338355108174782
+          },
+          "overall": {
+            "n": 2918906,
+            "position_rmse_m": 0.1076424578112143,
+            "velocity_rmse_mps": 1.338355108174782
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "linear_kf_transferred_from_morai": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 350055,
+            "position_rmse_m": 0.08282057573625509,
+            "velocity_rmse_mps": 1.1246955814500428
+          },
+          "class::PEDESTRIAN": {
+            "n": 213522,
+            "position_rmse_m": 0.0332317888569954,
+            "velocity_rmse_mps": 0.4999982862763287
+          },
+          "class::VEHICLE": {
+            "n": 2355329,
+            "position_rmse_m": 0.07905847267390244,
+            "velocity_rmse_mps": 1.478975696241878
+          },
+          "gap::matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.07711581690031928,
+            "velocity_rmse_mps": 1.391051338552359
+          },
+          "matched": {
+            "n": 2918906,
+            "position_rmse_m": 0.07711581690031928,
+            "velocity_rmse_mps": 1.391051338552359
+          },
+          "overall": {
+            "n": 2918906,
+            "position_rmse_m": 0.07711581690031928,
+            "velocity_rmse_mps": 1.391051338552359
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "n_official_val_sequences": 56521
+    },
+    "B_same_corruption_family": {
+      "corruption_config": {
+        "bias_xy": [
+          0.0,
+          0.0
+        ],
+        "covariance_xy": null,
+        "dropout_burst_enabled": true,
+        "dropout_burst_length_samples": [],
+        "dropout_burst_max_len": 5,
+        "dropout_burst_min_len": 2,
+        "dropout_burst_prob": 0.02,
+        "dropout_prob": 0.1,
+        "gaussian_noise_std_m": 0.3,
+        "mode": "custom",
+        "seed": 20260905
+      },
+      "dense_v2_cross_domain_diagnostic": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348346,
+            "position_rmse_m": 0.44203131624314723,
+            "velocity_rmse_mps": 1.7290198819862905
+          },
+          "class::PEDESTRIAN": {
+            "n": 212469,
+            "position_rmse_m": 0.4277131997117945,
+            "velocity_rmse_mps": 1.3992389281185973
+          },
+          "class::VEHICLE": {
+            "n": 2347374,
+            "position_rmse_m": 0.4490967849446622,
+            "velocity_rmse_mps": 1.9575681837157632
+          },
+          "gap::gap_1_2": {
+            "n": 358983,
+            "position_rmse_m": 0.5331242693461851,
+            "velocity_rmse_mps": 1.895387941672401
+          },
+          "gap::gap_3_5": {
+            "n": 87404,
+            "position_rmse_m": 0.9464242557695107,
+            "velocity_rmse_mps": 1.9267066575653689
+          },
+          "gap::gap_6_plus": {
+            "n": 5422,
+            "position_rmse_m": 1.5540695634674797,
+            "velocity_rmse_mps": 1.985981522349633
+          },
+          "gap::matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.3969011023848715,
+            "velocity_rmse_mps": 1.8945989254370112
+          },
+          "matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.3969011023848715,
+            "velocity_rmse_mps": 1.8945989254370112
+          },
+          "missing": {
+            "n": 451809,
+            "position_rmse_m": 0.6542859145826201,
+            "velocity_rmse_mps": 1.9025961675213166
+          },
+          "overall": {
+            "n": 2908189,
+            "position_rmse_m": 0.44672580682177915,
+            "velocity_rmse_mps": 1.8958435704165002
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348346,
+            "position_rmse_m": 0.29699994125630563,
+            "velocity_rmse_mps": 0.9169056799950223
+          },
+          "class::PEDESTRIAN": {
+            "n": 212469,
+            "position_rmse_m": 0.2760445960262662,
+            "velocity_rmse_mps": 0.7290658568695114
+          },
+          "class::VEHICLE": {
+            "n": 2347374,
+            "position_rmse_m": 0.3102638777368657,
+            "velocity_rmse_mps": 1.4892995240476397
+          },
+          "gap::gap_1_2": {
+            "n": 358983,
+            "position_rmse_m": 0.3695392424934233,
+            "velocity_rmse_mps": 1.4167772395456415
+          },
+          "gap::gap_3_5": {
+            "n": 87404,
+            "position_rmse_m": 0.7049027970787346,
+            "velocity_rmse_mps": 1.4953936169669528
+          },
+          "gap::gap_6_plus": {
+            "n": 5422,
+            "position_rmse_m": 1.2174129190577518,
+            "velocity_rmse_mps": 1.5892304843786773
+          },
+          "gap::matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.2649206488555179,
+            "velocity_rmse_mps": 1.3806861291406987
+          },
+          "matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.2649206488555179,
+            "velocity_rmse_mps": 1.3806861291406987
+          },
+          "missing": {
+            "n": 451809,
+            "position_rmse_m": 0.47160721322072885,
+            "velocity_rmse_mps": 1.4344925566815376
+          },
+          "overall": {
+            "n": 2908189,
+            "position_rmse_m": 0.30632187005077394,
+            "velocity_rmse_mps": 1.3891821048999697
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet_motion_stratified": {
+        "moving": {
+          "n": 1029882,
+          "position_rmse_m": 0.3818604239027929,
+          "velocity_rmse_mps": 2.1018077690130643
+        },
+        "near_stationary": {
+          "n": 1878307,
+          "position_rmse_m": 0.2555971936306368,
+          "velocity_rmse_mps": 0.7521800870446296
+        }
+      },
+      "linear_kf_av2_tuned": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348346,
+            "position_rmse_m": 0.3546297898381287,
+            "velocity_rmse_mps": 1.4918447146943785
+          },
+          "class::PEDESTRIAN": {
+            "n": 212469,
+            "position_rmse_m": 0.31903705484959044,
+            "velocity_rmse_mps": 1.1296445076922286
+          },
+          "class::VEHICLE": {
+            "n": 2347374,
+            "position_rmse_m": 0.34769564076361625,
+            "velocity_rmse_mps": 1.7428470073297104
+          },
+          "gap::gap_1_2": {
+            "n": 358983,
+            "position_rmse_m": 0.4254449851014944,
+            "velocity_rmse_mps": 1.6967800631955363
+          },
+          "gap::gap_3_5": {
+            "n": 87404,
+            "position_rmse_m": 0.8170901698250016,
+            "velocity_rmse_mps": 1.7485215650831205
+          },
+          "gap::gap_6_plus": {
+            "n": 5422,
+            "position_rmse_m": 1.3924029953792858,
+            "velocity_rmse_mps": 1.8159664441271712
+          },
+          "gap::matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.2961049782653917,
+            "velocity_rmse_mps": 1.6708968180850239
+          },
+          "matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.2961049782653917,
+            "velocity_rmse_mps": 1.6708968180850239
+          },
+          "missing": {
+            "n": 451809,
+            "position_rmse_m": 0.5442782084669014,
+            "velocity_rmse_mps": 1.708383125348301
+          },
+          "overall": {
+            "n": 2908189,
+            "position_rmse_m": 0.34652505695550345,
+            "velocity_rmse_mps": 1.6767755834893034
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "linear_kf_transferred_from_morai": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348346,
+            "position_rmse_m": 0.3553012321287571,
+            "velocity_rmse_mps": 1.5345152311875592
+          },
+          "class::PEDESTRIAN": {
+            "n": 212469,
+            "position_rmse_m": 0.3322101442400247,
+            "velocity_rmse_mps": 1.15042708279533
+          },
+          "class::VEHICLE": {
+            "n": 2347374,
+            "position_rmse_m": 0.3576996795318165,
+            "velocity_rmse_mps": 1.8193015547030527
+          },
+          "gap::gap_1_2": {
+            "n": 358983,
+            "position_rmse_m": 0.4376449998461054,
+            "velocity_rmse_mps": 1.7574244132225612
+          },
+          "gap::gap_3_5": {
+            "n": 87404,
+            "position_rmse_m": 0.8395868900656731,
+            "velocity_rmse_mps": 1.797002483779232
+          },
+          "gap::gap_6_plus": {
+            "n": 5422,
+            "position_rmse_m": 1.428080629060697,
+            "velocity_rmse_mps": 1.8634447733926136
+          },
+          "gap::matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.303552860902353,
+            "velocity_rmse_mps": 1.7428279416615575
+          },
+          "matched": {
+            "n": 2456380,
+            "position_rmse_m": 0.303552860902353,
+            "velocity_rmse_mps": 1.7428279416615575
+          },
+          "missing": {
+            "n": 451809,
+            "position_rmse_m": 0.5594842988703804,
+            "velocity_rmse_mps": 1.7664546311325697
+          },
+          "overall": {
+            "n": 2908189,
+            "position_rmse_m": 0.3556113726488662,
+            "velocity_rmse_mps": 1.7465194958571992
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "n_official_val_sequences": 56521
+    },
+    "C_different_corruption_seed": {
+      "corruption_config": {
+        "bias_xy": [
+          0.0,
+          0.0
+        ],
+        "covariance_xy": null,
+        "dropout_burst_enabled": true,
+        "dropout_burst_length_samples": [],
+        "dropout_burst_max_len": 5,
+        "dropout_burst_min_len": 2,
+        "dropout_burst_prob": 0.02,
+        "dropout_prob": 0.1,
+        "gaussian_noise_std_m": 0.3,
+        "mode": "custom",
+        "seed": 999999
+      },
+      "dense_v2_cross_domain_diagnostic": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348145,
+            "position_rmse_m": 0.44353190332828685,
+            "velocity_rmse_mps": 1.7338368434822662
+          },
+          "class::PEDESTRIAN": {
+            "n": 212562,
+            "position_rmse_m": 0.42753710017188684,
+            "velocity_rmse_mps": 1.3970246460321156
+          },
+          "class::VEHICLE": {
+            "n": 2347391,
+            "position_rmse_m": 0.4489949030993636,
+            "velocity_rmse_mps": 1.9574884099505852
+          },
+          "gap::gap_1_2": {
+            "n": 358744,
+            "position_rmse_m": 0.535121927869992,
+            "velocity_rmse_mps": 1.911388264085446
+          },
+          "gap::gap_3_5": {
+            "n": 87128,
+            "position_rmse_m": 0.9441673509725926,
+            "velocity_rmse_mps": 1.9302763320491185
+          },
+          "gap::gap_6_plus": {
+            "n": 5490,
+            "position_rmse_m": 1.5536760936943956,
+            "velocity_rmse_mps": 2.0475310270296485
+          },
+          "gap::matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.3968522659876261,
+            "velocity_rmse_mps": 1.8923769776173731
+          },
+          "matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.3968522659876261,
+            "velocity_rmse_mps": 1.8923769776173731
+          },
+          "missing": {
+            "n": 451362,
+            "position_rmse_m": 0.6550093334453162,
+            "velocity_rmse_mps": 1.9167596652592047
+          },
+          "overall": {
+            "n": 2908098,
+            "position_rmse_m": 0.4468086119379399,
+            "velocity_rmse_mps": 1.8961819371083724
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348145,
+            "position_rmse_m": 0.2962014681254646,
+            "velocity_rmse_mps": 0.9116334134841748
+          },
+          "class::PEDESTRIAN": {
+            "n": 212562,
+            "position_rmse_m": 0.277156886782239,
+            "velocity_rmse_mps": 0.7295627262275898
+          },
+          "class::VEHICLE": {
+            "n": 2347391,
+            "position_rmse_m": 0.3118711079976658,
+            "velocity_rmse_mps": 1.4939796660335705
+          },
+          "gap::gap_1_2": {
+            "n": 358744,
+            "position_rmse_m": 0.3718046700463984,
+            "velocity_rmse_mps": 1.4339624543879044
+          },
+          "gap::gap_3_5": {
+            "n": 87128,
+            "position_rmse_m": 0.7116102035379359,
+            "velocity_rmse_mps": 1.5173785050047917
+          },
+          "gap::gap_6_plus": {
+            "n": 5490,
+            "position_rmse_m": 1.2636614353928943,
+            "velocity_rmse_mps": 1.713950447886353
+          },
+          "gap::matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.265141671280709,
+            "velocity_rmse_mps": 1.3812946876726147
+          },
+          "matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.265141671280709,
+            "velocity_rmse_mps": 1.3812946876726147
+          },
+          "missing": {
+            "n": 451362,
+            "position_rmse_m": 0.47649272760116784,
+            "velocity_rmse_mps": 1.454129105188565
+          },
+          "overall": {
+            "n": 2908098,
+            "position_rmse_m": 0.30761716589447263,
+            "velocity_rmse_mps": 1.3928489345994384
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet_motion_stratified": {
+        "moving": {
+          "n": 1030041,
+          "position_rmse_m": 0.38347689427894144,
+          "velocity_rmse_mps": 2.1075523103532463
+        },
+        "near_stationary": {
+          "n": 1878057,
+          "position_rmse_m": 0.25666045862489384,
+          "velocity_rmse_mps": 0.7536024484147034
+        }
+      },
+      "linear_kf_av2_tuned": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348145,
+            "position_rmse_m": 0.3548005145330331,
+            "velocity_rmse_mps": 1.4897154272339383
+          },
+          "class::PEDESTRIAN": {
+            "n": 212562,
+            "position_rmse_m": 0.3191409871131071,
+            "velocity_rmse_mps": 1.130130479783376
+          },
+          "class::VEHICLE": {
+            "n": 2347391,
+            "position_rmse_m": 0.3491448537950084,
+            "velocity_rmse_mps": 1.747737752582916
+          },
+          "gap::gap_1_2": {
+            "n": 358744,
+            "position_rmse_m": 0.42734444935829013,
+            "velocity_rmse_mps": 1.7121809400891026
+          },
+          "gap::gap_3_5": {
+            "n": 87128,
+            "position_rmse_m": 0.8241065421745245,
+            "velocity_rmse_mps": 1.777776715880349
+          },
+          "gap::gap_6_plus": {
+            "n": 5490,
+            "position_rmse_m": 1.439896741817864,
+            "velocity_rmse_mps": 1.9369807946159527
+          },
+          "gap::matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.29621124794798204,
+            "velocity_rmse_mps": 1.6718487463509661
+          },
+          "matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.29621124794798204,
+            "velocity_rmse_mps": 1.6718487463509661
+          },
+          "missing": {
+            "n": 451362,
+            "position_rmse_m": 0.5490597201145967,
+            "velocity_rmse_mps": 1.7279270519866428
+          },
+          "overall": {
+            "n": 2908098,
+            "position_rmse_m": 0.3477256794074653,
+            "velocity_rmse_mps": 1.6806752604708641
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "linear_kf_transferred_from_morai": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 348145,
+            "position_rmse_m": 0.3550722020409554,
+            "velocity_rmse_mps": 1.5325171732540062
+          },
+          "class::PEDESTRIAN": {
+            "n": 212562,
+            "position_rmse_m": 0.332938825319553,
+            "velocity_rmse_mps": 1.1521479804815014
+          },
+          "class::VEHICLE": {
+            "n": 2347391,
+            "position_rmse_m": 0.35904922362558767,
+            "velocity_rmse_mps": 1.8242804181110177
+          },
+          "gap::gap_1_2": {
+            "n": 358744,
+            "position_rmse_m": 0.4393927240367335,
+            "velocity_rmse_mps": 1.7760892478625314
+          },
+          "gap::gap_3_5": {
+            "n": 87128,
+            "position_rmse_m": 0.8455350721801407,
+            "velocity_rmse_mps": 1.8286264448690546
+          },
+          "gap::gap_6_plus": {
+            "n": 5490,
+            "position_rmse_m": 1.465515557232945,
+            "velocity_rmse_mps": 1.9683877602668007
+          },
+          "gap::matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.3037907791132126,
+            "velocity_rmse_mps": 1.7434646195891725
+          },
+          "matched": {
+            "n": 2456736,
+            "position_rmse_m": 0.3037907791132126,
+            "velocity_rmse_mps": 1.7434646195891725
+          },
+          "missing": {
+            "n": 451362,
+            "position_rmse_m": 0.5635407267256098,
+            "velocity_rmse_mps": 1.7888007764997138
+          },
+          "overall": {
+            "n": 2908098,
+            "position_rmse_m": 0.35672915548746004,
+            "velocity_rmse_mps": 1.7505781594110918
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "n_official_val_sequences": 56521
+    },
+    "D_morai_calibrated_diagnostic": {
+      "corruption_config": {
+        "bias_xy": [
+          -0.6548025429052758,
+          0.6652460172320311
+        ],
+        "covariance_xy": [
+          [
+            0.5054367466769748,
+            -0.07705166171251883
+          ],
+          [
+            -0.07705166171251883,
+            0.3577342804083116
+          ]
+        ],
+        "dropout_burst_enabled": true,
+        "dropout_burst_length_samples": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          6,
+          6,
+          6,
+          7,
+          7,
+          7,
+          7,
+          8,
+          8,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          10,
+          10,
+          10,
+          10,
+          17,
+          20,
+          21,
+          23,
+          24,
+          28,
+          29,
+          34,
+          35,
+          44
+        ],
+        "dropout_burst_max_len": 5,
+        "dropout_burst_min_len": 2,
+        "dropout_burst_prob": 0.04,
+        "dropout_prob": 0.013963039014373716,
+        "gaussian_noise_std_m": 0.0,
+        "mode": "morai_calibrated",
+        "seed": 20260906
+      },
+      "dense_v2_cross_domain_diagnostic": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 347161,
+            "position_rmse_m": 2.8500450699946716,
+            "velocity_rmse_mps": 4.051627704704857
+          },
+          "class::PEDESTRIAN": {
+            "n": 211851,
+            "position_rmse_m": 2.292373735359511,
+            "velocity_rmse_mps": 3.8047610913008847
+          },
+          "class::VEHICLE": {
+            "n": 2340078,
+            "position_rmse_m": 3.0143825740473496,
+            "velocity_rmse_mps": 4.746901349779551
+          },
+          "gap::gap_1_2": {
+            "n": 203572,
+            "position_rmse_m": 1.5568141077970243,
+            "velocity_rmse_mps": 4.641427294580362
+          },
+          "gap::gap_3_5": {
+            "n": 164704,
+            "position_rmse_m": 2.4172389762553013,
+            "velocity_rmse_mps": 4.674550820687534
+          },
+          "gap::gap_6_plus": {
+            "n": 312331,
+            "position_rmse_m": 8.005007313171982,
+            "velocity_rmse_mps": 4.801519433044579
+          },
+          "gap::matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.2960212513930172,
+            "velocity_rmse_mps": 4.568857486539032
+          },
+          "matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.2960212513930172,
+            "velocity_rmse_mps": 4.568857486539032
+          },
+          "missing": {
+            "n": 680607,
+            "position_rmse_m": 5.616523807465744,
+            "velocity_rmse_mps": 4.723479764997447
+          },
+          "overall": {
+            "n": 2899090,
+            "position_rmse_m": 2.9480683129818126,
+            "velocity_rmse_mps": 4.605623811881945
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 347161,
+            "position_rmse_m": 1.361658991295568,
+            "velocity_rmse_mps": 1.4191659613847414
+          },
+          "class::PEDESTRIAN": {
+            "n": 211851,
+            "position_rmse_m": 1.2861587571455442,
+            "velocity_rmse_mps": 1.333994743858657
+          },
+          "class::VEHICLE": {
+            "n": 2340078,
+            "position_rmse_m": 1.7942567271660466,
+            "velocity_rmse_mps": 2.189530941193514
+          },
+          "gap::gap_1_2": {
+            "n": 203572,
+            "position_rmse_m": 1.1772814018953537,
+            "velocity_rmse_mps": 2.0723212940099707
+          },
+          "gap::gap_3_5": {
+            "n": 164704,
+            "position_rmse_m": 1.4850388424114296,
+            "velocity_rmse_mps": 2.122517491279938
+          },
+          "gap::gap_6_plus": {
+            "n": 312331,
+            "position_rmse_m": 4.104599265031629,
+            "velocity_rmse_mps": 2.3571514709114796
+          },
+          "gap::matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.0867781560678151,
+            "velocity_rmse_mps": 2.007770655930565
+          },
+          "matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.0867781560678151,
+            "velocity_rmse_mps": 2.007770655930565
+          },
+          "missing": {
+            "n": 680607,
+            "position_rmse_m": 2.946128775470126,
+            "velocity_rmse_mps": 2.2191084340838474
+          },
+          "overall": {
+            "n": 2899090,
+            "position_rmse_m": 1.7150796768124152,
+            "velocity_rmse_mps": 2.0593346158480004
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "knet_motion_stratified": {
+        "moving": {
+          "n": 1026916,
+          "position_rmse_m": 2.304110777451662,
+          "velocity_rmse_mps": 3.060265480367966
+        },
+        "near_stationary": {
+          "n": 1872174,
+          "position_rmse_m": 1.281767461902723,
+          "velocity_rmse_mps": 1.195853783324662
+        }
+      },
+      "linear_kf_av2_tuned": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 347161,
+            "position_rmse_m": 1.7840552161895447,
+            "velocity_rmse_mps": 2.6046385235982963
+          },
+          "class::PEDESTRIAN": {
+            "n": 211851,
+            "position_rmse_m": 1.6966408833430768,
+            "velocity_rmse_mps": 2.387352175707005
+          },
+          "class::VEHICLE": {
+            "n": 2340078,
+            "position_rmse_m": 2.0141077075616827,
+            "velocity_rmse_mps": 2.6571372609543285
+          },
+          "gap::gap_1_2": {
+            "n": 203572,
+            "position_rmse_m": 1.2730393868982446,
+            "velocity_rmse_mps": 2.6224253115895197
+          },
+          "gap::gap_3_5": {
+            "n": 164704,
+            "position_rmse_m": 1.7288093891057654,
+            "velocity_rmse_mps": 2.6892198135430143
+          },
+          "gap::gap_6_plus": {
+            "n": 312331,
+            "position_rmse_m": 4.937249669256203,
+            "velocity_rmse_mps": 2.8553994219428134
+          },
+          "gap::matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.1177973068515963,
+            "velocity_rmse_mps": 2.59565116932396
+          },
+          "matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.1177973068515963,
+            "velocity_rmse_mps": 2.59565116932396
+          },
+          "missing": {
+            "n": 680607,
+            "position_rmse_m": 3.5205639162513744,
+            "velocity_rmse_mps": 2.747474643493153
+          },
+          "overall": {
+            "n": 2899090,
+            "position_rmse_m": 1.9661920951527558,
+            "velocity_rmse_mps": 2.6320808798056854
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "linear_kf_transferred_from_morai": {
+        "buckets": {
+          "class::OTHER": {
+            "n": 347161,
+            "position_rmse_m": 1.8114929855215498,
+            "velocity_rmse_mps": 2.607566053625236
+          },
+          "class::PEDESTRIAN": {
+            "n": 211851,
+            "position_rmse_m": 1.7818845334364721,
+            "velocity_rmse_mps": 2.3924435113350975
+          },
+          "class::VEHICLE": {
+            "n": 2340078,
+            "position_rmse_m": 2.0873498853532224,
+            "velocity_rmse_mps": 2.760982081121453
+          },
+          "gap::gap_1_2": {
+            "n": 203572,
+            "position_rmse_m": 1.3073651933192505,
+            "velocity_rmse_mps": 2.707557476583087
+          },
+          "gap::gap_3_5": {
+            "n": 164704,
+            "position_rmse_m": 1.786433699570558,
+            "velocity_rmse_mps": 2.756416442260915
+          },
+          "gap::gap_6_plus": {
+            "n": 312331,
+            "position_rmse_m": 5.14787964182289,
+            "velocity_rmse_mps": 2.9189036678768514
+          },
+          "gap::matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.1348397723532349,
+            "velocity_rmse_mps": 2.6861067174401634
+          },
+          "matched": {
+            "n": 2218483,
+            "position_rmse_m": 1.1348397723532349,
+            "velocity_rmse_mps": 2.6861067174401634
+          },
+          "missing": {
+            "n": 680607,
+            "position_rmse_m": 3.66670062922711,
+            "velocity_rmse_mps": 2.8180072265291796
+          },
+          "overall": {
+            "n": 2899090,
+            "position_rmse_m": 2.0351582191213513,
+            "velocity_rmse_mps": 2.717647539664294
+          }
+        },
+        "divergence_count": 0,
+        "nonfinite_count": 0
+      },
+      "n_official_val_sequences": 56348
+    }
+  },
+  "dense_v2_checkpoint_path": "/home/didgang1203/heven_presentation_assets/kalmannet_training_stability/checkpoint/dense_kalmannet_v2.pt",
+  "dense_v2_evaluated": true,
+  "linear_kf_av2_tuned": {
+    "internal_val_position_rmse": 0.3420017545380466,
+    "internal_val_velocity_rmse": 1.597283677898722,
+    "n_candidates": 40,
+    "params": {
+      "p0_scale": 10.0,
+      "r_std": 0.150005759181122,
+      "sigma_a": 2.0
+    },
+    "provenance": "calibrated on the internal 9,000-scenario TRAIN + 1,000-scenario internal VAL split of the 10k TRAIN-source pool (generic_robust condition) -- official AV2 VAL never touched",
+    "train_residual_sigma_z": 0.300011518362244
+  },
+  "linear_kf_transferred_from_morai": {
+    "params": {
+      "p0_scale": 10.0,
+      "r_std": 0.2254682076528578,
+      "sigma_a": 5.0
+    },
+    "provenance": "T-9A.1 selected_kf_config.json, validation-only selection on MORAI HEVEN actors 1/13/15/18/35/36/38/40/44/46/48 (train) + 21/23/27/31 (val); CROSS-DOMAIN TRANSFERRED to AV2 without retuning -- NOT the fair AV2-tuned baseline"
+  },
+  "official_val_shard_root": "/home/didgang1203/datasets/av2/processed/kalmannet_scaleup_v2/official_val",
+  "official_val_split_manifest": "/home/didgang1203/datasets/av2/manifests/scaleup_v2_official_val_split.json"
+}

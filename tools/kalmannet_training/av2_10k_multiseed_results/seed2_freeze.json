@@ -1,0 +1,87 @@
+{
+  "batch_size": 64,
+  "bucket_policy": {
+    "n_buckets": 8,
+    "sampler_version": "length_bucketed_v1",
+    "use_length_bucketing": true
+  },
+  "corruption_policy": {
+    "bias_xy": [
+      0.0,
+      0.0
+    ],
+    "covariance_xy": null,
+    "dropout_burst_enabled": true,
+    "dropout_burst_length_samples": [],
+    "dropout_burst_max_len": 5,
+    "dropout_burst_min_len": 2,
+    "dropout_burst_prob": 0.02,
+    "dropout_prob": 0.1,
+    "gaussian_noise_std_m": 0.3,
+    "mode": "custom",
+    "seed": 20260905
+  },
+  "extra": {},
+  "frozen_at_git_sha": "754d6dcb30afb186acadfba71114a18361090605",
+  "gradient_clip": 10.0,
+  "learning_rate": 0.004,
+  "loss_on_predict_only": true,
+  "max_epochs": 60,
+  "model_architecture": {
+    "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+    "hidden_size": 32,
+    "measurement_dim": 2,
+    "measurement_fields": [
+      "x",
+      "y"
+    ],
+    "state_dim": 4,
+    "state_fields": [
+      "x",
+      "y",
+      "vx",
+      "vy"
+    ]
+  },
+  "notes": "AV2 KalmanNet Full-Scale 10K Generic-Robust Pretraining v1 -- 10,000 fresh AV2 TRAIN-source scenarios (9,000 internal-train / 1,000 internal-val), 1 seed, GENERIC-ROBUST corruption. Checkpoint SHA-256 a005efc54b63ad92f4972a2731bc4ff1e5e1d9cc7c45e7e18f3030c0bfe91e51. No MORAI evaluation is available in this environment -- this freeze covers AV2 official-VAL evaluation only, never a MORAI/competition-performance claim.",
+  "patience": 15,
+  "schema_version": "kalmannet_batch_calibration_freeze_v1",
+  "selection_evidence": {
+    "best_epoch": 4,
+    "checkpoint_path": "/home/didgang1203/datasets/av2/checkpoints/av2_scaleup_v2_10k_generic_robust_bs64_lr004_seed2.pt",
+    "checkpoint_sha256": "a005efc54b63ad92f4972a2731bc4ff1e5e1d9cc7c45e7e18f3030c0bfe91e51",
+    "dataset": "av2_kalmannet_scaleup_v2 TRAIN-source pool (10,000 scenarios), PR #54",
+    "dataset_manifest_sha256_recorded_in_checkpoint": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+    "device_used_for_training": true,
+    "internal_split_counts": {
+      "test": 0,
+      "train": 9000,
+      "val": 1000
+    },
+    "internal_split_manifest_path_machine_local": "/home/didgang1203/datasets/av2/manifests/scaleup_v2_internal_split_9k1k.json",
+    "internal_split_manifest_sha256": "f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad",
+    "internal_split_seed": 20260930,
+    "internal_validation_best_loss": 0.7468887660922348,
+    "internal_validation_metric": "mean per-frame MSE over [x,y,vx,vy], loss_on_predict_only semantics -- NEVER official AV2 VAL",
+    "n_internal_val_sequences": 57372,
+    "n_train_sequences": 496434,
+    "official_val_scenario_manifest_sha256": "bebbfd3bc1caca11ece6af6f8c78c88b2fbbd08b221b18824590d584348a66d0",
+    "torch_version": "2.4.1+cu121",
+    "train_scenario_manifest_sha256": "12ae390ea1b01e714b6e9d3b8d4a06822547b035d8aa8e5746ebdc92526c4c59",
+    "verified_overlap_with_official_val": {
+      "internal_train_vs_official_val": 0,
+      "internal_val_vs_official_val": 0
+    }
+  },
+  "shuffle_seed_policy": {
+    "init_seed": 2,
+    "order_seed": 2,
+    "seed": 2
+  },
+  "three_seed_validation_summary": {
+    "note": "ONE initialization seed only, per this task's own explicit instruction -- no seed-selection decision was made (no ambiguity to protect from official-VAL influence). seed=0.",
+    "seeds_run": [
+      2
+    ]
+  }
+}
