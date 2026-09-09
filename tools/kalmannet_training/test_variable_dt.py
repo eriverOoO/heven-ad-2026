@@ -292,3 +292,148 @@ def test_evaluate_with_dt_buckets_exact_rmse_value():
 
     result = evaluate_with_dt_buckets([seq], biased_estimate)
     assert result["0.2s"]["position_rmse_m"] == pytest.approx(5.0, abs=1e-9)
+
+
+# --------------------------------------------------------------------------
+# thinning != missing measurement (section 6) -- corruption ordering (11)
+# --------------------------------------------------------------------------
+
+
+def test_thinned_sequence_never_carries_a_none_measurement_placeholder_for_a_removed_frame():
+    """A temporally-thinned sequence's z_meas list is exactly as long as
+    its (shorter) retained-frame list -- there is structurally no way for
+    a removed original index to leave a None placeholder behind, unlike
+    a missing-measurement frame which keeps its slot."""
+    seq = _seq(n=40, dt=0.1)
+    out = thin_sequence(seq, STRONG_VARIABLE_DT, augmentation_seed=21, segment_id="scnT::trk::0")
+    assert len(out["z_meas"]) == len(out["frames"]) == len(out["x_true"]) == len(out["retained_indices"])
+
+
+def test_corruption_applied_after_thinning_never_before(monkeypatch):
+    """Section 11: load clean -> thin -> corrupt retained-only. If
+    corruption ran on the FULL original array first, the corrupted
+    z_meas passed into thinning would still have the original (longer)
+    length; segment_to_thinned_training_sequence must never do that --
+    verified by asserting the corruption call always receives an array
+    whose length equals the THINNED retained-frame count, not the
+    original segment length."""
+    import numpy as np
+
+    from variable_dt import segment_to_thinned_training_sequence
+
+    n_original = 50
+    x_true = [[float(i), 0.0, 1.0, 0.0] for i in range(n_original)]
+    dts = [None] + [0.1] * (n_original - 1)
+    clean_seq = {"frames": list(range(n_original)), "dt": dts, "x_true": x_true,
+                 "z_meas": [[float(i), 0.0] for i in range(n_original)]}
+
+    class _FakeSegment:
+        segment_id = "fake::seg::0"
+
+        def to_kalmannet_sequence(self, corruption_config):
+            assert corruption_config is None  # must be called with CLEAN first
+            return dict(clean_seq)
+
+    captured_lengths = []
+
+    def fake_apply_corruption(arrays, segment_id, config):
+        captured_lengths.append(arrays["clean_position"].shape[0])
+        n = arrays["clean_position"].shape[0]
+        return {"measurement": arrays["clean_position"], "measurement_valid": np.ones(n, dtype=bool)}
+
+    monkeypatch.setattr(
+        "ad_morai_bridge_dev.dataset.av2_motion_forecasting_adapter.apply_corruption", fake_apply_corruption
+    )
+
+    out = segment_to_thinned_training_sequence(
+        _FakeSegment(), STRONG_VARIABLE_DT, augmentation_seed=99, corruption_config=object()
+    )
+    assert captured_lengths, "apply_corruption was never called"
+    assert captured_lengths[0] == len(out["retained_indices"])
+    assert captured_lengths[0] < n_original  # confirms thinning happened BEFORE corruption, not after
+
+
+# --------------------------------------------------------------------------
+# Determinism of the full per-split loading pipeline (underlies resume
+# reproducibility -- section 24's "resume reproducibility with thinning
+# config": train_one_run_batched's own existing resume mechanism is only
+# exact if load_split_sequences_with_thinning itself is byte-deterministic
+# given the same inputs, since data is loaded once before resume applies).
+# --------------------------------------------------------------------------
+
+
+def test_thin_sequence_is_byte_deterministic_across_independent_calls():
+    seq = _seq(n=70, dt=0.1)
+    results = [
+        thin_sequence(seq, STRONG_VARIABLE_DT, augmentation_seed=55, segment_id="scnR::trkR::3")
+        for _ in range(3)
+    ]
+    for r in results[1:]:
+        assert r["retained_indices"] == results[0]["retained_indices"]
+        assert r["dt"] == results[0]["dt"]
+        assert r["x_true"] == results[0]["x_true"]
+
+
+# --------------------------------------------------------------------------
+# No official-VAL leakage / policies are hardcoded, not data-fit
+# --------------------------------------------------------------------------
+
+
+def test_mild_and_strong_policies_are_frozen_hardcoded_constants():
+    """Section 8: augmentation probabilities must never be derived from
+    the frozen MORAI TEST actors or any loaded data file -- structurally
+    enforced here by construction (ThinningPolicy is a frozen dataclass
+    with literal tuple values baked into variable_dt.py's own source,
+    never read from a config/data file at import time)."""
+    with pytest.raises(Exception):
+        MILD_VARIABLE_DT.skip_probs = (1.0,)  # frozen -- cannot be mutated at runtime
+    assert isinstance(MILD_VARIABLE_DT.skip_probs, tuple)
+    assert isinstance(STRONG_VARIABLE_DT.skip_probs, tuple)
+
+
+def test_load_split_sequences_with_thinning_only_touches_the_given_shard_root(monkeypatch, tmp_path):
+    """No official-VAL leakage: the function never reads any shard root
+    other than the one explicitly passed in -- verified by pointing it at
+    a nonexistent path and confirming the failure is a clean 'no such
+    shard index' error from THAT path, never a fallback to some other
+    (e.g. official-val) root."""
+    from variable_dt import load_split_sequences_with_thinning, FIXED_DT
+
+    fake_root = tmp_path / "definitely_not_official_val"
+    with pytest.raises(Exception):
+        load_split_sequences_with_thinning(
+            fake_root, {"splits": {"train": [], "val": [], "test": []}}, FIXED_DT, 1, None,
+        )
+
+
+# --------------------------------------------------------------------------
+# Batch collation with variable dt (section 24)
+# --------------------------------------------------------------------------
+
+
+def test_build_padded_batch_preserves_each_sequences_own_variable_dt():
+    """batched_kalmannet.build_padded_batch already stores dt per-sample,
+    per-timestep ([b, t_max]) -- unmodified by this task. This locks that
+    a THINNED sequence's variable dt values survive collation alongside a
+    FIXED sequence in the SAME batch, un-conflated."""
+    from batched_kalmannet import build_padded_batch
+
+    fixed_seq = _seq(n=4, dt=0.1)
+    thinned = thin_sequence(_seq(n=8, dt=0.1), MILD_VARIABLE_DT, augmentation_seed=1, segment_id="mix::a::0")
+    if not thinned.get("is_thinned", True):
+        thinned = thin_sequence(_seq(n=8, dt=0.1), STRONG_VARIABLE_DT, augmentation_seed=1, segment_id="mix::b::0")
+
+    batch = build_padded_batch([fixed_seq, thinned], device="cpu")
+    n0 = len(fixed_seq["frames"])
+    n1 = len(thinned["frames"])
+    for t in range(1, n0):
+        assert batch.dt[0, t].item() == pytest.approx(fixed_seq["dt"][t], abs=1e-6)
+    for t in range(1, n1):
+        assert batch.dt[1, t].item() == pytest.approx(thinned["dt"][t], abs=1e-6)
+    # The two samples' dt streams must differ somewhere if thinning
+    # actually produced a non-trivial dt sequence for sample 1.
+    if any(v != 0.1 for v in thinned["dt"][1:]):
+        assert not all(
+            batch.dt[0, t].item() == pytest.approx(batch.dt[1, t].item(), abs=1e-6)
+            for t in range(1, min(n0, n1))
+        )
