@@ -2,7 +2,8 @@
 
 ## 1. Executive summary
 
-**Status: BLOCKED on host dependencies and model licence acknowledgement.**
+**Status: PARTIAL; model provision is complete, but host dependencies block the
+detector build.**
 The isolated runtime path, exact input contract, model provisioner, held-out
 bag validator, and a bounded synthetic XYZIRC publisher are ready. No model
 was downloaded, no TensorRT engine was built, and no production launch or
@@ -57,24 +58,60 @@ export AD_AUTOWARE_MODEL_LICENSE_REVIEWED=1
 tools/centerpoint_offline/provision_autoware_centerpoint_model.sh
 ```
 
-Only run this after a human reviews the upstream model licence. This audit did
-not set the acknowledgement and did not download artifacts.
+The user reviewed the licence and authorized the acknowledgement. The
+provisioner found existing artifacts and verified them without replacement:
+
+| Artifact | Size | SHA-256 verification |
+| --- | ---: | --- |
+| `pts_voxel_encoder_centerpoint.onnx` | 7.3 KiB | `dc1a876…05405764` |
+| `pts_backbone_neck_head_centerpoint.onnx` | 20 MiB | `3fe7e128…e391542e` |
+| `centerpoint_ml_package.param.yaml` | 1.1 KiB | `9bbc16e…7576f0e27` |
+| `detection_class_remapper.param.yaml` | 2.7 KiB | `c711f887…c36772d5` |
 
 ## 5. Isolated build and smoke path
 
-After compatible TensorRT is available, use the worktree-only roots below;
-never the shared HEVEN ROS workspace roots:
+Autoware 1.8.0's x86_64 TensorRT role pins
+`10.8.0.43-1+cuda12.8` and packages `libnvinfer10`,
+`libnvinfer-plugin10`, `libnvonnxparsers10`, and their matching development
+and header packages. The current host has CUDA 11.8 and no APT candidate for
+these packages; its only NVIDIA APT source is the CUDA WSL repository. A
+global TensorRT/CUDA 12.8 side-by-side installation requires separate user
+approval and must not be improvised by this audit. It does **not** justify a
+driver replacement, CUDA removal, ROS reinstall, or a broad APT upgrade.
+
+The required user-only preflight and package action, once the NVIDIA TensorRT
+repository serving those exact versions has been configured, is:
+
+```bash
+trt_version='10.8.0.43-1+cuda12.8'
+apt-cache madison libnvinfer10 libnvonnxparsers10 libnvinfer-dev
+# Each required package must show exactly $trt_version before proceeding.
+sudo apt-get install -y cuda-toolkit-12-8 \
+  libnvinfer10="$trt_version" libnvinfer-plugin10="$trt_version" \
+  libnvonnxparsers10="$trt_version" libnvinfer-dev="$trt_version" \
+  libnvinfer-plugin-dev="$trt_version" \
+  libnvinfer-headers-dev="$trt_version" \
+  libnvinfer-headers-plugin-dev="$trt_version" \
+  libnvonnxparsers-dev="$trt_version"
+sudo apt-mark hold libnvinfer10 libnvinfer-plugin10 libnvonnxparsers10 \
+  libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev \
+  libnvinfer-headers-dev libnvinfer-headers-plugin-dev
+```
+
+`cuda-toolkit-12-8` is a side-by-side toolkit request, not a driver package;
+the package solver must be reviewed before confirmation. Do not run this while
+the exact candidate check is empty (as it is on the audited host), and do not
+substitute a TensorRT 8 or latest package merely to make CMake pass.
+
+After the approved dependency installation, use the worktree-only build helper
+below. It builds `--packages-up-to autoware_lidar_centerpoint`, its source
+dependency closure rather than all of Universe, and never uses the shared
+HEVEN ROS workspace roots:
 
 ```bash
 export ROS_DOMAIN_ID=77
 export CMAKE_BUILD_PARALLEL_LEVEL=2
-source /opt/ros/humble/setup.bash
-source /home/didgang1203/projects/autoware_tracker_ws/install/setup.bash
-colcon build --packages-select autoware_lidar_centerpoint \
-  --base-paths /home/didgang1203/projects/autoware_tracker_ws/src/autoware_universe \
-  --build-base .autoware_runtime/build \
-  --install-base .autoware_runtime/install \
-  --log-base .autoware_runtime/log
+bash tools/centerpoint_offline/build_autoware_centerpoint_isolated.sh
 ```
 
 `tools/centerpoint_offline/synthetic_xyzirc.py` is the bounded smoke
@@ -129,10 +166,11 @@ route/traffic/spawn-disjoint from training.
 
 ## 8. Remaining blockers
 
-1. A human review/acknowledgement of the pinned official model licence.
-2. A compatible TensorRT C++ development/runtime installation (requires user
-   approval before any system change).
-3. GPU visibility for engine/model-load smoke testing.
+1. A compatible TensorRT C++ development/runtime installation, including a
+   CUDA 12.8-compatible side-by-side toolchain as required by the pinned
+   Autoware 1.8 role (requires user approval before any system change).
+2. The isolated dependency-closure build after (1).
+3. GPU engine/model-load smoke testing after (2).
 4. A sequence-disjoint MORAI bag meeting the validator contract.
 
 No blocker is addressed by CenterPoint retraining, AV2 training, tracker
