@@ -1,6 +1,70 @@
 # Autoware CenterPoint runtime bring-up v1
 
-## 1. Executive summary
+## Current verified result (2026-09-10)
+
+**Runtime status: READY for bounded Autoware replay.**  This supersedes the
+initial readiness snapshot below.  The isolated Autoware 1.8 / Universe 0.51
+`autoware_lidar_centerpoint_node` now builds and executes with the pinned full
+CenterPoint v3 model.  It uses a user-local TensorRT 10.8.0.43 CUDA-11.8 tar
+root; CUDA 11.8 and NVIDIA driver 560.94 were left unchanged.
+
+The actual validated chain is:
+
+```text
+pinned ONNX -> TensorRT 10.8 engine -> isolated CenterPoint node
+           -> synthetic 16-byte XYZIRC -> final DetectedObjects
+```
+
+`build_only:=true` generated external model-root engines: encoder 17 MiB
+(`64cbefd0…cd40d5ebe`) and head 11 MiB (`c63c75e2…bfd3f5e7`).  A normal node
+then loaded both TensorRT 10.8 plans, accepted a non-empty synthetic XYZIRC
+cloud with an identity `map -> lidar_link` TF, and emitted a well-formed empty
+`DetectedObjects` message.  Empty objects are expected for this artificial
+cloud; this is a runtime smoke test, not an accuracy result.
+
+The C++ TensorRT header/link smoke also passed for both `NvInfer.h` and
+`NvOnnxParser.h`.  The isolated detector build initially exposed a missing
+`cuda_blackboard` source dependency, not a CUDA/TensorRT incompatibility.  The
+following exact Autoware lockfile dependencies are held only in the ignored
+`.autoware_runtime/src/` overlay:
+
+| Dependency | Pinned revision |
+| --- | --- |
+| `cuda_blackboard` | 0.3.0 / `e3f13d2ddb0c7e0f6a1fd76227301555e4262a19` |
+| `negotiated` | `eac198b55dcd052af5988f0f174902913c5f20e7` |
+
+The final build used `--parallel-workers 2`,
+`CMAKE_BUILD_PARALLEL_LEVEL=2`, and only
+`/tmp/heven-worktrees/centerpoint-stability-audit-v1/.autoware_runtime/` for
+build/install/log/cache.  The local TensorRT root is
+`/home/didgang1203/opt/tensorrt/10.8.0.43-cuda11.8/` (about 6.6 GiB).  The
+model root is `/home/didgang1203/models/autoware/lidar_centerpoint/`; no large
+artifact is tracked by Git.
+
+**CUDA 12.8 required: NO.**  CUDA 11.8 + TensorRT 10.8.0.43 compiled the
+detector, built engines, and executed this smoke path.  No global TensorRT,
+CUDA toolkit/driver replacement, ROS reinstall, or broad APT upgrade was
+performed.  The only approved ROS build-dependency packages installed were
+`tensorrt_cmake_module` 0.0.5, `diagnostic_updater` 4.0.7, and `logging_demo`
+0.20.9.
+
+Run the repeatable bounded smoke with:
+
+```bash
+cd /tmp/heven-worktrees/centerpoint-stability-audit-v1
+export TENSORRT_ROOT=/home/didgang1203/opt/tensorrt/10.8.0.43-cuda11.8
+export ROS_DOMAIN_ID=77
+bash tools/centerpoint_offline/smoke_autoware_centerpoint.sh
+```
+
+The node still exposes only final `DetectedObjects`; decoded, score-filtered,
+circle-NMS, and IoU-NMS stage dumps require a small default-off instrumentation
+patch after a valid MORAI bag is available.  Runtime is ready, but real
+duplicate/recall/jitter/tracker metrics remain **not measured**.  The next hard
+blocker is a sequence-disjoint MORAI VLP-16 bag with `/ad/dev/objects` actor
+GT, ego status, TF/TF-static, and clock.  **Retraining decision: NOT YET.**
+
+## 1. Initial pre-completion snapshot
 
 **Status: PARTIAL; model provision is complete, but host dependencies block the
 detector build.**

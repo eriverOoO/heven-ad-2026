@@ -101,3 +101,6 @@ route_corridor.json
 external/
 OpenPCDet/
 third_party/OpenPCDet/
+
+# CenterPoint-only isolated Autoware overlay (builds and pinned external deps).
+/.autoware_runtime/

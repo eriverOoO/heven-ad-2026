@@ -6,6 +6,7 @@ set -euo pipefail
 WORKTREE=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 AUTOWARE_SRC=${AUTOWARE_SRC:-/home/didgang1203/projects/autoware_tracker_ws/src}
 RUNTIME_ROOT=${AUTOWARE_RUNTIME_ROOT:-"$WORKTREE/.autoware_runtime"}
+RUNTIME_SRC=${AUTOWARE_RUNTIME_SRC:-"$RUNTIME_ROOT/src"}
 TENSORRT_ROOT=${TENSORRT_ROOT:-}
 
 for binary in colcon nvcc; do
@@ -38,13 +39,21 @@ export MKL_NUM_THREADS=${MKL_NUM_THREADS:-2}
 export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-2}
 export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}
 
-mkdir -p "$RUNTIME_ROOT"/{build,install,log,cache}
+mkdir -p "$RUNTIME_ROOT"/{build,install,log,cache} "$RUNTIME_SRC"
+COLCON_CACHE_ARGS=()
+if [[ ${COLCON_CMAKE_CLEAN_CACHE:-0} == 1 ]]; then
+  COLCON_CACHE_ARGS+=(--cmake-clean-cache)
+fi
 colcon --log-base "$RUNTIME_ROOT/log" build --symlink-install \
-  --base-paths "$AUTOWARE_SRC" \
+  --parallel-workers "${COLCON_PARALLEL_WORKERS:-2}" \
+  --base-paths "$AUTOWARE_SRC" "$RUNTIME_SRC" \
   --packages-up-to autoware_lidar_centerpoint \
   --build-base "$RUNTIME_ROOT/build" \
   --install-base "$RUNTIME_ROOT/install" \
-  --cmake-args -DCMAKE_BUILD_TYPE=Release "${TRT_CMAKE_ARGS[@]}"
+  "${COLCON_CACHE_ARGS[@]}" \
+  --cmake-args -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS=-Wno-error=unused-parameter \
+  "${TRT_CMAKE_ARGS[@]}"
 
 source "$RUNTIME_ROOT/install/setup.bash"
 ros2 pkg prefix autoware_lidar_centerpoint
