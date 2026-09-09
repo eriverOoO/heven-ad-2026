@@ -27,19 +27,23 @@ else
 fi
 [[ -d "$AUTOWARE_SRC/autoware_universe" ]] || { echo "AUTOWARE_SRC is not an Autoware source root: $AUTOWARE_SRC" >&2; exit 2; }
 
+# Some ROS Humble setup scripts reference optional variables unset in a clean
+# shell. Keep strict mode for this helper, but source that generated script
+# with nounset temporarily disabled.
+set +u
 source /opt/ros/humble/setup.bash
+set -u
 export OMP_NUM_THREADS=${OMP_NUM_THREADS:-2}
 export MKL_NUM_THREADS=${MKL_NUM_THREADS:-2}
 export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-2}
 export CMAKE_BUILD_PARALLEL_LEVEL=${CMAKE_BUILD_PARALLEL_LEVEL:-2}
 
 mkdir -p "$RUNTIME_ROOT"/{build,install,log,cache}
-colcon build --symlink-install \
+colcon --log-base "$RUNTIME_ROOT/log" build --symlink-install \
   --base-paths "$AUTOWARE_SRC" \
   --packages-up-to autoware_lidar_centerpoint \
   --build-base "$RUNTIME_ROOT/build" \
   --install-base "$RUNTIME_ROOT/install" \
-  --log-base "$RUNTIME_ROOT/log" \
   --cmake-args -DCMAKE_BUILD_TYPE=Release "${TRT_CMAKE_ARGS[@]}"
 
 source "$RUNTIME_ROOT/install/setup.bash"
