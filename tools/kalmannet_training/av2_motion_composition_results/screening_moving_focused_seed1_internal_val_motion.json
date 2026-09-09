@@ -1,0 +1,17 @@
+{
+  "all": {
+    "n": 2968204,
+    "position_rmse_m": 0.31675741088312154,
+    "velocity_rmse_mps": 1.4252473968503678
+  },
+  "moving": {
+    "n": 1042230,
+    "position_rmse_m": 0.37253850271359484,
+    "velocity_rmse_mps": 2.03153976030219
+  },
+  "near_stationary": {
+    "n": 1925974,
+    "position_rmse_m": 0.28200785442054205,
+    "velocity_rmse_mps": 0.9471995335049163
+  }
+}

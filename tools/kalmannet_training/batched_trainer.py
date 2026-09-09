@@ -34,6 +34,7 @@ from batched_kalmannet import (
     make_length_buckets,
     run_batch,
 )
+from motion_composition import MotionSamplerConfig, compute_sample_weights, deterministic_weighted_draw_order
 from nonfinite_guard import MAX_NONFINITE_GRAD_SKIPS_PER_EPOCH, safe_clip_and_step
 from resume_state import load_resume_state, save_resume_state
 from trainer_core import (
@@ -86,6 +87,8 @@ def train_one_run_batched(
     resume_validation_key: dict[str, Any] | None = None,
     checkpoint_every_epochs: int = 1,
     forensic_recorder: ForensicRecorder | None = None,
+    motion_sampler: MotionSamplerConfig | None = None,
+    motion_categories: list[str] | None = None,
 ) -> TrainResult:
     """THROUGHPUT MODE training loop. Same seeds/hyperparameter contract
     and ``TrainResult`` shape as ``trainer_core.train_one_run`` (so
@@ -103,7 +106,24 @@ def train_one_run_batched(
     -- e.g. seed/lr/batch_size/hidden_size/dataset+split content hashes
     -- must match exactly what produced that checkpoint, or
     ``resume_state.ResumeValidationError`` is raised rather than silently
-    continuing under a different configuration)."""
+    continuing under a different configuration).
+
+    ``motion_sampler`` (default ``None`` -- fully backward compatible,
+    byte-identical to every prior call site / the frozen 10k baseline):
+    when given together with ``motion_categories`` (one
+    ``motion_composition.MOVING``/``NEAR_STATIONARY`` label per
+    ``train_seqs[i]``, precomputed once by the caller from GT so this
+    function never needs the AV2 shard loader), each epoch draws
+    ``len(train_seqs)`` sequence indices WITH REPLACEMENT from a
+    deterministic weighted distribution (``motion_composition.
+    deterministic_weighted_draw_order``, seeded from
+    ``(order_seed, epoch)`` -- no extra RNG state to persist across
+    resume) instead of the one-pass-per-epoch NATURAL order, then feeds
+    that drawn multiset through the SAME existing length-bucketing batch
+    construction unmodified (docs/perception/
+    kalmannet_av2_motion_composition_v1.md, "sampler semantics"). Draw
+    count per epoch is deliberately kept equal to ``len(train_seqs)``
+    (section 11: comparable wall-clock/training-budget to NATURAL)."""
     init_seed = seed if init_seed is None else init_seed
     order_seed = seed if order_seed is None else order_seed
 
@@ -165,11 +185,29 @@ def train_one_run_batched(
 
     val_batch_idx = _val_batches(val_seqs, batch_size, n_buckets) if val_seqs else []
 
+    motion_weights = None
+    if motion_sampler is not None and motion_sampler.target_moving_fraction is not None:
+        if motion_categories is None or len(motion_categories) != len(train_seqs):
+            raise ValueError(
+                "motion_sampler requires motion_categories, one label per train_seqs[i] "
+                f"(got {None if motion_categories is None else len(motion_categories)}, "
+                f"expected {len(train_seqs)})"
+            )
+        motion_weights = compute_sample_weights(motion_categories, motion_sampler)
+
     for epoch in range(start_epoch, max_epochs):
-        if use_length_bucketing:
-            batch_index_groups = bucketed_epoch_batch_order(train_seqs, rng, batch_size, n_buckets)
+        if motion_weights is not None:
+            draw_idx = deterministic_weighted_draw_order(
+                motion_weights, n_draws=len(train_seqs), seed=order_seed * 1_000_003 + epoch
+            )
+            epoch_train_seqs = [train_seqs[i] for i in draw_idx]
         else:
-            order = rng.permutation(len(train_seqs))
+            epoch_train_seqs = train_seqs
+
+        if use_length_bucketing:
+            batch_index_groups = bucketed_epoch_batch_order(epoch_train_seqs, rng, batch_size, n_buckets)
+        else:
+            order = rng.permutation(len(epoch_train_seqs))
             batch_index_groups = [
                 order[i : i + batch_size] for i in range(0, len(order), batch_size)
             ]
@@ -187,7 +225,7 @@ def train_one_run_batched(
         for batch_index, idx_group in enumerate(batch_index_groups):
             if len(idx_group) == 0:
                 continue
-            batch_seqs = [train_seqs[i] for i in idx_group]
+            batch_seqs = [epoch_train_seqs[i] for i in idx_group]
             padded = build_padded_batch(batch_seqs, device=device)
             opt.zero_grad()
             batch_result: BatchLossResult = run_batch(net, padded, device, loss_on_predict_only)

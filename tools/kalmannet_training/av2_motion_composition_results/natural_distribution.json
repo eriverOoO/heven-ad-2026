@@ -1,0 +1,56 @@
+{
+  "class_by_motion_group": {
+    "moving": {
+      "BACKGROUND": 323,
+      "BUS": 2905,
+      "CONSTRUCTION": 116,
+      "CYCLIST": 2697,
+      "MOTORCYCLIST": 825,
+      "PEDESTRIAN": 25592,
+      "RIDERLESS_BICYCLE": 44,
+      "STATIC": 1026,
+      "UNKNOWN": 20,
+      "VEHICLE": 146272
+    },
+    "near_stationary": {
+      "BACKGROUND": 23829,
+      "BUS": 2519,
+      "CONSTRUCTION": 7753,
+      "CYCLIST": 782,
+      "MOTORCYCLIST": 266,
+      "PEDESTRIAN": 22065,
+      "RIDERLESS_BICYCLE": 7141,
+      "STATIC": 34275,
+      "UNKNOWN": 738,
+      "VEHICLE": 217250
+    }
+  },
+  "definition_sensitivity_audit": {
+    "moving_fraction_by_key": {
+      "mean_speed_mps": 0.39618038909189063,
+      "median_speed_mps": 0.3622204585466866,
+      "p90_speed_mps": 0.45591795954378994
+    },
+    "n_segments": 496438,
+    "pairwise_agreement_fraction": {
+      "mean_speed_mps_vs_p90_speed_mps": 0.9398233011977326,
+      "median_speed_mps_vs_mean_speed_mps": 0.9642754986523997,
+      "median_speed_mps_vs_p90_speed_mps": 0.9063024990028966
+    }
+  },
+  "moving_count": 179820,
+  "moving_fraction": 0.3622204585466866,
+  "moving_speed_bins": {
+    "0-0.5": 0,
+    "0.5-2": 43099,
+    "10+": 49523,
+    "2-5": 30609,
+    "5-10": 56589
+  },
+  "near_stationary_count": 316618,
+  "near_stationary_fraction": 0.6377795414533134,
+  "near_stationary_threshold_mps": 0.5,
+  "representative_speed_key_chosen": "median_speed_mps",
+  "schema_version": "av2_motion_composition_natural_distribution_v1",
+  "total_segments": 496438
+}

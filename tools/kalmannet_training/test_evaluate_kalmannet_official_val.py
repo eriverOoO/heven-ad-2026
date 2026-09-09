@@ -314,3 +314,78 @@ def test_precomputed_kf_calibration_json_round_trips_and_skips_recalibration(tmp
     second_report = json.loads(second_report_path.read_text("utf-8"))
     first_report = json.loads(first_report_path.read_text("utf-8"))
     assert second_report["linear_kf_av2_tuned"]["params"] == first_report["linear_kf_av2_tuned"]["params"]
+
+
+# ---------------------------------------------------------------------------
+# evaluate_motion_stratified aggregation correctness (AV2 Motion-Composition
+# Ablation v1, section 21: "motion-stratified evaluator aggregation") --
+# a real correctness test, not just the pre-existing "at least one bucket
+# is non-empty" smoke assertion above.
+# ---------------------------------------------------------------------------
+
+
+def _motion_seq(vx, vy, n=4, dt=0.1):
+    x_true, frames, dts = [], [], [None]
+    x, y = 0.0, 0.0
+    for i in range(n):
+        x_true.append([x, y, vx, vy])
+        frames.append(i)
+        if i > 0:
+            dts.append(dt)
+        x += vx * dt
+        y += vy * dt
+    return {"frames": frames, "dt": dts, "x_true": x_true}
+
+
+def test_evaluate_motion_stratified_buckets_by_gt_speed_not_estimate_speed():
+    """A NEAR_STATIONARY GT segment estimated perfectly must land in
+    'near_stationary', a MOVING one in 'moving' -- regardless of what the
+    estimator itself outputs, since bucketing is defined on GT speed."""
+    stationary_seq = _motion_seq(vx=0.0, vy=0.0)
+    moving_seq = _motion_seq(vx=5.0, vy=0.0)
+
+    def perfect_estimate(seq):
+        return [list(x) for x in seq["x_true"]]
+
+    result = eval_mod.evaluate_motion_stratified([stationary_seq, moving_seq], perfect_estimate)
+    assert result["near_stationary"]["n"] == 4
+    assert result["moving"]["n"] == 4
+    assert result["near_stationary"]["position_rmse_m"] == pytest.approx(0.0, abs=1e-9)
+    assert result["moving"]["position_rmse_m"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_evaluate_motion_stratified_exact_rmse_value():
+    """Hand-computed RMSE check: a constant position error of (3, 4) on
+    every frame of one 4-frame MOVING segment gives position RMSE exactly
+    5.0 (sqrt(3^2+4^2)), never averaged away or mis-scaled."""
+    seq = _motion_seq(vx=5.0, vy=0.0, n=4)
+
+    def biased_estimate(seq):
+        return [[x[0] + 3.0, x[1] + 4.0, x[2], x[3]] for x in seq["x_true"]]
+
+    result = eval_mod.evaluate_motion_stratified([seq], biased_estimate)
+    assert result["moving"]["n"] == 4
+    assert result["moving"]["position_rmse_m"] == pytest.approx(5.0, abs=1e-9)
+    assert result["moving"]["velocity_rmse_mps"] == pytest.approx(0.0, abs=1e-9)
+    assert "near_stationary" not in result
+
+
+def test_evaluate_motion_stratified_skips_nonfinite_estimates():
+    seq = _motion_seq(vx=5.0, vy=0.0, n=4)
+
+    def bad_estimate(seq):
+        return [[float("nan"), 0.0, 0.0, 0.0] for _ in seq["x_true"]]
+
+    result = eval_mod.evaluate_motion_stratified([seq], bad_estimate)
+    assert result == {}  # every frame skipped -- no fabricated bucket
+
+
+def test_evaluate_motion_stratified_threshold_matches_locked_definition():
+    """The evaluator's own MOTION_STATIONARY_THRESHOLD_MPS must match
+    motion_composition.NEAR_STATIONARY_THRESHOLD_MPS -- the two motion
+    definitions used across this task (frame-level for evaluation,
+    segment-level for sampling) are deliberately the same numeric
+    threshold, so results are comparable."""
+    from motion_composition import NEAR_STATIONARY_THRESHOLD_MPS
+
+    assert eval_mod.MOTION_STATIONARY_THRESHOLD_MPS == NEAR_STATIONARY_THRESHOLD_MPS
