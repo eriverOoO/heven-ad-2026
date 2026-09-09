@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,9 @@ def detections_from_ros_dict(message: dict, label: int | None = 1) -> list[dict]
         if label is not None and object_label != label:
             continue
         position = obj["kinematics"]["pose_with_covariance"]["pose"]["position"]
+        orientation = obj["kinematics"]["pose_with_covariance"]["pose"]["orientation"]
+        dimensions = obj["shape"]["dimensions"]
+        linear = obj["kinematics"]["twist_with_covariance"]["twist"]["linear"]
         result.append(
             {
                 "x": float(position["x"]),
@@ -37,6 +41,12 @@ def detections_from_ros_dict(message: dict, label: int | None = 1) -> list[dict]
                 "z": float(position["z"]),
                 "score": float(obj.get("existence_probability", 0.0)),
                 "label": object_label,
+                "length": float(dimensions["x"]),
+                "width": float(dimensions["y"]),
+                "height": float(dimensions["z"]),
+                "yaw": 2.0 * math.atan2(float(orientation["z"]), float(orientation["w"])),
+                "vx": float(linear["x"]),
+                "vy": float(linear["y"]),
             }
         )
     return result

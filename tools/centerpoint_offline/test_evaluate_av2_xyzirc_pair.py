@@ -41,10 +41,17 @@ class Av2PairEvaluationTest(unittest.TestCase):
             return {
                 "existence_probability": 0.75,
                 "classification": [{"label": label, "probability": 1.0}],
+                "shape": {"dimensions": {"x": 4.0, "y": 2.0, "z": 1.5}},
                 "kinematics": {
                     "pose_with_covariance": {
-                        "pose": {"position": {"x": x, "y": 2.0, "z": 0.0}}
-                    }
+                        "pose": {
+                            "position": {"x": x, "y": 2.0, "z": 0.0},
+                            "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                        }
+                    },
+                    "twist_with_covariance": {
+                        "twist": {"linear": {"x": 0.0, "y": 0.0, "z": 0.0}}
+                    },
                 },
             }
 
