@@ -25,6 +25,12 @@ class Av2Vlp16AdapterTest(unittest.TestCase):
         self.assertTrue(np.array_equal(first, second))
         self.assertAlmostEqual(float(first["x"][0]), 5.0, places=5)
 
+    def test_retained_coordinates_are_source_coordinates(self):
+        points = np.array([[10.0, 0.0, 0.175, 10.0], [5.0, 0.0, 0.087, 20.0]], dtype=np.float32)
+        output = adapt_points(points, AdapterConfig(vertical_tolerance_deg=1.0, azimuth_bin_deg=1.0))
+        retained = np.column_stack((output["x"], output["y"], output["z"]))
+        self.assertTrue(any(np.allclose(retained[0], point[:3]) for point in points))
+
     def test_empty_and_intensity_modes(self):
         cloud = adapt_points(np.empty((0, 4), dtype=np.float32))
         self.assertEqual(len(cloud), 0)
