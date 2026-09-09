@@ -76,32 +76,30 @@ Autoware 1.8.0's x86_64 TensorRT role pins
 and header packages. The current host has CUDA 11.8 and no APT candidate for
 these packages; its only NVIDIA APT source is the CUDA WSL repository. A
 global TensorRT/CUDA 12.8 side-by-side installation requires separate user
-approval and must not be improvised by this audit. It does **not** justify a
-driver replacement, CUDA removal, ROS reinstall, or a broad APT upgrade.
+approval and must not be improvised by this audit. That Ansible package pin is
+not source-level proof that CenterPoint requires CUDA 12.8: the source uses
+the TensorRT C++ API, and TensorRT 10.8 officially supports CUDA 11.8. It
+does **not** justify a driver replacement, CUDA removal, ROS reinstall, or a
+broad APT upgrade.
 
-The required user-only preflight and package action, once the NVIDIA TensorRT
-repository serving those exact versions has been configured, is:
+The preferred next path is an exact TensorRT 10.8.0.43 Linux x86_64 CUDA-11.8
+tar distribution obtained from NVIDIA's authenticated official download flow.
+The artifact filename/URL must be taken from that flow, not inferred. Unpack
+it outside the repository, then run:
 
 ```bash
-trt_version='10.8.0.43-1+cuda12.8'
-apt-cache madison libnvinfer10 libnvonnxparsers10 libnvinfer-dev
-# Each required package must show exactly $trt_version before proceeding.
-sudo apt-get install -y cuda-toolkit-12-8 \
-  libnvinfer10="$trt_version" libnvinfer-plugin10="$trt_version" \
-  libnvonnxparsers10="$trt_version" libnvinfer-dev="$trt_version" \
-  libnvinfer-plugin-dev="$trt_version" \
-  libnvinfer-headers-dev="$trt_version" \
-  libnvinfer-headers-plugin-dev="$trt_version" \
-  libnvonnxparsers-dev="$trt_version"
-sudo apt-mark hold libnvinfer10 libnvinfer-plugin10 libnvonnxparsers10 \
-  libnvinfer-dev libnvinfer-plugin-dev libnvonnxparsers-dev \
-  libnvinfer-headers-dev libnvinfer-headers-plugin-dev
+export TENSORRT_ROOT=/home/didgang1203/opt/tensorrt/10.8.0.43-cuda11.8
+bash tools/centerpoint_offline/check_local_tensorrt.sh
+bash tools/centerpoint_offline/build_autoware_centerpoint_isolated.sh
 ```
 
-`cuda-toolkit-12-8` is a side-by-side toolkit request, not a driver package;
-the package solver must be reviewed before confirmation. Do not run this while
-the exact candidate check is empty (as it is on the audited host), and do not
-substitute a TensorRT 8 or latest package merely to make CMake pass.
+Both scripts scope `PATH`, `LD_LIBRARY_PATH`, CMake include/library lookup,
+and all build products to the invoking process/worktree; neither edits
+`.bashrc`, `/usr`, nor shared HEVEN ROS build directories.
+
+Do not install CUDA 12.8 or a global TensorRT package in this phase. CUDA 12.8
+is an escalation only if the exact CUDA-11.8 TensorRT artifact is unavailable
+or the local compile/build smoke produces a documented CUDA-specific failure.
 
 After the approved dependency installation, use the worktree-only build helper
 below. It builds `--packages-up-to autoware_lidar_centerpoint`, its source
@@ -166,9 +164,8 @@ route/traffic/spawn-disjoint from training.
 
 ## 8. Remaining blockers
 
-1. A compatible TensorRT C++ development/runtime installation, including a
-   CUDA 12.8-compatible side-by-side toolchain as required by the pinned
-   Autoware 1.8 role (requires user approval before any system change).
+1. An exact TensorRT 10.8.0.43 CUDA-11.8 tar root from NVIDIA's official
+   download flow, or evidence that NVIDIA no longer offers that artifact.
 2. The isolated dependency-closure build after (1).
 3. GPU engine/model-load smoke testing after (2).
 4. A sequence-disjoint MORAI bag meeting the validator contract.
