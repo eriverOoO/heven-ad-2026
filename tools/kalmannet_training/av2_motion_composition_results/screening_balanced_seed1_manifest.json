@@ -1,0 +1,91 @@
+{
+  "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+  "best_epoch": 3,
+  "best_val_loss": 0.7501028821686305,
+  "checkpoint_family": "av2_stage0_kalmannet_batched_v1",
+  "checkpoint_path": "/home/didgang1203/datasets/av2/checkpoints/av2_motion_screening_balanced_seed1.pt",
+  "checkpoint_schema_version": "av2_stage0_kalmannet_checkpoint_v1",
+  "checkpoint_sha256": "cb1091bcd38de5d2852dbba98b7b51e66e0ba4998f721cd1164ac35db033d3c5",
+  "coordinate_mode": "first_state_relative",
+  "corruption_config": {
+    "bias_xy": [
+      0.0,
+      0.0
+    ],
+    "covariance_xy": null,
+    "dropout_burst_enabled": true,
+    "dropout_burst_length_samples": [],
+    "dropout_burst_max_len": 5,
+    "dropout_burst_min_len": 2,
+    "dropout_burst_prob": 0.02,
+    "dropout_prob": 0.1,
+    "gaussian_noise_std_m": 0.3,
+    "mode": "custom",
+    "seed": 20260905
+  },
+  "dataset_manifest_sha256": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+  "environment": {
+    "cuda_available": true,
+    "cuda_version": "12.1",
+    "gpu_name": "NVIDIA GeForce RTX 4060",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "python_version": "3.10.12",
+    "torch_version": "2.4.1+cu121"
+  },
+  "git_sha": "41baa5652716c09a446fcdfbd9dc6c685feba389",
+  "loss_on_predict_only": true,
+  "measurement_fields": [
+    "x",
+    "y"
+  ],
+  "model_config": {
+    "hidden_size": 32,
+    "measurement_dim": 2,
+    "state_dim": 4
+  },
+  "seed_info": {
+    "init_seed": 1,
+    "order_seed": 1,
+    "seed": 1
+  },
+  "split_manifest_sha256": "f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad",
+  "state_fields": [
+    "x",
+    "y",
+    "vx",
+    "vy"
+  ],
+  "training_config": {
+    "abort_reason": null,
+    "batch_size": 64,
+    "condition": "generic_robust",
+    "deviation_from_historical_max_epochs": true,
+    "grad_clip": 10.0,
+    "grad_skip_count": 8,
+    "large_finite_gradient_count": 240,
+    "lr": 0.004,
+    "max_epochs": 8,
+    "mini_batch_semantics": "throughput_mode_mini_batch_gradient_averaging_not_equivalent_to_per_sequence_optimizer",
+    "motion_n_moving_segments": 179875,
+    "motion_n_stationary_segments": 316559,
+    "motion_natural_moving_fraction": 0.36233416728104845,
+    "motion_sampler": "BALANCED-MOTION",
+    "motion_sampler_fingerprint": "f6311077b6846cc519002ccbbc028f70670aec64be9cf4dee606df21e1b04b8b",
+    "motion_sampler_target_moving_fraction": 0.5,
+    "n_buckets": 8,
+    "n_train_sequences": 496434,
+    "n_val_sequences": 57372,
+    "nonfinite_gradient_skip_count": 0,
+    "norm_overflow_count": 8,
+    "norm_overflow_skip_count": 8,
+    "optimizer": "Adam",
+    "optimizer_state_collapse_count": 0,
+    "parameter_collapse_count": 0,
+    "patience": 8,
+    "per_element_nonfinite_gradient_count": 0,
+    "sampler_version": "length_bucketed_v1",
+    "training_collapsed": false,
+    "training_unstable": false,
+    "use_length_bucketing": true
+  }
+}

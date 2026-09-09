@@ -1,5 +1,124 @@
 # STATUS
 
+## AV2 KalmanNet Motion-Composition Ablation v1 — COMPLETE (outcome B, tradeoff; PR open, do NOT merge)
+
+Branch `exp/kalmannet-av2-motion-composition-v1`, from merged PR #59
+`754d6dc`/`41baa56` (`exp(kalmannet): AV2 10K GENERIC-ROBUST multi-seed
+completion`, verified `MERGED` before branching). **Offline AV2
+experiment only. No `kalmannet_core.py`/`KalmanNetFilter`/AB3DMOT/
+CenterPoint/ROS/prediction/planner/occupancy-grid file changed. No model
+architecture or optimizer-hyperparameter retuning. No MORAI evaluation,
+no MORAI/competition-performance claim — `MORAI_ESTIMATOR_EVAL_V2` still
+does not exist.**
+
+Tested whether AV2's natural ~64% near-stationary training composition
+limits estimation quality on MOVING trajectories, by adding an opt-in
+deterministic weighted-with-replacement sampler
+(`motion_composition.py`, `batched_trainer.py` additive `motion_sampler`/
+`motion_categories` params, byte-identical when unused) on top of the
+frozen 10k GENERIC-ROBUST config — no architecture/LR/epoch-semantics
+change beyond two explicitly user-approved, disclosed deviations
+(`max_epochs` 60→30, `patience` 15→10 for the full run only, both
+evidence-grounded: seed1/seed2 never improved more than 4 epochs after
+their prior best, and never ran past ~epoch 23 of 60).
+
+**Motion definition** (locked before any official-VAL read): median
+speed, 0.5 m/s threshold — most outlier-robust of 3 audited candidates
+(median/mean/p90; 96.4%/90.6%/94.0% pairwise agreement), independently
+reproduces the task's own prior "~64% near-stationary" observation
+(measured: 63.78% near-stationary / 36.22% moving, 496,438 real TRAIN
+segments, streamed to avoid an OOM that killed an earlier full-dataset-
+load attempt).
+
+**Screening** (8 epochs each, seed 1, internal-val only): BALANCED-MOTION
+(50% target) gave a modest MOVING RMSE improvement with a moderate
+NEAR_STATIONARY cost; MOVING-FOCUSED (77.5% target) gave a larger MOVING
+gain but a disproportionately larger cost (NEAR_STATIONARY velocity RMSE
++22.67% vs. BALANCED's +7.66%, and MOVING-FOCUSED's own overall ALL
+velocity RMSE regressed, unlike BALANCED's near-flat -0.03%) — **BALANCED-
+MOTION selected** for the full run, internal-validation-only, before any
+official-VAL read.
+
+**Full run** (BALANCED-MOTION, seed 1, `max_epochs=30`, `patience=10`,
+`--num-threads 4`): 20 epochs, 4.39 h (vs. seed1/seed2's 6.5–7.5 h),
+best_epoch=3, `catastrophic=false`, 0 element-nonfinite events, 36
+norm-overflow events all safely contained. Checkpoint SHA-256
+`32fbb4b7e077aa92e3f85da81a103341dd0b2857c985a2aea43c5d0a8e779431`.
+
+**Official AV2 VAL result (the actual test of the hypothesis) — outcome
+B, more severe than internal-val alone suggested.** On the practically-
+relevant GENERIC-ROBUST conditions (B/C) and the MORAI-calibrated
+diagnostic (D — AV2 diagnostic only, not a MORAI evaluation), official
+VAL **confirms** the internal-val pattern: MOVING position RMSE improves
+modestly (−0.4% to −2.8%), MOVING velocity RMSE improves more (−1.9% to
+−2.5%), while NEAR_STATIONARY degrades on both (+3.75–5.58% position,
++8.85–15.15% velocity) — a real, reproduced tradeoff, not noise (3/3
+conditions agree in direction). **But CLEAN (A) — never evaluated during
+internal-val, since that always used GENERIC-ROBUST corruption — reveals
+a severe, previously-unmeasured regression**: both MOVING (+59.05%) and
+NEAR_STATIONARY (+55.10%) position RMSE are dramatically worse under
+BALANCED-MOTION (ALL/CLEAN position RMSE nearly doubles, 0.03923→0.06216
+m). This new finding was not visible at the internal-val stage and
+materially changes the overall assessment.
+
+**Selected policy (chosen, not implemented): keep the NATURAL 10k model
+as the preferred AV2 pretrained family** — the MOVING gain under
+GENERIC-ROBUST/diagnostic conditions is real but small and does not
+offset the NEAR_STATIONARY cost or, especially, the severe CLEAN-condition
+regression. Secondary candidate for a future task: a milder mixed
+natural/motion-focused curriculum, to test whether the CLEAN regression
+is avoidable while keeping some of the MOVING gain — not implemented.
+
+**Real incident, fully recovered:** a genuine PC power loss occurred
+mid-task, after the full run's training+internal-val had completed and
+persisted under `~/datasets/av2/` (survived — outside `/tmp`), but while
+the official-VAL evaluation subprocess was still running (killed
+mid-flight). Because the git worktree lived under `/tmp` (cleared on
+reboot) and the branch had zero commits yet, every source file for this
+task was lost and was rebuilt from the conversation record after restart
+— verified behavior-equivalent by re-running the full test suite
+(292/292 pass, identical count to before the loss) and `git diff --check`/
+`pyflakes` clean. No experimental result was actually lost; only the
+official-VAL evaluation needed a full re-run (a single eval pass, not
+multi-hour training).
+
+**Tests:** 292/292 pass (245 pre-existing from PR #59 + 40 new: 34
+`test_motion_composition.py` + 6 `test_motion_sampler_integration.py`,
+of which the latter also gained 3 more for a total of 9 there + 4 new in
+`test_evaluate_kalmannet_official_val.py`). `py_compile`/`pyflakes`/
+`git diff --check` all clean.
+
+**Files:** `tools/kalmannet_training/{motion_composition.py,
+train_kalmannet_motion_composition.py, analyze_motion_composition.py,
+recompute_internal_val_motion_report.py}` (new),
+`tools/kalmannet_training/batched_trainer.py` (additive `motion_sampler`/
+`motion_categories`, byte-identical when unused),
+`tools/kalmannet_training/test_{motion_composition,
+motion_sampler_integration}.py` (new),
+`tools/kalmannet_training/test_evaluate_kalmannet_official_val.py`
+(+4 tests), `tools/kalmannet_training/av2_motion_composition_results/`
+(new, 88 KB: natural distribution, screening B/C, NATURAL/BALANCED
+internal-val + official-VAL reports, freeze manifest — no checkpoints/
+resume binaries/AV2 data), `docs/perception/
+kalmannet_av2_motion_composition_v1.md` (new), this file. No
+`kalmannet_core.py`/`KalmanNetFilter`/AB3DMOT/CenterPoint/ROS/prediction/
+planner/occupancy-grid file changed.
+
+**Recommended next task:** capture ≥1 real MORAI-recorded scenario (GT
+actor trajectories + ego GT + TF via the existing
+`ad_morai_dataset_capture`/`export_kalmannet`/
+`attach_kalmannet_measurements` pipeline, with real detector-attached
+measurements) and use it to build the first `MORAI_ESTIMATOR_EVAL_V2`:
+zero-shot-evaluate the frozen NATURAL 10k checkpoints (seed0/1/2, from
+PR #59 — reaffirmed as the preferred family by this task) against the
+Tuned Linear KF baseline on real MORAI data, before any further AV2-only
+composition/curriculum work. **Do NOT start further training as part of
+this task's own scope.**
+
+## AV2 KalmanNet Motion-Composition Ablation v1 result: **COMPLETE**
+
+---
+
 ## AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 — COMPLETE (3-seed evidence; PR open, do NOT merge)
 
 Branch `exp/kalmannet-av2-10k-multiseed-v1`, from merged PR #58 `754d6dc`
