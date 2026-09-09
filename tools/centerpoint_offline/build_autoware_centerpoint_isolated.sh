@@ -44,10 +44,20 @@ COLCON_CACHE_ARGS=()
 if [[ ${COLCON_CMAKE_CLEAN_CACHE:-0} == 1 ]]; then
   COLCON_CACHE_ARGS+=(--cmake-clean-cache)
 fi
+COLCON_SOURCE_ARGS=(--base-paths "$AUTOWARE_SRC" "$RUNTIME_SRC" --packages-up-to autoware_lidar_centerpoint)
+if [[ -f "$RUNTIME_SRC/autoware_lidar_centerpoint/.heven_centerpoint_stage_overlay" ]]; then
+  # Dependencies are already present in the isolated install. Re-source them
+  # and select only the runtime overlay to avoid duplicate package discovery.
+  if [[ -f "$RUNTIME_ROOT/install/setup.bash" ]]; then
+    set +u
+    source "$RUNTIME_ROOT/install/setup.bash"
+    set -u
+  fi
+  COLCON_SOURCE_ARGS=(--base-paths "$RUNTIME_SRC" --packages-select autoware_lidar_centerpoint)
+fi
 colcon --log-base "$RUNTIME_ROOT/log" build --symlink-install \
   --parallel-workers "${COLCON_PARALLEL_WORKERS:-2}" \
-  --base-paths "$AUTOWARE_SRC" "$RUNTIME_SRC" \
-  --packages-up-to autoware_lidar_centerpoint \
+  "${COLCON_SOURCE_ARGS[@]}" \
   --build-base "$RUNTIME_ROOT/build" \
   --install-base "$RUNTIME_ROOT/install" \
   "${COLCON_CACHE_ARGS[@]}" \
@@ -55,6 +65,8 @@ colcon --log-base "$RUNTIME_ROOT/log" build --symlink-install \
   -DCMAKE_CXX_FLAGS=-Wno-error=unused-parameter \
   "${TRT_CMAKE_ARGS[@]}"
 
+set +u
 source "$RUNTIME_ROOT/install/setup.bash"
+set -u
 ros2 pkg prefix autoware_lidar_centerpoint
 ros2 pkg executables autoware_lidar_centerpoint

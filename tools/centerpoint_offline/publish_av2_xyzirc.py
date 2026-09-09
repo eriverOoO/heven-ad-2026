@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import time
 
 import numpy as np
 
 from synthetic_xyzirc import XYZIRC_DTYPE, ros_fields
 
 FIELDS = ("x", "y", "z", "intensity", "return_type", "channel")
+
+
+def split_timestamp_ns(timestamp_ns: int) -> tuple[int, int]:
+    if timestamp_ns < 0:
+        raise ValueError("timestamp_ns must be non-negative")
+    return divmod(timestamp_ns, 1_000_000_000)
 
 
 def load_npz(path: Path) -> tuple[np.ndarray, dict[str, object]]:
@@ -39,6 +46,8 @@ def main() -> int:
     parser.add_argument("--topic", default="/ad/perception/lidar/points_xyzirc")
     parser.add_argument("--frame-id", default="av2_egovehicle")
     parser.add_argument("--count", type=int, default=5)
+    parser.add_argument("--wait-for-subscriber-sec", type=float, default=10.0)
+    parser.add_argument("--linger-sec", type=float, default=1.0)
     args = parser.parse_args()
     if args.count < 1:
         parser.error("--count must be positive")
@@ -48,13 +57,22 @@ def main() -> int:
     from sensor_msgs.msg import PointCloud2
 
     cloud, metadata = load_npz(args.npz)
+    if "timestamp_ns" not in metadata:
+        raise ValueError("NPZ must contain timestamp_ns")
+    stamp_sec, stamp_nanosec = split_timestamp_ns(int(metadata["timestamp_ns"]))
     rclpy.init()
     node = rclpy.create_node("centerpoint_av2_xyzirc")
     publisher = node.create_publisher(PointCloud2, args.topic, QoSProfile(depth=1))
     try:
+        deadline = time.monotonic() + args.wait_for_subscriber_sec
+        while publisher.get_subscription_count() < 1 and time.monotonic() < deadline:
+            rclpy.spin_once(node, timeout_sec=0.1)
+        if publisher.get_subscription_count() < 1:
+            raise RuntimeError(f"no subscriber discovered on {args.topic}")
         for _ in range(args.count):
             message = PointCloud2()
-            message.header.stamp = node.get_clock().now().to_msg()
+            message.header.stamp.sec = stamp_sec
+            message.header.stamp.nanosec = stamp_nanosec
             message.header.frame_id = args.frame_id
             message.height = 1
             message.width = len(cloud)
@@ -65,6 +83,9 @@ def main() -> int:
             message.is_dense = True
             message.data = cloud.tobytes()
             publisher.publish(message)
+            rclpy.spin_once(node, timeout_sec=0.1)
+        linger_deadline = time.monotonic() + args.linger_sec
+        while time.monotonic() < linger_deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
     finally:
         node.destroy_node()

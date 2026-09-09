@@ -1,0 +1,168 @@
+diff --git a/include/autoware/lidar_centerpoint/centerpoint_trt.hpp b/include/autoware/lidar_centerpoint/centerpoint_trt.hpp
+--- a/include/autoware/lidar_centerpoint/centerpoint_trt.hpp
++++ b/include/autoware/lidar_centerpoint/centerpoint_trt.hpp
+@@ -50,3 +50,3 @@ public:
+     const tf2_ros::Buffer & tf_buffer, std::vector<Box3D> & det_boxes3d,
+-    bool & is_num_pillars_within_range);
++    bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d = nullptr);
+
+@@ -62,3 +62,4 @@ protected:
+
+-  void postProcess(std::vector<Box3D> & det_boxes3d);
++  void postProcess(
++    std::vector<Box3D> & det_boxes3d, std::vector<Box3D> * post_score_boxes3d = nullptr);
+
+diff --git a/include/autoware/lidar_centerpoint/node.hpp b/include/autoware/lidar_centerpoint/node.hpp
+--- a/include/autoware/lidar_centerpoint/node.hpp
++++ b/include/autoware/lidar_centerpoint/node.hpp
+@@ -62,2 +62,12 @@ private:
+   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_pub_;
++  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
++    post_score_objects_pub_;
++  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
++    post_circle_nms_objects_pub_;
++  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
++    pre_iou_objects_pub_;
++  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
++    post_iou_objects_pub_;
++  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
++    final_stage_objects_pub_;
+
+@@ -66,2 +76,3 @@ private:
+   bool has_twist_{false};
++  bool enable_stage_dump_{false};
+
+diff --git a/launch/lidar_centerpoint.launch.xml b/launch/lidar_centerpoint.launch.xml
+--- a/launch/lidar_centerpoint.launch.xml
++++ b/launch/lidar_centerpoint.launch.xml
+@@ -12,2 +12,3 @@
+   <arg name="build_only" default="false" description="shutdown node after TensorRT engine file is built"/>
++  <arg name="enable_stage_dump" default="false" description="publish opt-in CenterPoint stage topics"/>
+
+@@ -31,2 +32,3 @@
+         <param name="logger_name" value="$(var node_name)"/>
++        <param name="enable_stage_dump" value="$(var enable_stage_dump)"/>
+       </composable_node>
+@@ -50,2 +52,3 @@
+       <param name="logger_name" value="$(var node_name)"/>
++      <param name="enable_stage_dump" value="$(var enable_stage_dump)"/>
+     </node>
+diff --git a/include/autoware/lidar_centerpoint/postprocess/postprocess_kernel.hpp b/include/autoware/lidar_centerpoint/postprocess/postprocess_kernel.hpp
+--- a/include/autoware/lidar_centerpoint/postprocess/postprocess_kernel.hpp
++++ b/include/autoware/lidar_centerpoint/postprocess/postprocess_kernel.hpp
+@@ -35,3 +35,3 @@ public:
+     const float * out_rot, const float * out_vel, std::vector<Box3D> & det_boxes3d,
+-    cudaStream_t stream);
++    cudaStream_t stream, std::vector<Box3D> * post_score_boxes3d = nullptr);
+
+diff --git a/lib/centerpoint_trt.cpp b/lib/centerpoint_trt.cpp
+--- a/lib/centerpoint_trt.cpp
++++ b/lib/centerpoint_trt.cpp
+@@ -176,3 +176,3 @@ bool CenterPointTRT::detect(
+   const tf2_ros::Buffer & tf_buffer, std::vector<Box3D> & det_boxes3d,
+-  bool & is_num_pillars_within_range)
++  bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d)
+ {
+@@ -193,3 +193,3 @@ bool CenterPointTRT::detect(
+
+-  postProcess(det_boxes3d);
++  postProcess(det_boxes3d, post_score_boxes3d);
+
+@@ -281,3 +281,4 @@ void CenterPointTRT::inference()
+
+-void CenterPointTRT::postProcess(std::vector<Box3D> & det_boxes3d)
++void CenterPointTRT::postProcess(
++  std::vector<Box3D> & det_boxes3d, std::vector<Box3D> * post_score_boxes3d)
+ {
+@@ -285,3 +286,3 @@ void CenterPointTRT::postProcess(std::vector<Box3D> & det_boxes3d)
+     head_out_heatmap_d_.get(), head_out_offset_d_.get(), head_out_z_d_.get(), head_out_dim_d_.get(),
+-    head_out_rot_d_.get(), head_out_vel_d_.get(), det_boxes3d, stream_));
++    head_out_rot_d_.get(), head_out_vel_d_.get(), det_boxes3d, stream_, post_score_boxes3d));
+   if (det_boxes3d.size() == 0) {
+diff --git a/lib/postprocess/postprocess_kernel.cu b/lib/postprocess/postprocess_kernel.cu
+--- a/lib/postprocess/postprocess_kernel.cu
++++ b/lib/postprocess/postprocess_kernel.cu
+@@ -200,3 +200,3 @@ cudaError_t PostProcessCUDA::generateDetectedBoxes3D_launch(
+   const float * out_rot, const float * out_vel, std::vector<Box3D> & det_boxes3d,
+-  cudaStream_t stream)
++  cudaStream_t stream, std::vector<Box3D> * post_score_boxes3d)
+ {
+@@ -232,2 +232,7 @@ cudaError_t PostProcessCUDA::generateDetectedBoxes3D_launch(
+
++  if (post_score_boxes3d != nullptr) {
++    post_score_boxes3d->resize(num_det_boxes3d);
++    thrust::copy(det_boxes3d_d.begin(), det_boxes3d_d.end(), post_score_boxes3d->begin());
++  }
++
+   // supress by NMS
+diff --git a/src/node.cpp b/src/node.cpp
+--- a/src/node.cpp
++++ b/src/node.cpp
+@@ -54,2 +54,3 @@ LidarCenterPointNode::LidarCenterPointNode(const rclcpp::NodeOptions & node_opti
+   has_twist_ = this->declare_parameter<bool>("model_params.has_twist");
++  enable_stage_dump_ = this->declare_parameter<bool>("enable_stage_dump", false);
+   const std::size_t point_feature_size = static_cast<std::size_t>(
+@@ -173,2 +174,19 @@ LidarCenterPointNode::LidarCenterPointNode(const rclcpp::NodeOptions & node_opti
+     "~/output/objects", rclcpp::QoS{1});
++  if (enable_stage_dump_) {
++    post_score_objects_pub_ =
++      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
++        "~/debug/stages/post_score", rclcpp::QoS{1});
++    post_circle_nms_objects_pub_ =
++      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
++        "~/debug/stages/post_circle_nms", rclcpp::QoS{1});
++    pre_iou_objects_pub_ =
++      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
++        "~/debug/stages/pre_iou", rclcpp::QoS{1});
++    post_iou_objects_pub_ =
++      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
++        "~/debug/stages/post_iou", rclcpp::QoS{1});
++    final_stage_objects_pub_ =
++      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
++        "~/debug/stages/final", rclcpp::QoS{1});
++  }
+
+@@ -218,5 +236,7 @@ void LidarCenterPointNode::pointCloudCallback(
+   std::vector<Box3D> det_boxes3d;
++  std::vector<Box3D> post_score_boxes3d;
+   bool is_num_pillars_within_range = true;
+   bool is_success = detector_ptr_->detect(
+-    input_pointcloud_msg, tf_buffer_, det_boxes3d, is_num_pillars_within_range);
++    input_pointcloud_msg, tf_buffer_, det_boxes3d, is_num_pillars_within_range,
++    enable_stage_dump_ ? &post_score_boxes3d : nullptr);
+   if (!is_success) {
+@@ -246,4 +266,34 @@ void LidarCenterPointNode::pointCloudCallback(
+
++  if (enable_stage_dump_) {
++    const auto boxes_to_message = [this, &input_pointcloud_msg](const std::vector<Box3D> & boxes) {
++      autoware_perception_msgs::msg::DetectedObjects msg;
++      msg.header = input_pointcloud_msg->header;
++      msg.objects.reserve(boxes.size());
++      for (const auto & box : boxes) {
++        autoware_perception_msgs::msg::DetectedObject obj;
++        box3DToDetectedObject(box, class_names_, has_twist_, has_variance_, obj);
++        msg.objects.emplace_back(obj);
++      }
++      return msg;
++    };
++    post_score_objects_pub_->publish(boxes_to_message(post_score_boxes3d));
++    post_circle_nms_objects_pub_->publish(boxes_to_message(det_boxes3d));
++
++    autoware_perception_msgs::msg::DetectedObjects pre_iou_msg;
++    pre_iou_msg.header = input_pointcloud_msg->header;
++    pre_iou_msg.objects = raw_objects;
++    pre_iou_objects_pub_->publish(pre_iou_msg);
++
++    autoware_perception_msgs::msg::DetectedObjects post_iou_msg;
++    post_iou_msg.header = input_pointcloud_msg->header;
++    post_iou_msg.objects = output_msg.objects;
++    post_iou_objects_pub_->publish(post_iou_msg);
++  }
++
+   detection_class_remapper_.mapClasses(output_msg);
+
++  if (enable_stage_dump_) {
++    final_stage_objects_pub_->publish(output_msg);
++  }
++
+   if (objects_sub_count > 0) {

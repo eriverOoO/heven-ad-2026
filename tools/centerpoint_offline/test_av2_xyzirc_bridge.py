@@ -4,10 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from publish_av2_xyzirc import load_npz
+from publish_av2_xyzirc import load_npz, split_timestamp_ns
 
 
 class Av2XyzircBridgeTest(unittest.TestCase):
+    def test_timestamp_is_preserved_for_ros_header(self):
+        self.assertEqual(split_timestamp_ns(315969904460072000), (315969904, 460072000))
+
     def test_npz_layout_and_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "frame.npz"
