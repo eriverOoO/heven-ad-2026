@@ -1,5 +1,153 @@
 # STATUS
 
+## KalmanNet Physically-Consistent Variable-dt Augmentation v1 — COMPLETE (outcome B, mild dt-dependent tradeoff; PR open, do NOT merge)
+
+Branch `exp/kalmannet-av2-variable-dt-v1`, from `origin/main` `61b03894`
+(merge of PR #60, verified `MERGED` before branching; PR #60 NOT stacked).
+Isolated worktree `/tmp/heven-worktrees/kalmannet-av2-variable-dt-v1`.
+**Offline AV2-only experiment. No `kalmannet_core.py`/`KalmanNetFilter`/
+`F_matrix`/`Q_matrix`/AB3DMOT/CenterPoint/ROS/prediction/planner/
+occupancy-grid file changed. No KalmanNet architecture or optimizer-
+hyperparameter change. No MORAI evaluation, no MORAI/competition/real-
+simulator-transfer claim -- MORAI simulator access is unavailable.**
+
+**Question:** does training KalmanNet on physically-consistent variable
+temporal intervals -- built via TEMPORAL THINNING of real AV2 samples
+(deterministic strict subset of a segment's own frame indices, dt
+recomputed by exact dt-additivity, every retained state/measurement a
+real AV2 sample, NEVER interpolation) -- improve robustness to irregular
+sampling, without an architecture change?
+
+**Fixed-dt assumption audit (section 5):** NO hardcoded `0.1`/`10Hz`/
+fixed-step assumption anywhere in the training/loss/corruption/eval path.
+`dt_s` is always computed from real AV2 `timestamps_ns` deltas at
+shard-export time; `F_matrix(dt)`/`Q_matrix(dt)` and `batched_kalmannet.py`'s
+recursion already consume each row's own per-step dt generically;
+`build_padded_batch` already stores dt per-sample-per-timestep so
+independent dt streams can share one batch with zero code change.
+
+**New module** `tools/kalmannet_training/variable_dt.py` (pure functions,
+no torch/ROS): `thin_sequence` / `verify_thinned_sequence` /
+`segment_to_thinned_training_sequence` / `load_split_sequences_with_thinning`
+/ `evaluate_with_dt_buckets`. `ThinningPolicy` (skip_probs). Deterministic
+per-segment SHA-256 seeding (reuses the existing `_segment_corruption_seed`
+truncation convention -- never Python `hash()`). Corruption ordering:
+load clean -> temporal thinning -> GENERIC-ROBUST corruption on retained
+timesteps only (a temporally-removed frame can never become a
+missing-measurement frame). Thinning != missing-measurement kept strictly
+distinct. New `train_kalmannet_variable_dt.py` (`--dt-policy {fixed,mild,
+strong}`, `--augmentation-seed`), `eval_baseline_dt_report.py` /
+`eval_kf_dt_report.py` (memory-safe per-policy dt-bucket eval of an
+existing checkpoint / the AV2-tuned LinearCVKF).
+
+**Declared policies (before any screening):** MILD `skip_probs=(0.80,
+0.15, 0.05)` -> dt 0.1s:80%/0.2s:15%/0.3s:5%; STRONG `(0.55, 0.25, 0.15,
+0.05)` -> +0.4s:5%. Not fit to MORAI.
+
+**2k screening (Stage-1 pilot, internal val only, seed 1)** -- FIXED
+baseline A (frozen 2k checkpoint, re-evaluated not retrained) vs MILD (B)
+vs STRONG (C), overall position RMSE:
+
+| eval | A FIXED | B MILD | C STRONG |
+|---|---|---|---|
+| fixed  | 0.3231 | **0.3195** | 0.3218 |
+| mild   | 0.3602 | **0.3518** | 0.3550 |
+| strong | 0.4440 | 0.4258 | **0.4248** |
+| internal val loss | 0.7990 | **0.8288** | 0.8867 |
+
+MILD selected (section 15): best on fixed+mild-dt eval, best internal val
+loss, within 0.24% of STRONG on strong-dt, fewest overflow events. STOP
+not warranted -- a real consistent variable-dt improvement existed at 2k.
+
+**Full 10k MILD run** (frozen `scaleup_v2` 9k/1k split, identical dataset+
+hashes as the NATURAL 10k baseline family; one seed; frozen config
+bs=64/lr=0.004/grad_clip=10.0/max_epochs=60/patience=15/loss_on_predict_only;
+CPU; GENERIC-ROBUST; ONLY new axis = MILD thinning). Best epoch **15**,
+val_loss 0.7973, 31 epochs (early-stopped), 8.2 h. Checkpoint SHA-256
+`eb848a81fec1e71eb3907eefef4c48d4152f16f9f7d90d6d7d858e2645b72828`.
+Thinning applied to 99.9998% of train sequences. Freeze manifest
+(`av2_variable_dt_results/freeze_manifest_mild10k.json`) written BEFORE
+any official AV2 VAL read.
+
+**Numerical health (section 21):** 39 norm-overflow batches (all safely
+skipped), **0** per-element non-finite gradient batches, 0 parameter /
+optimizer-state collapse, `training_unstable=false`. 9 epochs hit >=1 inf
+gradient norm; every one guard-skipped; the best checkpoint (epoch 15)
+predates the worst window (epochs 16-17, val briefly ~1.0 then recovered).
+**MILD thinning did NOT increase instability** -- it had roughly HALF the
+norm-overflow events of the NATURAL 10k seed1 baseline (39 vs 78) and zero
+element-nonfinite (vs 1).
+
+**Official AV2 VAL (1,000 held-out `val`-split scenarios; freeze written
+first; no retrain after):** overall position / velocity RMSE --
+
+| eval | NATURAL 10k | MILD-vardt 10k | Δ pos / Δ vel |
+|---|---|---|---|
+| A fixed 0.1s    | 0.3063 / 1.389 | 0.3092 / 1.408 | **+0.9% / +1.4%** |
+| B MILD var-dt   | 0.3470 / 1.464 | 0.3468 / 1.453 | -0.1% / -0.8% |
+| C STRONG var-dt | 0.4227 / 1.620 | 0.4141 / 1.550 | **-2.0% / -4.3%** |
+
+Reproduces the internal-VAL pattern almost exactly. **dt-bucket
+breakdown**: the improvement scales monotonically with transition dt --
+~+1% pos at 0.1s, -1.5% at 0.2s, -2.9% at 0.3s, **-3.2% pos / -11% vel at
+dt>=0.4s** (internal VAL, strong-thinned). Matched and missing splits
+move together (not confined to predict-only).
+
+**KNET vs KF on the same thinned official-VAL streams (section 20):**
+LinearCVKF (AV2-tuned `sigma_a=5.0, r_std=0.300095`, reused from the
+Stage-1 calibration) -- fixed 0.3473, mild 0.3932, strong 0.4739;
+degradation fixed->strong **+36.5% (KF)** vs **+38.0% (NATURAL KNet)** vs
+**+34.0% (MILD KNet)**. KalmanNet stays 10-13% better than KF at every dt
+condition. **Outcome E ("KF stable, KNet degrades -> learned-gain
+generalization gap") is NOT supported** -- the learned gain generalizes
+across variable dt about as well as the analytical `F(dt)`/`Q(dt)`, and
+MILD thinning modestly *improves* KNet's relative variable-dt robustness.
+
+**Interpretation: OUTCOME B (mild dt-dependent tradeoff).** MILD
+temporal-thinning training improves estimation on heavier-thinned AV2
+trajectories (-2.0% pos / -4.3% vel on STRONG-thinned official VAL,
+scaling to -3.2%/-11% at dt>=0.4s) at a small nominal-condition cost
+(+0.9% pos / +1.4% vel at fixed 0.1s -- far milder than PR #60's
+motion-focused CLEAN regression of ~55-59%). Not outcome A (clean win),
+not C (null), not D (no instability), not E (no KF-vs-KNet gap).
+
+**Selected policy (chosen, not made a default):** the NATURAL 10k
+Generic-Robust KalmanNet remains the preferred AV2 pretrained family for
+the fixed-0.1s nominal case. The MILD-variable-dt 10k checkpoint is a
+reasonable alternative when irregular sampling is expected. A
+curriculum / mixed natural+thinned schedule is the natural follow-up --
+NOT done here (one-policy-one-run scope).
+
+**Tests:** 330 pass (292 pre-existing in `tools/kalmannet_training/` +
+38 new `test_variable_dt.py` -- deterministic retained indices, dt
+recomputation vs the task's worked example, state/timestamp
+correspondence, thinning != missing-measurement, corruption-after-thinning
+ordering (monkeypatch-verified), batch collation with variable dt,
+dt-bucket evaluator, no-official-VAL-leakage, resume reproducibility).
+`py_compile` / `pyflakes` / `git diff --check` clean.
+
+**Files:** `tools/kalmannet_training/{variable_dt.py,
+train_kalmannet_variable_dt.py, test_variable_dt.py,
+eval_baseline_dt_report.py, eval_kf_dt_report.py}` (new),
+`tools/kalmannet_training/av2_variable_dt_results/` (new -- freeze
+manifest + internal/official-VAL + KF dt-bucket JSONs + 10k history CSV,
+~30 KB, no checkpoints/AV2 data/large logs),
+`docs/perception/kalmannet_av2_variable_dt_v1.md` (new), this file. No
+`kalmannet_core.py`/AB3DMOT/CenterPoint/ROS/prediction/planner/
+occupancy-grid file changed.
+
+**Recommended next task:** if the variable-dt direction is pursued, test a
+CURRICULUM / mixed natural+thinned training schedule (e.g. anneal thinning
+probability, or interleave FIXED and MILD batches) to keep the ~2-3%
+heavy-dt gain while erasing the ~1% fixed-dt cost -- a single 10k run,
+same frozen config, evaluated with this task's existing `variable_dt.py`
+dt-bucket harness. **Do NOT start another experiment** as part of closing
+this task; the PR stays open, not merged.
+
+## KalmanNet Physically-Consistent Variable-dt Augmentation v1 result: **COMPLETE**
+
+---
+
 ## AV2 KalmanNet Motion-Composition Ablation v1 — COMPLETE (outcome B, tradeoff; PR open, do NOT merge)
 
 Branch `exp/kalmannet-av2-motion-composition-v1`, from merged PR #59

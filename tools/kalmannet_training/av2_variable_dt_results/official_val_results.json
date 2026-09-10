@@ -1,0 +1,34 @@
+{
+  "_comment": "Official AV2 VAL results, added AFTER the freeze manifest (section 17/18). No retraining after these numbers. Split: scaleup_v2_official_val, 1000 held-out AV2 val-split scenarios.",
+  "primary_comparison": {
+    "natural": {
+      "fixed": {
+        "overall_position_rmse_m": 0.30632187005077394,
+        "overall_velocity_rmse_mps": 1.3891821048999697
+      },
+      "mild": {
+        "overall_position_rmse_m": 0.3469984965090995,
+        "overall_velocity_rmse_mps": 1.4640855360954594
+      },
+      "strong": {
+        "overall_position_rmse_m": 0.42266985545539904,
+        "overall_velocity_rmse_mps": 1.6197134325603886
+      }
+    },
+    "mild_variable_dt": {
+      "fixed": {
+        "overall_position_rmse_m": 0.30916151462469754,
+        "overall_velocity_rmse_mps": 1.4077640121838784
+      },
+      "mild": {
+        "overall_position_rmse_m": 0.3467862104305703,
+        "overall_velocity_rmse_mps": 1.453041427092886
+      },
+      "strong": {
+        "overall_position_rmse_m": 0.41414441826675197,
+        "overall_velocity_rmse_mps": 1.5501264285320582
+      }
+    }
+  },
+  "outcome": "B (dt-dependent tradeoff): MILD-vardt +0.9% pos at fixed 0.1s, -2.0% pos / -4.3% vel at STRONG-thinned. Reproduces internal VAL. Outcome D (instability) and E (KF-only-stable) NOT supported."
+}

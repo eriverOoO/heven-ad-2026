@@ -257,15 +257,131 @@ mild-thinning eval. Matched vs missing splits move together (both improve
 ~-2% under strong eval), so the effect is not confined to the
 predict-only regime.
 
-<!-- OFFICIAL_VAL_AND_KF_PLACEHOLDER -->
+## 12. Official AV2 VAL results (task section 18)
+
+Frozen manifest written first (section 9). Then both checkpoints
+evaluated on the **official AV2 VAL split** (`scaleup_v2_official_val`,
+1,000 held-out AV2 `val`-split scenarios -- structurally disjoint from
+every training/internal-val scenario), thinned deterministically from the
+same official-VAL trajectories under each policy. No retraining after
+seeing these numbers.
+
+| eval condition | NATURAL 10k pos / vel | MILD-vardt 10k pos / vel | Δ pos | Δ vel |
+|---|---|---|---|---|
+| A. fixed 0.1s   | 0.3063 / 1.389 | 0.3092 / 1.408 | **+0.9%** | +1.4% |
+| B. MILD var-dt  | 0.3470 / 1.464 | 0.3468 / 1.453 | -0.1% | -0.8% |
+| C. STRONG var-dt| 0.4227 / 1.620 | 0.4141 / 1.550 | **-2.0%** | **-4.3%** |
+
+**Official VAL reproduces the internal-VAL pattern almost exactly**
+(internal was +1.0% / -0.2% / -2.0% on position). The dt-dependent
+tradeoff is a real, held-out effect, not an internal-split artifact.
+Velocity RMSE improves more than position in the heavy-thinning regime,
+consistent with the internal dt-bucket breakdown.
+
+## 13. KNET vs KF -- variable-dt comparison (task section 20)
+
+`LinearCVKF` (AV2-tuned `sigma_a=5.0, r_std=0.300095`, reused from the
+Stage-1 pilot calibration -- GENERIC-ROBUST, AV2 TRAIN+VAL only, held-out
+test never touched) evaluated on the **exact same** temporally-thinned
+official-VAL streams. Its analytical `F(dt)`/`Q(dt)` already consume each
+retained transition's real variable dt, no KF change.
+
+| eval condition | LinearCVKF | NATURAL 10k KNet | MILD-vardt 10k KNet |
+|---|---|---|---|
+| fixed 0.1s   pos RMSE (m) | 0.3473 | 0.3063 | 0.3092 |
+| MILD var-dt  pos RMSE (m) | 0.3932 | 0.3470 | 0.3468 |
+| STRONG var-dt pos RMSE (m)| 0.4739 | 0.4227 | 0.4141 |
+| **degradation fixed -> strong** | **+36.5%** | **+38.0%** | **+33.9%** |
+
+**KF and KalmanNet degrade at essentially the same rate as dt grows**
+(+36.5% for KF vs +38.0% for the NATURAL KNet, fixed -> strong). The
+MILD-variable-dt KNet degrades the *least* (+33.9%). KalmanNet stays
+absolutely better than the analytical KF at every dt condition (by
+10-13%). **Outcome E ("KF stays stable across variable dt while KNet
+degrades, suggesting a learned-gain generalization problem") is NOT
+supported** -- the learned gain generalizes across variable dt about as
+well as the analytical `F(dt)`/`Q(dt)`, and MILD thinning modestly
+*improves* KNet's relative variable-dt robustness rather than exposing a
+gap.
+
+
+## 14. Fixed-dt regression check (task section 19)
+
+The one cost of MILD temporal-thinning training is a **+0.9% position /
++1.4% velocity RMSE regression on the nominal fixed-0.1s official VAL
+condition** (0.3063 -> 0.3092 m). This is small but real and reproduced
+on both internal and official VAL. It is far milder than the
+CLEAN-condition regression the prior motion-focused sampling task (PR #60)
+produced (~55-59%). It is the expected price of spreading model capacity
+across a wider dt distribution.
+
+## 15. Interpretation (task section 22)
+
+**OUTCOME B (tradeoff).** MILD temporal-thinning augmentation improves
+KalmanNet's estimation on temporally-thinned AV2 trajectories in the
+heavier-thinning regime (-2.0% position / -4.3% velocity RMSE on
+STRONG-thinned official VAL, scaling to -3.2% / -11% at dt >= 0.4s) while
+slightly degrading the nominal fixed-0.1s condition (+0.9% position). The
+mild-thinning regime is a wash. This is a genuine dt-dependent tradeoff,
+not a clean improvement (outcome A) and not a null result (outcome C) --
+the heavy-dt improvement is consistent and reproduced on held-out
+official VAL, but modest in magnitude and paid for at dt=0.1s.
+
+Notably **outcome D (instability) did NOT occur** and **outcome E
+(KF-handles-variable-dt-but-KNet-does-not) is NOT supported** -- see
+section 13: the learned gain generalizes across variable dt about as well
+as the analytical KF does, and MILD thinning actually *reduced*
+KalmanNet's gradient-overflow event count vs the NATURAL baseline.
+
+**No MORAI claim.** MORAI simulator access is unavailable. This
+experiment shows only: *MILD physically-consistent variable-dt
+augmentation improved KalmanNet estimation on temporally-thinned AV2
+trajectories in the heavier-dt regime, at a small fixed-dt cost.* Nothing
+about MORAI, competition, or real-simulator transfer is claimed.
+
+## 16. Recommendation
+
+The NATURAL 10k Generic-Robust KalmanNet remains the **preferred AV2
+pretrained family** for the fixed-0.1s nominal case. The MILD-variable-dt
+10k checkpoint is a **reasonable alternative when irregular sampling is
+expected** (e.g. a future real MORAI estimator stream with materially
+variable dt) -- it buys ~2-3% in the variable-dt regime for ~1% at
+dt=0.1s, with no added training instability. A curriculum / mixed
+natural+thinned schedule (to keep the heavy-dt gain while erasing the
+fixed-dt cost) is the natural follow-up if this direction is pursued
+further -- **not done here**, per this task's one-policy-one-run scope.
+
+
+## 17. Limitations
+
+- One seed only (section 16 scope). Cross-seed variance not characterized
+  at 10k for the variable-dt policy.
+- The dt-bucket eval statistic is per-frame (n = millions), so the
+  reported deltas are stable; but the *magnitude* (~1-3%) is small enough
+  that it should be read as a directional finding, not a headline number.
+- Screening used the 2k pilot dataset (disjoint scenarios from the 10k
+  set); the 2k signal (MILD improves fixed-dt too) did not fully carry to
+  10k, where the stronger NATURAL baseline already handles fixed-dt well.
+- KF baseline params reused from a prior AV2 calibration rather than
+  re-fit on the frozen 10k train split (a ~15 GB load on this
+  15 GB-RAM host); every prior AV2 task converged on the same
+  `sigma_a=5.0 / r_std~=0.30`, so this is a documented shortcut, not a
+  fitted result.
+- **No MORAI evaluation** -- MORAI simulator access is unavailable. The
+  MORAI/AV2 dt gap that motivated this task (section 1) is not directly
+  tested; only AV2-internal temporal-thinning robustness is measured.
 
 ## Files
 
-`tools/kalmannet_training/variable_dt.py` (new -- thinning core, dt-bucket
+`tools/kalmannet_training/variable_dt.py` (thinning core, dt-bucket
 evaluator, `load_split_sequences_with_thinning`),
-`tools/kalmannet_training/train_kalmannet_variable_dt.py` (new -- training
-entry point with `--dt-policy`), `tools/kalmannet_training/test_variable_dt.py`
-(new, 32 tests), `tools/kalmannet_training/av2_variable_dt_results/` (new,
-small JSON/CSV summaries), this file, `docs/agent/STATUS.md`. No
+`tools/kalmannet_training/train_kalmannet_variable_dt.py` (training entry
+point with `--dt-policy`), `tools/kalmannet_training/test_variable_dt.py`
+(38 tests), `tools/kalmannet_training/eval_baseline_dt_report.py` +
+`eval_kf_dt_report.py` (frozen-checkpoint / KF dt-bucket eval, memory-safe
+per-policy), `tools/kalmannet_training/av2_variable_dt_results/` (freeze
+manifest + internal/official VAL + KF dt-bucket JSONs + 10k history CSV),
+this file, `docs/agent/STATUS.md`. No
 `kalmannet_core.py`/`KalmanNetFilter`/AB3DMOT/CenterPoint/ROS/prediction/
-planner/occupancy-grid file changed.
+planner/occupancy-grid file changed; no KalmanNet architecture or
+optimizer-hyperparameter change.
