@@ -1133,3 +1133,96 @@ The next highest-value MORAI-independent task is a **deterministic
 point-count-matched random-downsample control replay** of the same ten AV2
 sweeps. It would distinguish simple point-count loss from the one-source
 ring-structure effect before interpreting any future MORAI result.
+
+## 32. Point-Count versus Ring-Structure Controlled Replay
+
+This experiment resolves the prior count-versus-structure limitation with ten
+identical timestamps and 89 supported vehicle GT. Threshold remains `.35`,
+densification remains disabled, and all runs use the same Autoware 0.51 model,
+TensorRT engines, ROI, stage instrumentation, and Hungarian 3 m GT matching.
+No production parameter was changed.
+
+| Arm | Input |
+| --- | --- |
+| A | Native AV2 aggregate: dual LiDAR / 64 `laser_number` values |
+| B | `up_lidar` only, all physical rings 0--31, no subsampling |
+| C | Up-only without-replacement random subset, exactly count-matched to D per frame; seeds 11/29/47 |
+| D | Existing corrected up-only physical source-ring 16-ring proxy |
+
+C and D therefore have the same source LiDAR, timestamp, AV2 egovehicle
+coordinates, input count, model and threshold. They differ only in whether
+the retained up-LiDAR points are randomly distributed or constrained to the
+16 selected physical vertical rings. This is a controlled contrast, not an
+additive causal decomposition of a nonlinear detector.
+
+### 32.1 Aggregate result
+
+| Arm | Recall | Vehicle FP/frame | S1/frame | Final/frame | GT-local R0 CAR | Winner XY | Peak drift | Zero-point GT |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A dual64 | 78.65% | 5.1 | 59.9 | 15.6 | .554 | .379 m | .396 m | 4.5% |
+| B up32 | 70.79% | 5.2 | 58.5 | 14.9 | .531 | .391 m | .414 m | 5.6% |
+| C random matched | 58.05% ± 1.06% | 3.73 ± .21 | 43.6 ± .22 | 12.1 ± .05 | .442 ± .004 | .480 ± .004 m | .503 ± .003 m | 8.25% ± 1.06% |
+| D ring16 | 42.70% | 1.8 | 24.3 | 7.3 | .328 | .756 m | .760 m | 24.7% |
+
+The random controls are stable: recall ranges only 57.30--59.55%, R0 score
+.437--.447, and winner XY error .475--.484 m. D is substantially below this
+entire random-replay range.
+
+### 32.2 Distance contrast
+
+| Distance | A dual64 | B up32 | C random matched | D ring16 |
+| --- | ---: | ---: | ---: | ---: |
+| 0--20 m | 93.75% | 93.75% | 93.75% | 93.75% |
+| 20--40 m | 89.47% | 84.21% | 84.21--89.47% | 78.95% |
+| 40--60 m | 80.65% | 77.42% | 51.61--64.52% | 25.81% |
+| 60--80 m | 56.52% | 34.78% | 4.35--17.39% | 0.00% |
+
+At 60--80 m, median GT points are 7 for B, 2--3 for C, and 0 for D;
+zero-point fractions are 8.7%, 13.0--17.4%, and 60.9%, respectively. Random
+count matching preserves some far-object evidence that structured rings miss.
+
+### 32.3 Controlled contrasts and assessment
+
+- **A → B, second-source / density contribution:** recall falls 7.87 points
+  and far-range recall 56.52% → 34.78%. This is a moderate effect; it may
+  include FOV and source-placement interactions, not merely a “second lidar”
+  scalar contribution.
+- **B → C, point-count contribution:** matching Up32 to Ring16 point counts
+  reduces recall by 12.74 points and R0 CAR score .531 → .442. Point count is
+  a strong contributor.
+- **C → D, ring-structure contribution:** with the same source and exact
+  per-frame count, structured selection further reduces recall by 15.35
+  points, S1/frame 43.6 → 24.3, R0 .442 → .328, and increases zero-point GT
+  8.25% → 24.7%. This is strong evidence that vertical sampling structure has
+  an additional effect beyond count alone.
+
+| Effect | Assessment |
+| --- | --- |
+| Point count | Strong |
+| Ring structure | Strong |
+| Second-source / source-density | Moderate |
+| Range interaction | Strong; effects concentrate beyond 40 m |
+
+The conclusion is **Mixed, with both point-count and structured vertical-ring
+effects material**. It does not establish expected MORAI accuracy: the data is
+one AV2 log and D is a source-ring proxy rather than a physical VLP-16 scan.
+It does show that interpreting the prior ring16 result as merely random
+point-count loss would be incorrect.
+
+Retraining remains **NOT YET**. These results strengthen the priority of
+sequence-disjoint MORAI actor-GT acquisition and subsequent target-domain
+evaluation, but do not justify a production threshold change or MORAI
+fine-tuning without target-domain evidence.
+
+External outputs (not committed):
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  metrics/sampling_control_v1/
+    summary.csv
+    summary.json
+    per_seed.csv
+    per_frame.csv
+    per_gt.csv
+    distance_summary.csv
+```
