@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ import numpy as np
 from centerpoint_raw_head import (
     RawHeadSnapshot,
     classify_native_hit_sparse_miss,
+    decode_cell_geometry,
     gate_reason_summary,
     gt_neighborhood_evidence,
     project_xy_to_grid,
@@ -96,6 +98,22 @@ class CenterPointRawHeadTest(unittest.TestCase):
         self.assertEqual((evidence["grid_x"], evidence["grid_y"]), (1, 2))
         self.assertGreater(evidence["threshold_margin"], 0.0)
         self.assertAlmostEqual(evidence["decoded_length"], 1.0)
+
+    def test_cell_geometry_uses_pinned_dimension_and_yaw_decode(self):
+        raw = snapshot(np.asarray([[[2.0]]], dtype=np.float32))
+        raw.arrays["reg"][:, 0, 0] = (0.25, -0.5)
+        raw.arrays["height"][0, 0, 0] = 1.5
+        raw.arrays["dim"][:, 0, 0] = (math.log(2.0), math.log(4.0), math.log(1.0))
+        raw.arrays["rot"][:, 0, 0] = (1.0, 0.0)
+        decoded = decode_cell_geometry(raw, reproduce_gate(raw), 0, 0)
+        self.assertAlmostEqual(decoded["x"], 0.25)
+        self.assertAlmostEqual(decoded["y"], -0.5)
+        self.assertAlmostEqual(decoded["z"], 1.5)
+        self.assertAlmostEqual(decoded["length"], 4.0)
+        self.assertAlmostEqual(decoded["width"], 2.0)
+        self.assertAlmostEqual(decoded["height"], 1.0)
+        self.assertAlmostEqual(decoded["raw_yaw"], math.pi / 2.0)
+        self.assertAlmostEqual(decoded["ros_yaw"], -math.pi)
 
     def test_top_k_debug_output_is_bounded(self):
         raw = snapshot(np.asarray([[[3.0, 2.0], [1.0, 0.0]]], dtype=np.float32))

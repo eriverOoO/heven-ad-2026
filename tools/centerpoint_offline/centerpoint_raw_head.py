@@ -279,6 +279,50 @@ def project_xy_to_grid(snapshot: RawHeadSnapshot, x: float, y: float) -> tuple[i
     return grid_x, grid_y
 
 
+def decode_cell_geometry(
+    snapshot: RawHeadSnapshot, gate: GateResult, grid_x: int, grid_y: int
+) -> dict:
+    """Decode all raw regression heads at one grid cell using pinned CUDA semantics.
+
+    ``raw_yaw`` is the MMDet3D head representation. ``ros_yaw`` is exactly
+    ``box3DToDetectedObject()``'s conversion and is the comparable AV2-ego yaw.
+    This function deliberately does not require a score or yaw-validity pass.
+    """
+    if not (0 <= grid_x < snapshot.width and 0 <= grid_y < snapshot.height):
+        raise ValueError(f"grid cell out of bounds: ({grid_x}, {grid_y})")
+    raw_yaw = float(
+        math.atan2(
+            snapshot.arrays["rot"][0, grid_y, grid_x],
+            snapshot.arrays["rot"][1, grid_y, grid_x],
+        )
+    )
+    scale_x = float(snapshot.metadata["voxel_size_x"]) * int(
+        snapshot.metadata["downsample_factor"]
+    )
+    scale_y = float(snapshot.metadata["voxel_size_y"]) * int(
+        snapshot.metadata["downsample_factor"]
+    )
+    return {
+        "grid_x": grid_x,
+        "grid_y": grid_y,
+        "reg_x": float(snapshot.arrays["reg"][0, grid_y, grid_x]),
+        "reg_y": float(snapshot.arrays["reg"][1, grid_y, grid_x]),
+        "x": float(gate.decoded_x[grid_y, grid_x]),
+        "y": float(gate.decoded_y[grid_y, grid_x]),
+        "z": float(snapshot.arrays["height"][0, grid_y, grid_x]),
+        "length": float(math.exp(float(snapshot.arrays["dim"][1, grid_y, grid_x]))),
+        "width": float(math.exp(float(snapshot.arrays["dim"][0, grid_y, grid_x]))),
+        "height": float(math.exp(float(snapshot.arrays["dim"][2, grid_y, grid_x]))),
+        "raw_yaw": raw_yaw,
+        "ros_yaw": -raw_yaw - math.pi / 2.0,
+        "vx": float(snapshot.arrays["vel"][0, grid_y, grid_x]),
+        "vy": float(snapshot.arrays["vel"][1, grid_y, grid_x]),
+        "winner_class": int(gate.winner_class[grid_y, grid_x]),
+        "winner_score": float(gate.winner_score[grid_y, grid_x]),
+        "car_score": float(gate.scores[0, grid_y, grid_x]),
+    }
+
+
 def gt_neighborhood_evidence(
     snapshot: RawHeadSnapshot,
     gate: GateResult,
