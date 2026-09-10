@@ -72,12 +72,14 @@ def arm_rows(name: str, mode: str, run_root: Path, derived_root: Path, annotatio
         matches = vehicle_matches(gt, stages["final"], gate_m)
         matched = {index for index, _, _ in matches}
         final_vehicle = [row for row in stages["final"] if row["label"] == VEHICLE_LABEL]
+        matched_scores = [float(final_vehicle[det_index]["score"]) for _, det_index, _ in matches]
         frame = {
             "arm": name, "mode": mode, "timestamp_ns": timestamp,
             "input_points": len(cloud), "roi_points": roi_point_count(cloud, (-76.8, -76.8, -4.0, 76.8, 76.8, 6.0)),
             "gt": len(gt), "matched": len(matches), "vehicle_fp": len(final_vehicle) - len(matches),
             "final_count": len(stages["final"]), "vehicle_final_count": len(final_vehicle),
             "mean_matched_center_error_m": float(np.mean([value for _, _, value in matches])) if matches else math.nan,
+            "mean_matched_score": float(np.mean(matched_scores)) if matched_scores else math.nan,
         }
         for stage in ("post_score", "post_circle_nms", "pre_iou", "post_iou", "final"):
             frame[f"{stage}_count"] = len(stages[stage])
@@ -107,10 +109,14 @@ def arm_rows(name: str, mode: str, run_root: Path, derived_root: Path, annotatio
 def aggregate(name: str, frame_rows: list[dict], gt_rows: list[dict]) -> dict:
     total_gt = sum(int(row["gt"]) for row in frame_rows)
     total_matched = sum(int(row["matched"]) for row in frame_rows)
+    total_vehicle_final = sum(int(row.get("vehicle_final_count", int(row["matched"]) + int(row["vehicle_fp"]))) for row in frame_rows)
     return {
         "arm": name, "frames": len(frame_rows), "gt": total_gt, "matched": total_matched,
         "recall": total_matched / total_gt if total_gt else None,
+        "vehicle_precision": total_matched / total_vehicle_final if total_vehicle_final else None,
         "fp_per_frame": float(np.mean([row["vehicle_fp"] for row in frame_rows])),
+        "matched_center_error_m": describe([row["mean_matched_center_error_m"] for row in frame_rows if "mean_matched_center_error_m" in row and not math.isnan(row["mean_matched_center_error_m"])]),
+        "matched_score": describe([row["mean_matched_score"] for row in frame_rows if "mean_matched_score" in row and not math.isnan(row["mean_matched_score"])]),
         "input_points_per_frame": describe([row["input_points"] for row in frame_rows]),
         "roi_points_per_frame": describe([row["roi_points"] for row in frame_rows]),
         "s1_per_frame": describe([row["post_score_count"] for row in frame_rows]),
@@ -120,6 +126,7 @@ def aggregate(name: str, frame_rows: list[dict], gt_rows: list[dict]) -> dict:
         "s5_per_frame": describe([row["final_count"] for row in frame_rows]),
         "r0_car_score": describe([row["r0_car_score"] for row in gt_rows]),
         "r0_ge_035": int(sum(bool(row["r0_score_ge_035"]) for row in gt_rows)),
+        "same_center_xy_error_m": describe([row["same_center_xy_error_m"] for row in gt_rows if "same_center_xy_error_m" in row]),
         "winner_center_xy_error_m": describe([row["winner_center_xy_error_m"] for row in gt_rows]),
         "winner_peak_drift_m": describe([row["winner_peak_drift_m"] for row in gt_rows]),
         "winner_dimension_relative_error": describe([row["winner_dimension_relative_error"] for row in gt_rows]),
@@ -130,8 +137,8 @@ def aggregate(name: str, frame_rows: list[dict], gt_rows: list[dict]) -> dict:
 
 
 def flatten_summary(summary: dict) -> dict:
-    row = {"arm": summary["arm"], "frames": summary["frames"], "gt": summary["gt"], "matched": summary["matched"], "recall": summary["recall"], "fp_per_frame": summary["fp_per_frame"], "r0_ge_035": summary["r0_ge_035"], "zero_point_fraction": summary["zero_point_fraction"]}
-    for key in ("input_points_per_frame", "roi_points_per_frame", "s1_per_frame", "s2_per_frame", "s3_per_frame", "s4_per_frame", "s5_per_frame", "r0_car_score", "winner_center_xy_error_m", "winner_peak_drift_m", "winner_dimension_relative_error", "winner_yaw_axis_error_rad", "winner_z_error_m"):
+    row = {"arm": summary["arm"], "frames": summary["frames"], "gt": summary["gt"], "matched": summary["matched"], "recall": summary["recall"], "vehicle_precision": summary["vehicle_precision"], "fp_per_frame": summary["fp_per_frame"], "r0_ge_035": summary["r0_ge_035"], "zero_point_fraction": summary["zero_point_fraction"]}
+    for key in ("input_points_per_frame", "roi_points_per_frame", "s1_per_frame", "s2_per_frame", "s3_per_frame", "s4_per_frame", "s5_per_frame", "matched_center_error_m", "matched_score", "r0_car_score", "same_center_xy_error_m", "winner_center_xy_error_m", "winner_peak_drift_m", "winner_dimension_relative_error", "winner_yaw_axis_error_rad", "winner_z_error_m"):
         row[f"{key}_mean"] = summary[key]["mean"]
         row[f"{key}_std"] = summary[key]["std"]
     return row
@@ -152,6 +159,7 @@ def main() -> int:
     parser.add_argument("--derived-root", type=Path, required=True)
     parser.add_argument("--baseline-run-root", type=Path, required=True)
     parser.add_argument("--control-run-root", type=Path, required=True)
+    parser.add_argument("--distance-control-run-root", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--gate-m", type=float, default=3.0)
     args = parser.parse_args()
@@ -169,6 +177,13 @@ def main() -> int:
         frames, gt = arm_rows(arm, mode, args.control_run_root, args.derived_root, annotations, args.gate_m)
         all_frames += frames; all_gt += gt
         summary = aggregate(arm, frames, gt); random_summaries.append(summary); summaries.append(summary); distance += distance_rows(arm, gt)
+    stratified_summaries = []
+    if args.distance_control_run_root:
+        for seed in SEEDS:
+            arm, mode = f"E_up_distance_stratified_seed{seed}", f"up_distance_stratified_seed{seed}"
+            frames, gt = arm_rows(arm, mode, args.distance_control_run_root, args.derived_root, annotations, args.gate_m)
+            all_frames += frames; all_gt += gt
+            summary = aggregate(arm, frames, gt); stratified_summaries.append(summary); summaries.append(summary); distance += distance_rows(arm, gt)
     random_flat = [flatten_summary(row) for row in random_summaries]
     random_mean = {key: describe([float(row[key]) for row in random_flat if row[key] is not None]) for key in ("recall", "fp_per_frame", "s1_per_frame_mean", "r0_car_score_mean", "winner_center_xy_error_m_mean", "winner_peak_drift_m_mean")}
     write_csv(args.output_dir / "per_frame.csv", all_frames)
@@ -176,7 +191,21 @@ def main() -> int:
     write_csv(args.output_dir / "summary.csv", [flatten_summary(row) for row in summaries])
     write_csv(args.output_dir / "per_seed.csv", random_flat)
     write_csv(args.output_dir / "distance_summary.csv", [{"arm": row["arm"], "distance_bin": row["distance_bin"], "gt": row["gt"], "recall": row["recall"], "r0_score_mean": row["r0_score"]["mean"], "points_in_gt_median": row["points_in_gt"]["median"], "zero_point_fraction": row["zero_point_fraction"], "winner_center_error_mean": row["winner_center_error"]["mean"], "winner_peak_drift_mean": row["winner_peak_drift"]["mean"]} for row in distance])
-    payload = {"threshold": 0.35, "gate_m": args.gate_m, "arms": summaries, "random_seed_summary": random_mean, "provenance": {"baseline_run_root": str(args.baseline_run_root), "control_run_root": str(args.control_run_root), "derived_root": str(args.derived_root)}}
+    coverage_rows = []
+    for arm in sorted({row["arm"] for row in all_gt}):
+        for bucket in ("0-20m", "20-40m", "40-60m", "60-80m"):
+            rows = [row for row in all_gt if row["arm"] == arm and row["distance_bin"] == bucket]
+            if not rows:
+                continue
+            point_counts = [float(row["points_in_gt"]) for row in rows]
+            coverage_rows.append({"arm": arm, "distance_bin": bucket, "gt": len(rows), **{f"fraction_ge_{threshold}": float(np.mean([value >= threshold for value in point_counts])) for threshold in (1, 3, 5, 10)}})
+    write_csv(args.output_dir / "coverage_summary.csv", coverage_rows)
+    stratified_flat = [flatten_summary(row) for row in stratified_summaries]
+    stratified_mean = {
+        key: describe([float(row[key]) for row in stratified_flat if row[key] is not None])
+        for key in ("recall", "fp_per_frame", "s1_per_frame_mean", "r0_car_score_mean", "winner_center_xy_error_m_mean", "winner_peak_drift_m_mean")
+    }
+    payload = {"threshold": 0.35, "gate_m": args.gate_m, "arms": summaries, "random_seed_summary": random_mean, "stratified_seed_summary": stratified_mean, "provenance": {"baseline_run_root": str(args.baseline_run_root), "control_run_root": str(args.control_run_root), "distance_control_run_root": str(args.distance_control_run_root) if args.distance_control_run_root else None, "derived_root": str(args.derived_root)}}
     (args.output_dir / "summary.json").write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps({"arms": len(summaries), "frames": len(all_frames), "gt_rows": len(all_gt), "output_dir": str(args.output_dir)}, indent=2))
     return 0

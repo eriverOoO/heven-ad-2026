@@ -1226,3 +1226,76 @@ External outputs (not committed):
     per_gt.csv
     distance_summary.csv
 ```
+
+## 33. Distance-Stratified Sampling Control
+
+Section 32's C-to-D contrast was explicitly provisional because uniform random
+sampling can preserve a different radial allocation. This follow-up adds E:
+an up-lidar-only, without-replacement random control that exactly matches D's
+total count **and every 5 m radial-bin count** for each frame. Bins span the
+CenterPoint square-ROI corner radius (108.6 m) plus an overflow bin. GT boxes,
+IDs, classes and per-object counts were not used during sampling.
+
+Three deterministic E seeds (11, 29, 47) use the same ten timestamps. Each
+frame validated `N_up(bin) >= N_ring16(bin)`, exact E/D bin histograms,
+timestamp identity, unchanged sampled source attributes, and no replacement.
+
+| Arm | Recall | FP/frame | S1/frame | R0 CAR | Winner XY | Peak drift |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| C uniform random | 58.05% ± 1.06% | 3.73 ± .21 | 43.6 ± .22 | .442 ± .004 | .480 ± .004 m | .503 ± .003 m |
+| E radial-stratified random | 55.81% ± 1.06% | 3.67 ± .39 | 41.7 ± 2.04 | .426 ± .013 | .500 ± .026 m | .520 ± .026 m |
+| D physical ring16 | 42.70% | 1.8 | 24.3 | .328 | .756 m | .760 m |
+
+E is modestly worse than C (`-2.25` recall points), so radial allocation is a
+real but limited contributor. Crucially, E remains far above D (`+13.11`
+points), despite exact source, total-count and radial-count matching. D is
+also outside E's 55.06--57.30% seed range.
+
+| Distance | C uniform | E radial-stratified | D ring16 |
+| --- | ---: | ---: | ---: |
+| 0--20 m | 93.75% | 93.75% | 93.75% |
+| 20--40 m | 84.21--89.47% | 84.21--100.00% | 78.95% |
+| 40--60 m | 51.61--64.52% | 41.94--58.06% | 25.81% |
+| 60--80 m | 4.35--17.39% | 8.70--13.04% | 0.00% |
+
+At 60--80 m, E still covers materially more GT than D after radial matching:
+E has 13.0% zero-point GT and 47.8% with at least three points, versus D's
+60.9% zero-point GT and 13.0% with at least three points. The remaining
+difference is the intended vertical ray/ring-coverage contrast, not a
+GT-aware or radial-count sampling difference.
+
+### 33.1 Updated controlled interpretation
+
+- **B → C:** overall up-only count reduction remains a **Strong** effect.
+- **C → E:** changing random radial allocation is **Moderate**: it lowers R0
+  `.442 -> .426` and recall 58.05% → 55.81%.
+- **E → D:** vertical physical ring selection remains **Strong** after source,
+  total count and radial counts are controlled: R0 `.426 -> .328`, S1/frame
+  `41.7 -> 24.3`, recall 55.81% → 42.70%, and winner XY `.500 -> .756 m`.
+- **A → B:** second-source/source-density effect remains **Moderate**.
+- **Interaction:** **Strong** because the effects are range dependent and not
+  additive, with the largest coverage loss beyond 40 m.
+
+The updated root interpretation is that the pretrained detector is sensitive
+to both sampling amount and physical vertical ray structure. Range allocation
+explains a small portion of the old C-to-D gap, but cannot explain the main
+ring16 degradation. This remains AV2 proxy evidence only; it is neither a
+MORAI accuracy claim nor a reason to alter production threshold/configuration.
+
+Retraining remains **NOT YET** pending a sequence-disjoint MORAI actor-GT bag.
+The next highest-value MORAI-independent task is a range-by-azimuth-stratified
+random control; it would test residual horizontal allocation without matching
+elevation and therefore without removing the vertical-ring factor.
+
+External outputs (not committed):
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  metrics/distance_stratified_control_v1/
+    summary.csv
+    per_seed.csv
+    per_frame.csv
+    per_gt.csv
+    distance_summary.csv
+    coverage_summary.csv
+```

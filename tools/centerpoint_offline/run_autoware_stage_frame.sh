@@ -56,7 +56,14 @@ export TERM=dumb
 export NO_COLOR=1
 
 pids=()
+group_pids=()
 cleanup() {
+  # ros2 CLI wrappers can leave their executable child alive when only the
+  # wrapper PID is signalled.  Launch persistent processes in isolated groups
+  # and terminate the group, never a shared ROS-domain process.
+  for pid in "${group_pids[@]}"; do
+    kill -INT -- "-$pid" 2>/dev/null || true
+  done
   for pid in "${pids[@]}"; do
     kill "$pid" 2>/dev/null || true
   done
@@ -66,11 +73,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map av2_egovehicle \
+setsid ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map av2_egovehicle \
   >"$OUTPUT_DIR/static_tf.log" 2>&1 &
-pids+=("$!")
+group_pids+=("$!")
 
-timeout 45s ros2 launch "$LAUNCH_FILE" \
+setsid timeout 45s ros2 launch "$LAUNCH_FILE" \
   input/pointcloud:=/ad/perception/lidar/points_xyzirc \
   output/objects:=/ad/perception/objects/detected \
   data_path:="$MODEL_DATA_ROOT" node_name:=lidar_centerpoint \
@@ -79,7 +86,7 @@ timeout 45s ros2 launch "$LAUNCH_FILE" \
   enable_raw_head_dump:="$([[ "$RAW_HEAD_DUMP" == on ]] && echo true || echo false)" \
   raw_head_dump_directory:="$OUTPUT_DIR/raw_head" \
   build_only:=false >"$OUTPUT_DIR/node.log" 2>&1 &
-pids+=("$!")
+group_pids+=("$!")
 
 topics=(/ad/perception/objects/detected)
 names=(final)
