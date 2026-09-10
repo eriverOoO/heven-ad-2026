@@ -1,0 +1,284 @@
+--- a/include/autoware/lidar_centerpoint/centerpoint_trt.hpp
++++ b/include/autoware/lidar_centerpoint/centerpoint_trt.hpp
+@@ -36,6 +36,32 @@
+ using autoware::tensorrt_common::ProfileDims;
+ using autoware::tensorrt_common::TrtCommonConfig;
+ 
++struct RawHeadDebug
++{
++  std::size_t class_size{};
++  std::size_t offset_size{};
++  std::size_t z_size{};
++  std::size_t dim_size{};
++  std::size_t rot_size{};
++  std::size_t vel_size{};
++  std::size_t height{};
++  std::size_t width{};
++  float voxel_size_x{};
++  float voxel_size_y{};
++  float range_min_x{};
++  float range_min_y{};
++  std::size_t downsample_factor{};
++  std::vector<float> distance_bin_upper_limits;
++  std::vector<float> score_thresholds;
++  std::vector<float> yaw_norm_thresholds;
++  std::vector<float> heatmap;
++  std::vector<float> offset;
++  std::vector<float> z;
++  std::vector<float> dim;
++  std::vector<float> rot;
++  std::vector<float> vel;
++};
++
+ class CenterPointTRT
+ {
+ public:
+@@ -48,7 +69,8 @@
+   bool detect(
+     const std::shared_ptr<const cuda_blackboard::CudaPointCloud2> & input_pointcloud_msg_ptr,
+     const tf2_ros::Buffer & tf_buffer, std::vector<Box3D> & det_boxes3d,
+-    bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d = nullptr);
++    bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d = nullptr,
++    RawHeadDebug * raw_head_debug = nullptr);
+ 
+ protected:
+   void initPtr();
+@@ -62,6 +84,7 @@
+ 
+   void postProcess(
+     std::vector<Box3D> & det_boxes3d, std::vector<Box3D> * post_score_boxes3d = nullptr);
++  void captureRawHead(RawHeadDebug & raw_head_debug);
+ 
+   std::unique_ptr<VoxelGeneratorTemplate> vg_ptr_{nullptr};
+   std::unique_ptr<tensorrt_common::TrtCommon> encoder_trt_ptr_{nullptr};
+--- a/include/autoware/lidar_centerpoint/node.hpp
++++ b/include/autoware/lidar_centerpoint/node.hpp
+@@ -75,6 +75,8 @@
+   bool has_variance_{false};
+   bool has_twist_{false};
+   bool enable_stage_dump_{false};
++  bool enable_raw_head_dump_{false};
++  std::string raw_head_dump_directory_;
+ 
+   // for diagnostics
+   double max_allowed_processing_time_ms_;
+--- a/launch/lidar_centerpoint.launch.xml
++++ b/launch/lidar_centerpoint.launch.xml
+@@ -12,6 +12,8 @@
+   <arg name="common_param_path" default="$(find-pkg-share autoware_lidar_centerpoint)/config/centerpoint_common.param.yaml"/>
+   <arg name="build_only" default="false" description="shutdown node after TensorRT engine file is built"/>
+   <arg name="enable_stage_dump" default="false" description="publish opt-in CenterPoint stage topics"/>
++  <arg name="enable_raw_head_dump" default="false" description="write opt-in raw head tensor snapshots"/>
++  <arg name="raw_head_dump_directory" default="" description="external raw head snapshot directory"/>
+ 
+   <arg name="use_pointcloud_container" default="false" description="use pointcloud_container"/>
+   <arg name="pointcloud_container_name" default="pointcloud_container" description="pointcloud_container name"/>
+@@ -31,6 +33,8 @@
+         <param name="build_only" value="$(var build_only)"/>
+         <param name="logger_name" value="$(var node_name)"/>
+         <param name="enable_stage_dump" value="$(var enable_stage_dump)"/>
++        <param name="enable_raw_head_dump" value="$(var enable_raw_head_dump)"/>
++        <param name="raw_head_dump_directory" value="$(var raw_head_dump_directory)"/>
+       </composable_node>
+     </load_composable_node>
+   </group>
+@@ -48,6 +52,8 @@
+       <param name="build_only" value="$(var build_only)"/>
+       <param name="logger_name" value="$(var node_name)"/>
+       <param name="enable_stage_dump" value="$(var enable_stage_dump)"/>
++      <param name="enable_raw_head_dump" value="$(var enable_raw_head_dump)"/>
++      <param name="raw_head_dump_directory" value="$(var raw_head_dump_directory)"/>
+     </node>
+   </group>
+ </launch>
+--- a/lib/centerpoint_trt.cpp
++++ b/lib/centerpoint_trt.cpp
+@@ -174,7 +174,8 @@
+ bool CenterPointTRT::detect(
+   const std::shared_ptr<const cuda_blackboard::CudaPointCloud2> & input_pointcloud_msg_ptr,
+   const tf2_ros::Buffer & tf_buffer, std::vector<Box3D> & det_boxes3d,
+-  bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d)
++  bool & is_num_pillars_within_range, std::vector<Box3D> * post_score_boxes3d,
++  RawHeadDebug * raw_head_debug)
+ {
+   is_num_pillars_within_range = true;
+ 
+@@ -192,6 +193,9 @@
+   inference();
+ 
+   postProcess(det_boxes3d, post_score_boxes3d);
++  if (raw_head_debug != nullptr) {
++    captureRawHead(*raw_head_debug);
++  }
+ 
+   // Check the actual number of pillars after inference to avoid unnecessary synchronization.
+   unsigned int num_pillars = 0;
+@@ -290,4 +294,39 @@
+   }
+ }
+ 
++void CenterPointTRT::captureRawHead(RawHeadDebug & output)
++{
++  const auto grid_size = config_.down_grid_size_x_ * config_.down_grid_size_y_;
++  output.class_size = config_.class_size_;
++  output.offset_size = config_.head_out_offset_size_;
++  output.z_size = config_.head_out_z_size_;
++  output.dim_size = config_.head_out_dim_size_;
++  output.rot_size = config_.head_out_rot_size_;
++  output.vel_size = config_.head_out_vel_size_;
++  output.height = config_.down_grid_size_y_;
++  output.width = config_.down_grid_size_x_;
++  output.voxel_size_x = config_.voxel_size_x_;
++  output.voxel_size_y = config_.voxel_size_y_;
++  output.range_min_x = config_.range_min_x_;
++  output.range_min_y = config_.range_min_y_;
++  output.downsample_factor = config_.downsample_factor_;
++  output.distance_bin_upper_limits = config_.distance_bin_upper_limits_;
++  output.score_thresholds = config_.score_thresholds_;
++  output.yaw_norm_thresholds = config_.yaw_norm_thresholds_;
++
++  const auto copy_output = [grid_size](
++                             const float * source, const std::size_t channels,
++                             std::vector<float> & destination) {
++    destination.resize(grid_size * channels);
++    CHECK_CUDA_ERROR(cudaMemcpy(
++      destination.data(), source, destination.size() * sizeof(float), cudaMemcpyDeviceToHost));
++  };
++  copy_output(head_out_heatmap_d_.get(), config_.class_size_, output.heatmap);
++  copy_output(head_out_offset_d_.get(), config_.head_out_offset_size_, output.offset);
++  copy_output(head_out_z_d_.get(), config_.head_out_z_size_, output.z);
++  copy_output(head_out_dim_d_.get(), config_.head_out_dim_size_, output.dim);
++  copy_output(head_out_rot_d_.get(), config_.head_out_rot_size_, output.rot);
++  copy_output(head_out_vel_d_.get(), config_.head_out_vel_size_, output.vel);
++}
++
+ }  // namespace autoware::lidar_centerpoint
+--- a/src/node.cpp
++++ b/src/node.cpp
+@@ -26,12 +26,92 @@
+ #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+ 
++#include <cstdint>
++#include <filesystem>
++#include <fstream>
++#include <iomanip>
+ #include <memory>
+ #include <stdexcept>
+ #include <string>
+ #include <vector>
+ 
+ namespace autoware::lidar_centerpoint
+ {
++namespace
++{
++void write_float_binary(const std::filesystem::path & path, const std::vector<float> & values)
++{
++  std::ofstream stream(path, std::ios::binary | std::ios::trunc);
++  if (!stream) {
++    throw std::runtime_error("failed to open raw-head output " + path.string());
++  }
++  stream.write(
++    reinterpret_cast<const char *>(values.data()),
++    static_cast<std::streamsize>(values.size() * sizeof(float)));
++  if (!stream) {
++    throw std::runtime_error("failed to write raw-head output " + path.string());
++  }
++}
++
++void write_float_array(std::ostream & stream, const std::vector<float> & values)
++{
++  stream << '[';
++  for (std::size_t index = 0; index < values.size(); ++index) {
++    if (index != 0) {
++      stream << ',';
++    }
++    stream << std::setprecision(9) << values[index];
++  }
++  stream << ']';
++}
++
++void write_raw_head_debug(
++  const std::filesystem::path & directory, const std::int64_t timestamp_ns,
++  const RawHeadDebug & raw)
++{
++  std::filesystem::create_directories(directory);
++  const auto prefix = directory / std::to_string(timestamp_ns);
++  if (std::filesystem::exists(prefix.string() + "_meta.json")) {
++    return;
++  }
++  write_float_binary(prefix.string() + "_heatmap.f32", raw.heatmap);
++  write_float_binary(prefix.string() + "_reg.f32", raw.offset);
++  write_float_binary(prefix.string() + "_height.f32", raw.z);
++  write_float_binary(prefix.string() + "_dim.f32", raw.dim);
++  write_float_binary(prefix.string() + "_rot.f32", raw.rot);
++  write_float_binary(prefix.string() + "_vel.f32", raw.vel);
++
++  std::ofstream metadata(prefix.string() + "_meta.json", std::ios::trunc);
++  if (!metadata) {
++    throw std::runtime_error("failed to open raw-head metadata output");
++  }
++  metadata << "{\n"
++           << "  \"timestamp_ns\": " << timestamp_ns << ",\n"
++           << "  \"dtype\": \"float32\",\n"
++           << "  \"layout\": \"NCHW_without_batch\",\n"
++           << "  \"class_size\": " << raw.class_size << ",\n"
++           << "  \"height\": " << raw.height << ",\n"
++           << "  \"width\": " << raw.width << ",\n"
++           << "  \"voxel_size_x\": " << raw.voxel_size_x << ",\n"
++           << "  \"voxel_size_y\": " << raw.voxel_size_y << ",\n"
++           << "  \"range_min_x\": " << raw.range_min_x << ",\n"
++           << "  \"range_min_y\": " << raw.range_min_y << ",\n"
++           << "  \"downsample_factor\": " << raw.downsample_factor << ",\n"
++           << "  \"bindings\": {\"heatmap\": " << raw.class_size
++           << ", \"reg\": " << raw.offset_size
++           << ", \"height\": " << raw.z_size
++           << ", \"dim\": " << raw.dim_size
++           << ", \"rot\": " << raw.rot_size
++           << ", \"vel\": " << raw.vel_size << "},\n"
++           << "  \"distance_bin_upper_limits\": ";
++  write_float_array(metadata, raw.distance_bin_upper_limits);
++  metadata << ",\n  \"score_thresholds\": ";
++  write_float_array(metadata, raw.score_thresholds);
++  metadata << ",\n  \"yaw_norm_thresholds\": ";
++  write_float_array(metadata, raw.yaw_norm_thresholds);
++  metadata << "\n}\n";
++}
++}  // namespace
++
+ LidarCenterPointNode::LidarCenterPointNode(const rclcpp::NodeOptions & node_options)
+ : Node("lidar_center_point", node_options), tf_buffer_(this->get_clock())
+ {
+@@ -53,6 +126,11 @@
+   class_names_ = this->declare_parameter<std::vector<std::string>>("model_params.class_names");
+   has_twist_ = this->declare_parameter<bool>("model_params.has_twist");
+   enable_stage_dump_ = this->declare_parameter<bool>("enable_stage_dump", false);
++  enable_raw_head_dump_ = this->declare_parameter<bool>("enable_raw_head_dump", false);
++  raw_head_dump_directory_ = this->declare_parameter<std::string>("raw_head_dump_directory", "");
++  if (enable_raw_head_dump_ && raw_head_dump_directory_.empty()) {
++    throw std::invalid_argument("raw_head_dump_directory must be set when raw dump is enabled");
++  }
+   const std::size_t point_feature_size = static_cast<std::size_t>(
+     this->declare_parameter<std::int64_t>("model_params.point_feature_size"));
+   has_variance_ = this->declare_parameter<bool>("model_params.has_variance");
+@@ -235,13 +313,20 @@
+ 
+   std::vector<Box3D> det_boxes3d;
+   std::vector<Box3D> post_score_boxes3d;
++  RawHeadDebug raw_head_debug;
+   bool is_num_pillars_within_range = true;
+   bool is_success = detector_ptr_->detect(
+     input_pointcloud_msg, tf_buffer_, det_boxes3d, is_num_pillars_within_range,
+-    enable_stage_dump_ ? &post_score_boxes3d : nullptr);
++    enable_stage_dump_ ? &post_score_boxes3d : nullptr,
++    enable_raw_head_dump_ ? &raw_head_debug : nullptr);
+   if (!is_success) {
+     return;
+   }
++  if (enable_raw_head_dump_) {
++    write_raw_head_debug(
++      raw_head_dump_directory_, rclcpp::Time(input_pointcloud_msg->header.stamp).nanoseconds(),
++      raw_head_debug);
++  }
+   diagnostics_centerpoint_trt_->add_key_value(
+     "is_num_pillars_within_range", is_num_pillars_within_range);
+   if (!is_num_pillars_within_range) {

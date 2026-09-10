@@ -3,22 +3,25 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 --npz PATH --output-dir DIR [--stage-dump on|off]" >&2
+  echo "usage: $0 --npz PATH --output-dir DIR [--stage-dump on|off] [--raw-head-dump on|off]" >&2
 }
 
 NPZ=
 OUTPUT_DIR=
 STAGE_DUMP=on
+RAW_HEAD_DUMP=off
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --npz) NPZ=${2:-}; shift 2 ;;
     --output-dir) OUTPUT_DIR=${2:-}; shift 2 ;;
     --stage-dump) STAGE_DUMP=${2:-}; shift 2 ;;
+    --raw-head-dump) RAW_HEAD_DUMP=${2:-}; shift 2 ;;
     *) usage; exit 2 ;;
   esac
 done
 [[ -f "$NPZ" && -n "$OUTPUT_DIR" ]] || { usage; exit 2; }
 [[ "$STAGE_DUMP" == on || "$STAGE_DUMP" == off ]] || { usage; exit 2; }
+[[ "$RAW_HEAD_DUMP" == on || "$RAW_HEAD_DUMP" == off ]] || { usage; exit 2; }
 
 WORKTREE=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 RUNTIME_ROOT=${AUTOWARE_RUNTIME_ROOT:-"$WORKTREE/.autoware_runtime"}
@@ -36,6 +39,9 @@ done
   exit 2
 }
 mkdir -p "$OUTPUT_DIR"
+if [[ "$RAW_HEAD_DUMP" == on ]]; then
+  mkdir -p "$OUTPUT_DIR/raw_head"
+fi
 
 set +u
 source /opt/ros/humble/setup.bash
@@ -65,6 +71,8 @@ timeout 45s ros2 launch "$LAUNCH_FILE" \
   data_path:="$MODEL_DATA_ROOT" node_name:=lidar_centerpoint \
   model_name:=centerpoint model_param_path:="$MODEL_PARAM" \
   enable_stage_dump:="$([[ "$STAGE_DUMP" == on ]] && echo true || echo false)" \
+  enable_raw_head_dump:="$([[ "$RAW_HEAD_DUMP" == on ]] && echo true || echo false)" \
+  raw_head_dump_directory:="$OUTPUT_DIR/raw_head" \
   build_only:=false >"$OUTPUT_DIR/node.log" 2>&1 &
 pids+=("$!")
 
@@ -130,5 +138,16 @@ for name in "${names[@]}"; do
     exit 1
   }
 done
+if [[ "$RAW_HEAD_DUMP" == on ]]; then
+  timestamp_ns=$(/usr/bin/python3 -c \
+    'import numpy as np,sys; print(int(np.load(sys.argv[1], allow_pickle=False)["timestamp_ns"]))' \
+    "$NPZ")
+  for suffix in meta.json heatmap.f32 reg.f32 height.f32 dim.f32 rot.f32 vel.f32; do
+    [[ -s "$OUTPUT_DIR/raw_head/${timestamp_ns}_${suffix}" ]] || {
+      echo "missing raw-head capture: ${timestamp_ns}_${suffix}" >&2
+      exit 1
+    }
+  done
+fi
 echo "CenterPoint frame run: PASS ($STAGE_DUMP)"
 echo "Output: $OUTPUT_DIR"
