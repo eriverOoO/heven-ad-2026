@@ -39,7 +39,7 @@ for filename in "${frames[@]}"; do
   for mode in native source_ring_vlp16_v2; do
     npz="$DERIVED_ROOT/$mode/$filename"
     [[ -f "$npz" ]] || { echo "missing paired NPZ: $npz" >&2; exit 2; }
-    "$RUNNER" --npz "$npz" --output-dir "$OUTPUT_ROOT/$timestamp/$mode" \
+    bash "$RUNNER" --npz "$npz" --output-dir "$OUTPUT_ROOT/$timestamp/$mode" \
       --stage-dump on --raw-head-dump on
   done
   completed=$((completed + 1))
