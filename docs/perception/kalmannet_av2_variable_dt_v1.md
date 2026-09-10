@@ -156,7 +156,108 @@ Matches the task's own qualitative description exactly ("0.1s dominant,
 aggressive" for STRONG). No interval larger than 0.4s in this first
 experiment, per instruction.
 
-<!-- SCREENING_RESULTS_PLACEHOLDER -->
+## 7. 2k screening result (internal validation only)
+
+Screened FIXED (baseline A, the frozen 2k pilot GENERIC-ROBUST checkpoint
+`av2_stage1_pilot_generic_robust_bs64_lr004_seed0.pt`, re-evaluated, not
+retrained) vs MILD (B) vs STRONG (C), all seed 1, on the Stage-1
+2,000-scenario pilot dataset. Each checkpoint evaluated under all three dt
+policies via `evaluate_with_dt_buckets` (`variable_dt.py`), **internal
+validation split only** -- official AV2 VAL never read for selection
+(task section 12/13).
+
+| eval policy | A (FIXED-trained) | B (MILD-trained) | C (STRONG-trained) |
+|---|---|---|---|
+| fixed-dt  overall pos RMSE (m) | 0.3231 | **0.3195** | 0.3218 |
+| mild-dt   overall pos RMSE (m) | 0.3602 | **0.3518** | 0.3550 |
+| strong-dt overall pos RMSE (m) | 0.4440 | 0.4258 | **0.4248** |
+| internal val loss (training)   | 0.7990 | **0.8288** | 0.8867 |
+| norm-overflow events           | --     | 1      | 2      |
+| thinning-applied fraction      | --     | 99.999% | 99.86% |
+
+At 2k scale MILD improved every eval condition vs baseline A -- including
+fixed-dt (-1.1%) -- and clearly beat STRONG on fixed+mild-dt eval and on
+internal val loss, tying STRONG within 0.24% on strong-dt eval, with fewer
+overflow events.
+
+## 8. Selected policy: MILD-VARIABLE-DT (one full 10k run)
+
+Per section 15's criteria: (1) variable-dt validation improvement -- yes
+vs baseline; (2) fixed-0.1 preservation -- best of the three at 2k; (3)
+numerical stability -- best (1 overflow); (4) data retention -- 99.999%.
+STRONG rejected (weaker overall, higher internal loss). **STOP was not
+warranted** -- MILD showed a real, consistent internal-val improvement in
+the variable-dt regime at 2k. One full 10k MILD run launched (frozen
+NATURAL 10k dataset + hyperparameters, only new axis = temporal thinning).
+
+## 9. Full 10k MILD-VARIABLE-DT training run
+
+`scaleup_v2` frozen 10k dataset (9k internal-TRAIN / 1k internal-VAL,
+`dataset_manifest_sha256 ab0f9faa...`, `split_manifest_sha256 f4bb07b2...`
+-- identical to the NATURAL 10k baseline family). One seed (1). Frozen
+config: `hidden_size=32, batch_size=64, lr=0.004, max_epochs=60,
+patience=15, grad_clip=10.0, loss_on_predict_only=True`, CPU,
+GENERIC-ROBUST corruption. Thinning applied to 496,413 / 496,414 training
+sequences (99.9998%; 1 too short to thin, 20 sequences n<2 dropped vs the
+NATURAL baseline's 496,434).
+
+Best epoch **15**, `val_loss_mse_xy_vxvy = 0.7973`, 31 epochs run
+(early-stopped), 8.2 h wall time. Checkpoint SHA-256
+`eb848a81fec1e71eb3907eefef4c48d4152f16f9f7d90d6d7d858e2645b72828`.
+Freeze manifest (`av2_variable_dt_results/freeze_manifest_mild10k.json`)
+written **before** any official AV2 VAL read.
+
+## 10. Numerical health (task section 21)
+
+| counter | 10k MILD-variable-dt | NATURAL 10k seed1 baseline |
+|---|---|---|
+| norm-overflow batches (all skipped) | **39** | 78 |
+| per-element non-finite gradient batches | **0** | 1 |
+| non-finite-gradient skips | 0 | 1 |
+| parameter / optimizer-state collapse | 0 / 0 | 0 / 0 |
+| large-but-finite gradient events | 9,432 | ~12,000 |
+| training_collapsed / training_unstable | false / false | false / false |
+
+9 epochs (11, 16, 17, 20, 22, 23, 26, 28, 30) hit at least one inf
+gradient norm, every one safely skipped by the `nonfinite_guard`
+three-state guard (`docs/perception/kalmannet_gradient_norm_overflow_v1.md`).
+The best checkpoint (epoch 15) **predates** the worst instability window
+(epochs 16-17, where val loss briefly rose to ~1.0 then recovered).
+**Finding: temporal thinning at the MILD level did NOT increase numerical
+instability** -- the MILD-variable-dt run had roughly half the
+norm-overflow events and zero element-nonfinite events of the NATURAL
+FIXED-DT baseline. Section 21's concern is not borne out for MILD.
+
+## 11. Primary comparison -- internal validation dt-buckets (task section 14/19)
+
+NATURAL 10k seed1 (FIXED-DT) vs 10k MILD-VARIABLE-DT, both evaluated
+identically on the 1k internal-VAL split under each dt policy, overall +
+per-transition-dt bucket position RMSE (m):
+
+| eval condition | bucket | NATURAL | MILD-vardt | Δ pos | Δ vel |
+|---|---|---|---|---|---|
+| fixed  | overall | 0.3056 | 0.3087 | **+1.0%** | +1.2% |
+| fixed  | 0.1s | 0.3028 | 0.3060 | +1.0% | +1.5% |
+| mild   | overall | 0.3445 | 0.3439 | -0.2% | -1.0% |
+| mild   | 0.1s | 0.3272 | 0.3276 | +0.1% | -0.6% |
+| mild   | 0.2s | 0.3851 | 0.3820 | -0.8% | -1.9% |
+| mild   | 0.3s | 0.4366 | 0.4302 | -1.5% | -5.2% |
+| strong | overall | 0.4262 | 0.4176 | **-2.0%** | -4.4% |
+| strong | 0.1s | 0.3815 | 0.3758 | -1.5% | -4.7% |
+| strong | 0.2s | 0.4387 | 0.4298 | -2.0% | -5.4% |
+| strong | 0.3s | 0.5041 | 0.4893 | -2.9% | -8.1% |
+| strong | 0.4s+ | 0.5762 | 0.5576 | **-3.2%** | **-11.1%** |
+
+**The improvement from temporal-thinning training scales monotonically
+with transition dt** -- slightly worse at dt=0.1s (~+1%), progressively
+better as dt grows, up to ~-3.2% position / ~-11% velocity RMSE at
+dt >= 0.4s. Net effect is condition-dependent: -2.0% position under
+strong-thinning eval, +1.0% under fixed-dt eval, a wash under
+mild-thinning eval. Matched vs missing splits move together (both improve
+~-2% under strong eval), so the effect is not confined to the
+predict-only regime.
+
+<!-- OFFICIAL_VAL_AND_KF_PLACEHOLDER -->
 
 ## Files
 
