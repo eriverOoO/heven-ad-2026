@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize paired AV2 native/VLP16-like CenterPoint stage captures."""
+"""Summarize paired AV2 native/sparsified CenterPoint stage captures."""
 from __future__ import annotations
 
 import argparse
@@ -337,6 +337,45 @@ def beam_audit(lidar_paths: list[Path], derived_root: Path) -> dict:
     }
 
 
+def source_ring_beam_audit(
+    lidar_paths: list[Path], derived_root: Path, adapted_mode: str
+) -> dict:
+    """Summarize occupancy for a precomputed source-ring proxy."""
+    total = np.zeros(16, dtype=np.int64)
+    occupied_frames = np.zeros(16, dtype=np.int64)
+    per_frame = []
+    for lidar_path in lidar_paths:
+        cloud, metadata = load_npz(
+            derived_root / adapted_mode / f"{lidar_path.stem}.npz"
+        )
+        if metadata.get("mode") != adapted_mode:
+            raise ValueError(f"unexpected mode metadata for {lidar_path.stem}: {metadata}")
+        if len(cloud) and (cloud["channel"].min() < 0 or cloud["channel"].max() > 15):
+            raise ValueError(f"source-ring channel outside 0..15 in {lidar_path.stem}")
+        counts = np.bincount(cloud["channel"], minlength=16)
+        total += counts
+        occupied_frames += counts > 0
+        per_frame.append(
+            {
+                "timestamp_ns": int(lidar_path.stem),
+                "points": len(cloud),
+                "occupied_beams": int(np.count_nonzero(counts)),
+                "points_per_channel": counts.tolist(),
+            }
+        )
+    manifest_paths = sorted((derived_root / "manifests").glob(f"*_{adapted_mode}.json"))
+    manifest = json.loads(manifest_paths[0].read_text()) if len(manifest_paths) == 1 else None
+    return {
+        "mode": adapted_mode,
+        "points_per_channel": total.tolist(),
+        "occupied_frames_per_channel": occupied_frames.tolist(),
+        "per_frame": per_frame,
+        "geometry_manifest": str(manifest_paths[0]) if manifest is not None else None,
+        "selection": manifest.get("selection") if manifest else None,
+        "angular_mismatch_deg": manifest.get("angular_mismatch_deg") if manifest else None,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--annotations", type=Path, required=True)
@@ -346,13 +385,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--score-csv", type=Path)
     parser.add_argument("--gate-m", type=float, default=3.0)
+    parser.add_argument("--adapted-mode", default="vlp16_like")
     args = parser.parse_args()
 
     import pyarrow.feather as feather
 
     columns = feather.read_table(args.annotations).to_pydict()
     lidar_paths = sorted(args.lidar_dir.glob("*.feather"))
-    modes = {"native": [], "vlp16_like": []}
+    adapted_mode = args.adapted_mode
+    if adapted_mode == "native":
+        parser.error("--adapted-mode must differ from native")
+    modes = {"native": [], adapted_mode: []}
     paired_rows = []
     stage_scores: dict[str, dict[str, list[float]]] = {
         mode: {stage: [] for stage in STAGE_FILES} for mode in modes
@@ -397,7 +440,9 @@ def main() -> int:
                 }
             )
 
-        paired_rows.extend(paired_gt_stability(gt, final_all["native"], final_all["vlp16_like"], args.gate_m))
+        paired_rows.extend(
+            paired_gt_stability(gt, final_all["native"], final_all[adapted_mode], args.gate_m)
+        )
         for gi, actor in enumerate(gt):
             distance = math.hypot(actor["x"], actor["y"])
             bin_name = next(
@@ -409,13 +454,13 @@ def main() -> int:
             row = distance_rows[bin_name]
             row["gt"] += 1
             row["native_points"].append(points_in_box(clouds["native"], actor))
-            row["adapted_points"].append(points_in_box(clouds["vlp16_like"], actor))
+            row["adapted_points"].append(points_in_box(clouds[adapted_mode], actor))
             if gi in match_maps["native"]:
                 row["native_matches"] += 1
                 row["native_scores"].append(match_maps["native"][gi]["score"])
-            if gi in match_maps["vlp16_like"]:
+            if gi in match_maps[adapted_mode]:
                 row["adapted_matches"] += 1
-                row["adapted_scores"].append(match_maps["vlp16_like"][gi]["score"])
+                row["adapted_scores"].append(match_maps[adapted_mode][gi]["score"])
 
     stage_summary = {}
     for mode in modes:
@@ -435,6 +480,7 @@ def main() -> int:
 
     result = {
         "frame_count": len(lidar_paths),
+        "adapted_mode": adapted_mode,
         "modes": {mode: summarize_mode(rows) for mode, rows in modes.items()},
         "per_frame": modes,
         "stage_summary": stage_summary,
@@ -470,7 +516,11 @@ def main() -> int:
             }
             for name, row in distance_rows.items()
         },
-        "beam_audit": beam_audit(lidar_paths, args.derived_root),
+        "beam_audit": (
+            beam_audit(lidar_paths, args.derived_root)
+            if adapted_mode == "vlp16_like"
+            else source_ring_beam_audit(lidar_paths, args.derived_root, adapted_mode)
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")

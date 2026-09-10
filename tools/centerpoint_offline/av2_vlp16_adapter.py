@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Sensor-aware AV2-point to VLP-16-like XYZIRC adaptation prototype.
+"""Legacy ego-elevation structured-sparsity adapter.
 
 The input is an ``(N, 4)`` float array (x, y, z, intensity) in one LiDAR
 frame.  This deliberately does not implement an AV2 dataset reader: local AV2
 storage currently contains motion-forecasting assets, not a verified LiDAR
 sensor corpus.  The caller owns frame normalization and provenance.
 
-This is deterministic geometry-aware downsampling, not physical ray tracing
-and not a training-data generator.  Original AV2 files are never written.
+This preserved ``ego_elevation_stress_v1`` implementation measures elevation
+about the AV2 rear-axle ego origin.  It is deterministic and useful as a
+structured stress-test, but it is not a physical VLP-16 proxy.  New physical
+ring selection belongs in :mod:`av2_source_ring_adapter`.  Original AV2 files
+are never written.
 """
 from __future__ import annotations
 

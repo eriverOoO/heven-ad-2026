@@ -11,6 +11,7 @@ from summarize_av2_stage_audit import (
     describe,
     outputs_equivalent,
     paired_gt_stability,
+    source_ring_beam_audit,
     stage_rows,
     validate_stage_counts,
 )
@@ -100,6 +101,35 @@ class Av2StageSummaryTest(unittest.TestCase):
         row = paired_gt_stability(gt, [detection(0.2)], [detection(0.5)], 3.0)[0]
         self.assertAlmostEqual(row["native_center_error_m"], 0.2)
         self.assertAlmostEqual(row["adapted_center_error_m"], 0.5)
+
+    def test_source_ring_beam_audit_records_all_channels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lidar = root / "lidar"
+            mode = "source_ring_vlp16_v2"
+            lidar.mkdir()
+            (root / mode).mkdir()
+            paths = []
+            for timestamp in (1, 2):
+                path = lidar / f"{timestamp}.feather"
+                path.touch()
+                paths.append(path)
+                np.savez(
+                    root / mode / f"{timestamp}.npz",
+                    x=np.zeros(16, np.float32),
+                    y=np.zeros(16, np.float32),
+                    z=np.zeros(16, np.float32),
+                    intensity=np.zeros(16, np.uint8),
+                    return_type=np.zeros(16, np.uint8),
+                    channel=np.arange(16, dtype=np.uint16),
+                    timestamp_ns=np.int64(timestamp),
+                    source_log_id=np.str_("log"),
+                    mode=np.str_(mode),
+                    coordinate_frame=np.str_("av2_egovehicle"),
+                )
+            result = source_ring_beam_audit(paths, root, mode)
+        self.assertEqual(result["points_per_channel"], [2] * 16)
+        self.assertEqual(result["occupied_frames_per_channel"], [2] * 16)
 
 
 if __name__ == "__main__":

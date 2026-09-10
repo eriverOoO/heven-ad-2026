@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert AV2 Sensor feather sweeps to native and VLP-16-like XYZIRC NPZ."""
+"""Convert AV2 Sensor sweeps to native and legacy ego-elevation stress NPZ."""
 from __future__ import annotations
 
 import argparse
