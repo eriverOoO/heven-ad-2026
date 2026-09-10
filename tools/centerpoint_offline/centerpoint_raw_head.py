@@ -88,7 +88,10 @@ class GateResult:
     reason: np.ndarray
 
 
-def reproduce_gate(snapshot: RawHeadSnapshot) -> GateResult:
+def reproduce_gate(
+    snapshot: RawHeadSnapshot,
+    score_threshold_override: float | np.ndarray | None = None,
+) -> GateResult:
     """Reproduce generateBoxes3D_kernel decisions without changing inference."""
     scores = sigmoid(snapshot.arrays["heatmap"])
     winner_class = np.argmax(scores, axis=0).astype(np.int16)
@@ -110,9 +113,21 @@ def reproduce_gate(snapshot: RawHeadSnapshot) -> GateResult:
     upper = np.asarray(snapshot.metadata["distance_bin_upper_limits"], dtype=np.float32)
     distance_bucket = np.searchsorted(upper, radial_distance, side="right").astype(np.int16)
     inside = distance_bucket < len(upper)
-    threshold_matrix = np.asarray(snapshot.metadata["score_thresholds"], dtype=np.float32).reshape(
-        len(upper), snapshot.class_size
-    )
+    threshold_matrix = np.asarray(
+        snapshot.metadata["score_thresholds"], dtype=np.float32
+    ).reshape(len(upper), snapshot.class_size).copy()
+    if score_threshold_override is not None:
+        override = np.asarray(score_threshold_override, dtype=np.float32)
+        if override.ndim == 0:
+            threshold_matrix.fill(float(override))
+        elif override.shape == (snapshot.class_size,):
+            threshold_matrix[:] = override[None, :]
+        elif override.shape == threshold_matrix.shape:
+            threshold_matrix[:] = override
+        else:
+            raise ValueError(
+                "score threshold override must be scalar, per-class, or match the configured matrix"
+            )
     actual_threshold = np.full((snapshot.height, snapshot.width), np.nan, dtype=np.float32)
     actual_threshold[inside] = threshold_matrix[
         distance_bucket[inside], winner_class[inside]
