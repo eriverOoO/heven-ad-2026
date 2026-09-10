@@ -815,10 +815,10 @@ fine-tuning, but this is a 10-sweep, one-log AV2 source-ring proxy rather than
 MORAI target-domain evidence. Threshold changes are also not promoted to
 production from this proxy.
 
-The next highest-value MORAI-independent task is a **cached-R0 score-gate
-sensitivity experiment**. It should vary only the gate in offline replay,
-measure recovered GT evidence together with candidate/FP growth, and avoid
-claiming a deployable threshold until MORAI actor-GT data exists.
+The next highest-value MORAI-independent task was a **cached-R0 score-gate
+sensitivity experiment**. Sections 26--30 report its completion. It varied
+only the offline gate, measured recovered GT evidence together with
+candidate/FP growth, and does not claim a deployable threshold.
 
 Completed external artifacts:
 
@@ -832,4 +832,179 @@ Completed external artifacts:
   metrics/raw_head_v1/stage_summary.json
   metrics/raw_head_v1/stage_scores.csv
   metrics/raw_head_v1/stage_analyzer.log
+```
+
+## 26. Cached-R0 score-gate sensitivity
+
+No TensorRT inference was executed for this experiment. Each threshold reused
+the exact six R0 tensors in `raw_head_ten_sweep_v3`; only a fresh in-memory
+copy of the score-threshold matrix changed. The offline path faithfully
+reproduces the pinned 0.51.0 sequence:
+
+```text
+R0 sigmoid / winner class / box decode
+  -> class-distance score and yaw-validity gates
+  -> score-ordered S1
+  -> class-agnostic 0.5 m circle NMS
+  -> ROS box/yaw convention
+  -> 10 m search / IoU > 0.1 suppression
+  -> area-based class remapping
+```
+
+At the 0.35 baseline, every cached frame reproduced every captured S1--S5
+stage, including counts, classes, scores, centers, dimensions and yaw. The
+largest scalar/geometry discrepancy was `8.53e-6`.
+
+| Baseline stage total | Native captured/offline | Corrected captured/offline |
+| --- | ---: | ---: |
+| S1 post-score | 599 / 599 | 243 / 243 |
+| S2 circle NMS | 163 / 163 | 73 / 73 |
+| S3 pre-IoU | 163 / 163 | 73 / 73 |
+| S4 post-IoU | 156 / 156 | 73 / 73 |
+| S5 final | 156 / 156 | 73 / 73 |
+
+The older 598/244 totals belong to a different inference capture. The pinned
+node's wall-clock-seeded preprocessing order can move borderline cells across
+0.35 between separate inference processes. This cached study consistently
+uses the newer 599/243 artifacts and introduces no such cross-run confound.
+
+## 27. Threshold-recovery frontier
+
+The primary global sweep was bounded to 0.20--0.45. A small 0.01 fine sweep
+between 0.20 and 0.35 located the discrete transition points; no threshold
+below 0.20 was evaluated.
+
+| Threshold | Recall | Vehicle FP/frame | Precision | F1 | S1/frame | S5/frame | Mean matched error |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| .20 | 52.81% | 4.9 | 48.96% | .508 | 75.1 | 14.8 | .356 m |
+| .225 | 50.56% | 4.0 | 52.94% | .517 | 58.0 | 12.8 | .299 m |
+| .25 | 50.56% | 3.4 | 56.96% | .536 | 48.9 | 11.1 | .299 m |
+| .275 | 49.44% | 2.6 | 62.86% | .553 | 40.1 | 9.9 | .295 m |
+| **.29** | **49.44%** | **2.4** | **64.71%** | **.561** | **36.4** | **9.5** | **.295 m** |
+| .30 | 47.19% | 2.4 | 63.64% | .542 | 34.5 | 9.2 | .286 m |
+| .325 | 44.94% | 1.9 | 67.80% | .541 | 27.7 | 8.1 | .288 m |
+| .35 baseline | 42.70% | 1.8 | 67.86% | .524 | 24.3 | 7.3 | .278 m |
+| .375 | 40.45% | 1.3 | 73.47% | .522 | 20.1 | 6.1 | .278 m |
+| .40 | 39.33% | 1.2 | 74.47% | .515 | 17.4 | 5.6 | .262 m |
+| .45 | 34.83% | .9 | 77.50% | .481 | 13.2 | 4.6 | .283 m |
+
+The `.29` neighborhood is the most informative diagnostic trade-off region,
+not an optimal or deployable threshold. Relative to sparse 0.35 it recovers
+six GT, adds six vehicle false positives and 121 S1 candidates: 1.0 extra FP
+and 20.2 extra S1 candidates per recovered GT. At 0.20, nine GT are recovered
+at a cost of 31 extra vehicle FP and 508 extra S1 candidates (3.44 and 56.4
+per recovery respectively).
+
+The largest corrected S1 load in the bounded sweep is 751 total / 147 maximum
+per frame at .20, versus 243 total / 49 maximum at .35: approximately 3.1x
+aggregate and 3.0x peak growth. The configured 5x/10x explosion guards were
+not reached.
+
+Native 0.35 remains far ahead: 78.65% recall, 5.1 vehicle FP/frame, 57.85%
+precision, 59.9 S1/frame and 15.6 final detections/frame. Sparse 0.20 already
+has more S1 load than native (75.1 versus 59.9) and nearly the same vehicle FP
+load (4.9 versus 5.1), yet reaches only 52.81% recall. Threshold reduction
+therefore cannot recover most of the missing representation.
+
+New detections are also lower quality. The six actors newly recovered at .29
+have mean/median center error `.402/.403 m`; the nine at .20 have `.687/.476
+m`. The latter is substantially worse than the baseline survivor-conditioned
+`.278 m`, so the extra recall is not free localization improvement.
+
+## 28. Distance-specific recoverability
+
+| Threshold | 0--20 m (16) | 20--40 m (19) | 40--60 m (31) | 60--80 m (23) |
+| ---: | ---: | ---: | ---: | ---: |
+| .35 | 93.75% | 78.95% | 25.81% | 0.00% |
+| .325 | 93.75% | 84.21% | 25.81% | 4.35% |
+| .30 | 93.75% | 84.21% | 29.03% | 8.70% |
+| .29 | 93.75% | 84.21% | 35.48% | 8.70% |
+| .275 | 93.75% | 84.21% | 35.48% | 8.70% |
+| .25 | 93.75% | 89.47% | 35.48% | 8.70% |
+| .20 | 93.75% | 89.47% | 38.71% | 13.04% |
+
+Of the 23 far-range GT, all 14 zero-point cuboids remain unrecovered throughout
+the sweep. Three of nine nonzero-point cuboids recover at 0.20; six remain
+unrecovered. No zero-point cuboid even obtains a GT-local CAR threshold
+crossing. This supports a representation/evidence limit rather than a gate-only
+explanation of far-range loss.
+
+The native-hit/corrected-miss cohort contains 33 actors. Final recoveries are:
+
+| Threshold | Local evidence crosses | S1 match | Final match | Still unrecovered |
+| ---: | ---: | ---: | ---: | ---: |
+| .325 | 2 | 2 | 2 | 31 |
+| .30 | 4 | 4 | 4 | 29 |
+| .275 | 6 | 6 | 6 | 27 |
+| .25 | 7 | 7 | 7 | 26 |
+| .225 | 8 | 7 | 7 | 26 |
+| .20 | 9 | 9 | 9 | 24 |
+
+The one `.225` evidence crossing without an S1 match is retained explicitly;
+a CAR-local value crossing the threshold is not necessarily the cell's winning
+class. No forced recovery or detector pairing is used.
+
+## 29. Global versus CAR-only lowering
+
+CAR-only lowering holds the other four head-class thresholds at 0.35. Vehicle
+recall and vehicle FP are identical to the global policy at every tested value,
+while avoiding low-score non-vehicle candidates and outputs.
+
+| Policy | Vehicle recall | Vehicle FP/frame | All final | S1 total |
+| --- | ---: | ---: | ---: | ---: |
+| Global .35 | 42.70% | 1.8 | 73 | 243 |
+| Global .30 | 47.19% | 2.4 | 92 | 345 |
+| CAR .30 / others .35 | 47.19% | 2.4 | 83 | 321 |
+| Global .25 | 50.56% | 3.4 | 111 | 489 |
+| CAR .25 / others .35 | 50.56% | 3.4 | 96 | 439 |
+| Global .20 | 52.81% | 4.9 | 148 | 751 |
+| CAR .20 / others .35 | 52.81% | 4.9 | 114 | 629 |
+
+At global .29 the unmatched/non-supported output composition is 24 CAR, 24
+PEDESTRIAN, one TRUCK and two BICYCLE boxes over ten frames. Most occur at
+20--40 m (31/51). CAR-only lowering is therefore the more efficient diagnostic
+policy for vehicle recovery, but it does not fix the fundamental recall limit.
+
+## 30. Runtime calibration versus representation
+
+The outcome is **Mixed**: modest CAR score calibration can recover a small
+near/mid-range subset at manageable load, but threshold adjustment is
+insufficient overall and especially at long range.
+
+| Hypothesis | Assessment | Evidence |
+| --- | --- | --- |
+| H1: 0.35 materially amplifies sparse recall loss | Moderate | lowering to .29 recovers 6/33 native-hit misses, but 27 remain |
+| H2: modest lowering recovers useful GT without disproportionate FP | Moderate | .29 adds 6 GT and 6 vehicle FP; new error is .402 m |
+| H3: large recovery requires unacceptable growth | Strong | even .20 adds 508 S1 and 31 FP but recovers only 9 GT |
+| H4: CAR-only dominates global lowering | Strong | same vehicle metrics with fewer S1 and final non-vehicle outputs |
+| H5: far-range loss is largely gate-unrecoverable | Strong | only 3/23 recover at .20; all 14 zero-point GT remain missed |
+
+Retraining remains **NOT YET** because this is still one AV2 log and a
+source-ring proxy, not target-domain MORAI evidence. The result does raise the
+priority of future MORAI-domain adaptation: runtime threshold calibration can
+only provide partial compensation for a raw representation loss.
+
+The next highest-value MORAI-independent task is a **cached-R0 regression-head
+geometry audit**. It should compare GT-conditioned center, size and yaw
+regression for native versus corrected inputs, including below-threshold
+actors, to determine whether sparsification damages geometry as well as
+confidence. The already completed MORAI converter/training preflight should
+not be duplicated before target data arrives.
+
+External outputs:
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  metrics/score_gate_sensitivity_v1/
+    summary.csv
+    per_threshold.json
+    per_gt_recovery.csv
+    fp_breakdown.csv
+    distance_tradeoff.csv
+    recall_vs_threshold.png
+    fp_per_frame_vs_threshold.png
+    s1_per_frame_vs_threshold.png
+    precision_recall.png
+    recovered_gt_vs_extra_fp.png
+    distance_recall_vs_threshold.png
 ```
