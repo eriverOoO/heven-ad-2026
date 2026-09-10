@@ -23,6 +23,15 @@ several nominal beams before azimuth reduction. Consequently, this run is a
 useful structured sparsity stress-test but is not a physically representative
 VLP-16 emulation. The retraining decision remains **NOT YET**.
 
+The follow-up `source_ring_vlp16_v2` experiment in Sections 13--18 removes
+that geometric defect by selecting 16 unique physical rings from `up_lidar`
+after motion-aware source-local ring recovery. It restores uniform beam
+occupancy and improves survivor geometry, but it does not restore detection
+recall: corrected micro recall is 42.70%, versus 44.94% for the old stress
+adapter and 78.65% native. The corrected loss still begins at S1, before NMS.
+The corrected adapter is therefore classified **B: a useful one-lidar 16-ring
+sparsity proxy, but not close enough to exact VLP-16 geometry**.
+
 ## 2. Scope and coordinate contract
 
 The source is AV2 Sensor validation log
@@ -319,7 +328,225 @@ Large outputs remain outside Git:
 Retraining decision: **NOT YET**. This experiment proves sensitivity to the
 tested sparsification, not a MORAI domain gap or a need for fine-tuning.
 
-The single highest-value next task is to correct the AV2 adapter using
-source-LiDAR-local ray geometry and deterministic source-ring selection, then
-rerun these same 10 paired sweeps. That removes the current confound before
-adding a random count-matched control or using the result to design training.
+That next task is completed in Sections 13--18. The historical result remains
+here as the reproducible control rather than being overwritten.
+
+## 13. Corrected source-ring geometry
+
+The previous `vlp16_like` output is preserved as the
+`ego_elevation_stress_v1` historical control. Its behavior and files were not
+rewritten. The corrected mode is `source_ring_vlp16_v2`.
+
+AV2's aggregate `laser_number` split was validated as follows:
+
+```text
+0..31  -> up_lidar,   local ring = laser_number
+32..63 -> down_lidar, local ring = laser_number - 32
+```
+
+The official aggregate schema alone does not name this numeric split. The
+assignment is supported empirically by applying the two calibration
+extrinsics and recovering 32 fixed local elevation bands per source. Matching
+up/down local-ring median elevations differ by 0.0070 degrees on average and
+0.0126 degrees at most after acquisition-time reconstruction.
+
+Static inverse extrinsics at the sweep reference time are not sufficiently
+accurate for recovering physical ray elevation from the motion-compensated
+cloud. The corrected diagnostic uses each point's acquisition time
+`sweep_timestamp + offset_ns`:
+
+```text
+p_city = city_SE3_egovehicle(reference) * p_ego_compensated
+p_ego(acquisition) = inverse(city_SE3_egovehicle(acquisition)) * p_city
+p_sensor = inverse(egovehicle_SE3_sensor) * p_ego(acquisition)
+```
+
+Pose translation is linearly interpolated and rotation uses quaternion SLERP.
+Across the 64 rings, mean per-ring elevation MAD improves from 0.0556 degrees
+with the reference-time approximation to 0.00992 degrees. The worst p05--p95
+ring span improves from 6.009 degrees to 0.110 degrees. Motion undo is
+therefore material for estimating ring geometry.
+
+This reconstruction is used only to estimate fixed ring angles and choose
+ring IDs. Selected output points retain their original AV2 compensated
+egovehicle XYZ exactly; calibration and city poses are not applied to detector
+input coordinates.
+
+## 14. Unique VLP-16 target mapping
+
+The primary proxy uses only `up_lidar`. It applies a deterministic,
+order-preserving minimum-total-angular-error assignment from the sorted VLP-16
+targets to 16 unique recovered source rings. Output channel is the sorted
+elevation index 0--15, not the interleaved VLP-16 firing ID.
+
+| Channel | Target deg | Up local ring | Measured deg | Abs. error deg |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | -15 | 17 | -15.648 | .648 |
+| 1 | -13 | 29 | -11.316 | 1.684 |
+| 2 | -11 | 21 | -8.849 | 2.151 |
+| 3 | -9 | 27 | -7.259 | 1.741 |
+| 4 | -7 | 16 | -6.152 | .848 |
+| 5 | -5 | 22 | -4.670 | .330 |
+| 6 | -3 | 18 | -3.003 | .003 |
+| 7 | -1 | 13 | -1.003 | .003 |
+| 8 | +1 | 10 | +.998 | .002 |
+| 9 | +3 | 2 | +1.664 | 1.336 |
+| 10 | +5 | 11 | +2.331 | 2.669 |
+| 11 | +7 | 6 | +3.330 | 3.670 |
+| 12 | +9 | 14 | +4.664 | 4.336 |
+| 13 | +11 | 0 | +6.998 | 4.002 |
+| 14 | +13 | 15 | +10.331 | 2.669 |
+| 15 | +15 | 4 | +14.997 | .003 |
+
+Mean absolute angular mismatch is 1.631 degrees and maximum mismatch is
+4.336 degrees. The mismatch is a real limitation of selecting 16 unique
+VLP-32C rings: the recovered upper source elevations do not populate every
+2-degree VLP-16 target. No cross-sensor mixing, angular tolerance gate, range
+crop, or beam-by-azimuth nearest-return reduction is applied.
+
+All 16 channels are occupied in every one of the 10 sweeps. Aggregate points
+per channel are:
+
+```text
+[17333, 16605, 16260, 15972, 15879, 15540, 15075, 15396,
+ 15336, 15069, 14829, 15103, 14693, 13337, 10905, 8919]
+```
+
+The alternating zero/near-zero beam pathology is eliminated. Proxy point
+count is 22,476--24,915 per frame, roughly one quarter of the two-source native
+aggregate, while preserving each selected physical source ring's original
+azimuth returns.
+
+## 15. Corrected object-density check
+
+The table uses the same 89 supported regular-vehicle GT actor-frames and
+direct oriented point-in-box counts.
+
+| Range | GT | Native median | Old ego-angle median | Corrected source-ring median | Corrected zero rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0--20 m | 16 | 564 | 115 | 264 | 0.0% |
+| 20--40 m | 19 | 107 | 17 | 17 | 0.0% |
+| 40--60 m | 31 | 30 | 0 | 5 | 25.8% |
+| 60--80 m | 23 | 9 | 0 | 0 | 60.9% |
+
+The invalid ego-angle adapter caused avoidable collapse at 40--60 m; the
+source-ring proxy restores a nonzero median. Far-range sparsity remains severe
+at 60--80 m, where a one-source 16-ring subset has only 1.13 points/object on
+average and zero points for 60.9% of GT boxes. That residual is a property of
+this ring-subset proxy and scene sample, not evidence about MORAI.
+
+## 16. Corrected CenterPoint stage replay
+
+The same 10 timestamps were replayed with the same model, TensorRT engines,
+single-sweep configuration, score gates, circle NMS, IoU NMS, ROI, and identity
+interface TF. Only point selection differs. Native stage dumps from the
+original controlled run are reused; corrected runs were captured into a new
+mode directory.
+
+| Stage | Native mean (total) | Old stress mean (total) | Corrected mean (total) |
+| --- | ---: | ---: | ---: |
+| Input | 91,103.9 (911,039) | 12,827.5 (128,275) | 23,625.1 (236,251) |
+| ROI | 84,355.3 (843,553) | 11,950.9 (119,509) | 21,550.2 (215,502) |
+| S1 post-score | 59.8 (598) | 24.7 (247) | 24.4 (244) |
+| S2 circle NMS | 16.3 (163) | 7.6 (76) | 7.3 (73) |
+| S3 pre-IoU | 16.3 (163) | 7.6 (76) | 7.3 (73) |
+| S4 post-IoU | 15.6 (156) | 7.4 (74) | 7.3 (73) |
+| S5 final | 15.6 (156) | 7.4 (74) | 7.3 (73) |
+
+The corrected proxy retains 25.93% of native input points and 25.55% of native
+ROI points, versus 14.08% and 14.17% for the old adapter. Despite nearly
+doubling retained points, corrected S1 count is effectively unchanged from
+the old stress input (244 versus 247) and remains 59.2% below native.
+
+S1 mean/median scores are .509/.481 native, .496/.459 old, and .499/.465
+corrected. The main S1 difference remains candidate-count loss, not a large
+global score shift among survivors. Circle-NMS reduction is 72.74% native,
+69.23% old, and 70.08% corrected. IoU-NMS reduction is 4.29%, 2.63%, and 0%,
+respectively. NMS does not preferentially remove corrected sparse candidates.
+
+The earliest measurable divergence remains **S1 post-score**. Because raw
+pre-score tensors are not retained, network peak generation versus the
+class/distance score gate remains unresolved. Circle NMS and IoU NMS occur too
+late to explain the initial loss.
+
+## 17. Corrected detection and paired stability
+
+| Metric | Native | Old stress | Corrected source-ring |
+| --- | ---: | ---: | ---: |
+| Supported vehicle GT | 89 | 89 | 89 |
+| Vehicle matches | 70 | 40 | 38 |
+| Micro recall | 78.65% | 44.94% | 42.70% |
+| Final detections/frame | 15.6 | 7.4 | 7.3 |
+| Vehicle FP/frame | 5.1 | 1.6 | 1.8 |
+| Matched center error mean | .272 m | .416 m | .278 m |
+| Matched score mean | .660 | .631 | .642 |
+
+Corrected survivor-conditioned center error is close to native, unlike the
+old stress adapter. That is improved geometry among surviving detections, not
+an overall localization improvement: corrected recall is lower and 51 of 89
+GT actor-frames are missed.
+
+GT-conditioned paired metrics use only the 37 actors detected in both native
+and corrected branches. No array-index or forced detector pairing is used.
+
+| Metric | Mean | Median | p90 | Max |
+| --- | ---: | ---: | ---: | ---: |
+| Native-to-corrected center shift | .178 m | .176 m | .348 m | .617 m |
+| Corrected center error | .285 m | .248 m | .545 m | 1.003 m |
+| Size-vector shift | .207 m | .155 m | .404 m | .738 m |
+| Score shift (corrected - native) | -.087 | -.052 | +.024 | +.122 |
+| Pi-symmetric yaw-axis shift | .049 rad | .029 rad | .115 rad | .211 rad |
+
+There are no class changes among the 37 jointly detected actors. Six have a
+directional front/back yaw flip; the Pi-symmetric axis metric prevents those
+from inflating box-axis instability.
+
+| Range | GT | Native recall | Old stress recall | Corrected recall | Corrected pts/object median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0--20 m | 16 | 93.75% | 93.75% | 93.75% | 264 |
+| 20--40 m | 19 | 89.47% | 78.95% | 78.95% | 17 |
+| 40--60 m | 31 | 80.65% | 29.03% | 25.81% | 5 |
+| 60--80 m | 23 | 56.52% | 4.35% | 0.00% | 0 |
+
+All bins are descriptive, correlated observations from one log. The corrected
+proxy proves that the old alternating-empty-channel bug was not the sole cause
+of range loss. A single 16-ring source still supplies too few returns on many
+far GT boxes in this sample.
+
+## 18. Final interpretation and decision
+
+| Finding | Assessment | Evidence |
+| --- | --- | --- |
+| Candidate/score-stage sensitivity | Strong | Native S1 598 versus corrected 244; loss precedes NMS |
+| Confidence degradation | Moderate | jointly detected score shift -.087; survivor S1 distribution changes modestly |
+| NMS interaction as primary loss | Unsupported | sparse circle/IoU reduction is no stronger than native |
+| Point-count sensitivity | Strong | one-source 16-ring input retains 25.9%; recall loses 36.0 pp |
+| Beam-structure sensitivity | Moderate | corrected and old yield similar S1/recall despite very different retained counts and geometry |
+| MORAI domain conclusion | Unresolved | no MORAI VLP-16 calibration or held-out actor-GT sequence |
+
+**Corrected adapter classification: B -- useful one-lidar 16-ring sparsity
+proxy, but not close enough to VLP-16 geometry.** It is physically grounded in
+one source origin, unique fixed rings, preserved azimuth returns, and original
+ego coordinates. It is not exact VLP-16 emulation because mean/max target
+angle mismatch is 1.631/4.336 degrees, its source is VLP-32C, and no raycasting
+or VLP-16 firing/return physics is modeled.
+
+Retraining decision: **NOT YET**. The corrected experiment establishes strong
+input-sparsity sensitivity before NMS, but it is neither MORAI target-domain
+evidence nor a general AV2 benchmark. The next highest-value task that does
+not require MORAI data is **raw pre-score instrumentation**: preserve decoded
+head candidates before the class/distance score gate, then replay this fixed
+native/corrected sample to separate model peak loss from threshold-gate loss.
+
+Corrected external artifacts:
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/derived/
+  source_ring_vlp16_v2/<timestamp>.npz
+  manifests/02678d04-cc9f-3148-9f95-1ba66347dff9_source_ring_vlp16_v2.json
+
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  stage_dumps/ten_sweep/<timestamp>/source_ring_vlp16_v2/
+  metrics/source_ring_v2_stage_summary.json
+  metrics/source_ring_v2_stage_scores.csv
+```
