@@ -550,3 +550,116 @@ Corrected external artifacts:
   metrics/source_ring_v2_stage_summary.json
   metrics/source_ring_v2_stage_scores.csv
 ```
+
+## 19. Raw head and score-gate instrumentation
+
+### 19.1 Pinned head contract
+
+The runtime source remains Autoware Universe `autoware_lidar_centerpoint`
+0.51.0. `CenterPointTRT::inference()` binds the head tensors in this exact
+order; `CenterPointTRT::postProcess()` passes them to
+`PostProcessCUDA::generateDetectedBoxes3D_launch()`.
+
+| Binding | Runtime shape | Buffer type | Meaning in the pinned decoder |
+| --- | --- | --- | --- |
+| `spatial_features` | `[1, 32, 480, 480]` | FP32 input buffer | scattered pillar features |
+| `heatmap` | `[1, 5, 480, 480]` | FP32 output buffer | per-class logits |
+| `reg` | `[1, 2, 480, 480]` | FP32 output buffer | x/y cell offsets |
+| `height` | `[1, 1, 480, 480]` | FP32 output buffer | box z |
+| `dim` | `[1, 3, 480, 480]` | FP32 output buffer | log width/length/height |
+| `rot` | `[1, 2, 480, 480]` | FP32 output buffer | yaw sine/cosine |
+| `vel` | `[1, 2, 480, 480]` | FP32 output buffer | x/y velocity |
+
+The binding names are taken from the pinned TensorRT engine metadata. The
+engine uses FP16 precision internally, but this implementation supplies FP32
+input/output buffers.
+
+`generateBoxes3D_kernel()` visits every 480x480 cell. It applies sigmoid to
+all five class logits and selects the highest-scoring class. There is no
+heatmap local-maximum operation and no top-K stage. It decodes x/y from the
+winning cell and `reg`, selects the first radial distance bin whose upper
+bound exceeds the decoded radius, then applies that class/bin threshold. The
+active model package defines four bounds `[50, 90, 121, 200]` m and a score
+threshold of `0.35` for every class in every bin. A separate yaw-vector norm
+gate is then applied (`0.3` for CAR/TRUCK/BUS/BICYCLE and `0.0` for
+PEDESTRIAN). Positive cells are compacted and score-sorted to form S1.
+
+Consequently there is no independently materialized R1 candidate list in the
+pinned architecture:
+
+```text
+R0 dense head tensors
+  -> per-cell sigmoid/max-class + decode + distance/class score gate + yaw gate
+  -> S1 compacted, score-sorted boxes
+```
+
+The source locations are:
+
+- `lib/centerpoint_trt.cpp`: `CenterPointTRT::inference`,
+  `CenterPointTRT::postProcess`
+- `lib/postprocess/postprocess_kernel.cu`: `generateBoxes3D_kernel`,
+  `PostProcessCUDA::generateDetectedBoxes3D_launch`
+- `src/node.cpp`: `LidarCenterPointNode::pointCloudCallback`
+
+### 19.2 Opt-in probe design
+
+The isolated overlay adds `enable_raw_head_dump`, default `false`. When it is
+enabled, the six output tensors are copied read-only to bounded FP32 binary
+snapshots after the unchanged production postprocess call. Metadata records
+the timestamp, shapes, grid geometry, score thresholds, distance bounds, and
+yaw thresholds. The metadata file is written last and is the completion
+sentinel. Dumps live outside Git; dense tensors are never written as CSV.
+
+Offline analysis reproduces the pinned kernel's gate, verifies reproduced
+accepted scores/count against S1, and then emits only bounded summaries:
+per-class distributions, top 100 raw-class and decoder-winner cells, rejection
+reasons, threshold margins, and GT-neighborhood evidence. A five-cell radius
+equals 1.6 m at the 0.32 m output-grid resolution; it is deliberately smaller
+than the 3 m final-output association gate to reduce contamination from nearby
+actors.
+
+The actual replay and causal results are pending the reserved KalmanNet CPU
+training process. Per the coexistence policy, the CenterPoint overlay rebuild
+and GPU replay are not run concurrently with that training.
+
+### 19.3 Resume checkpoint
+
+No build/replay job is left running in the background. Resume only after the
+KalmanNet CPU training PID has ended and memory has recovered:
+
+```bash
+cd /tmp/heven-worktrees/centerpoint-stability-audit-v1
+free -h
+nvidia-smi
+
+export TENSORRT_ROOT=/home/didgang1203/opt/tensorrt/10.8.0.43-cuda11.8
+export ROS_DOMAIN_ID=77
+export OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+export NUMEXPR_NUM_THREADS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+
+bash tools/centerpoint_offline/prepare_autoware_stage_overlay.sh
+nice -n 10 bash tools/centerpoint_offline/build_autoware_centerpoint_isolated.sh
+```
+
+After the build succeeds, use a new external output directory for the fixed
+10-frame, 20-run paired replay:
+
+```bash
+bash tools/centerpoint_offline/run_centerpoint_raw_head_sample.sh \
+  --derived-root /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/derived \
+  --output-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_v1
+
+/home/didgang1203/venvs/heven-centerpoint/bin/python \
+  tools/centerpoint_offline/summarize_centerpoint_raw_head_audit.py \
+  --annotations /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/val/02678d04-cc9f-3148-9f95-1ba66347dff9/annotations.feather \
+  --derived-root /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/derived \
+  --run-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_v1 \
+  --reference-run-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/ten_sweep \
+  --output /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/metrics/raw_head_gate_summary.json \
+  --gt-csv /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/metrics/raw_head_gt_evidence.csv \
+  --top-k-jsonl /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/metrics/raw_head_top100.jsonl
+```
+
+The summarizer deliberately aborts if reproduced R0 gate counts/scores differ
+from S1 or if raw-dump ON changes any S1--S5 output relative to the prior
+raw-dump OFF capture.
