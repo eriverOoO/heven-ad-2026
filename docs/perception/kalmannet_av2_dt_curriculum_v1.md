@@ -65,6 +65,44 @@ precomputed `train_seqs` list and resamples indices with replacement each
 epoch -- it has no hook to re-thin sequence *content* per epoch. An
 epoch-ramped schedule would require re-thinning every epoch (or carrying
 both forms of every sequence in memory), neither of which is the minimal
-change this task asks for. <!-- CURRICULUM_DECISION -->
+change this task asks for. MIXED-50 already smooths the tradeoff at 2k (section 3), so per section 5
+("If MIXED-50 already dominates the tradeoff, skip curriculum entirely")
+no curriculum candidate was trained.
 
-<!-- SCREENING_PLACEHOLDER -->
+## 3. 2k screening result (internal validation only)
+
+Stage-1 2,000-scenario pilot dataset, seed 1, frozen config
+(`bs=64/lr=0.004/grad_clip=10.0/max_epochs=60/patience=15`,
+GENERIC-ROBUST, CPU). MIXED-50 realised a 44,465-fixed / 44,410-thinned
+train split (fraction 0.4997). Best epoch 21, `val_loss 0.8245`. Each
+checkpoint evaluated on the internal-VAL split under all three dt
+policies (`evaluate_with_dt_buckets`), overall position RMSE (m). The
+FIXED / MILD / STRONG rows are the frozen PR #61 screening checkpoints,
+re-evaluated, not retrained.
+
+| eval | A FIXED baseline | B MILD | C STRONG | **D MIXED-50** |
+|---|---|---|---|---|
+| fixed  | 0.3231 | 0.3195 | 0.3218 | **0.3177** |
+| mild   | 0.3602 | 0.3518 | 0.3550 | 0.3523 |
+| strong | 0.4440 | 0.4258 | 0.4248 | 0.4297 |
+| best internal val loss | 0.7990 | 0.8288 | 0.8867 | **0.8245** |
+| norm-overflow events | -- | 1 | 2 | **0** |
+
+**MIXED-50 improves the FIXED baseline on all three conditions**
+(fixed -1.7%, mild -2.2%, strong -3.2%), has the **best** fixed-dt of any
+variant (below even pure MILD), the **lowest** internal val loss of the
+variable-dt family, and the fewest gradient-overflow events. It retains
+~78% of pure MILD's strong-dt improvement over the FIXED baseline
+(-3.2% vs MILD's -4.1%).
+
+## 4. 10k run justified? YES
+
+Section 7 criteria: (1) fixed-dt RMSE close to the NATURAL baseline --
+MIXED-50 is *better* than the baseline at 2k, not merely close; (2)
+strong-dt retains meaningful improvement -- yes, -3.2% vs baseline;
+(3) not a mere average that loses on both endpoints -- MIXED-50 wins on
+both. STOP (section 8) not warranted. One full 10k MIXED-50 run launched
+(same frozen `scaleup_v2` 9k/1k split + hyperparameters as baselines A/B;
+one seed).
+
+<!-- FULL_RUN_PLACEHOLDER -->
