@@ -1,0 +1,104 @@
+{
+  "_comment": "Freeze manifest for the selected 10k VARIABLE-DT KalmanNet checkpoint. Written BEFORE any official AV2 VAL read (task section 17). Checkpoint selection used INTERNAL VALIDATION ONLY.",
+  "checkpoint_path": "~/datasets/av2/checkpoints/av2_10k_vardt_mild_seed1.pt",
+  "checkpoint_sha256": "eb848a81fec1e71eb3907eefef4c48d4152f16f9f7d90d6d7d858e2645b72828",
+  "git_sha": "262ebc192eebd42ccf5300109147b8fabdfba52b",
+  "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+  "model_config": {"hidden_size": 32, "state_dim": 4, "measurement_dim": 2},
+
+  "temporal_augmentation_policy": {
+    "name": "MILD-VARIABLE-DT",
+    "mechanism": "temporal thinning (physically-consistent, no interpolation)",
+    "skip_probs": [0.80, 0.15, 0.05],
+    "implied_dt_distribution_base_0.1s": {"0.1s": 0.80, "0.2s": 0.15, "0.3s": 0.05},
+    "min_retained_frames": 5,
+    "augmentation_seed": 1,
+    "thinning_seed_convention": "SHA-256(f'{augmentation_seed}:thinning:{segment_id}')[:4] mod 2**31-1",
+    "corruption_ordering": "load clean -> temporal thinning -> GENERIC-ROBUST corruption on retained timesteps only"
+  },
+
+  "selection_provenance": {
+    "screening_dataset": "Stage-1 2,000-scenario pilot (~/datasets/av2/processed/av2_kalmannet_v1_stage1_pilot_sharded)",
+    "screening_seed": 1,
+    "screening_internal_val_overall_position_rmse_m": {
+      "A_FIXED_2k_baseline": {"fixed": 0.3231, "mild": 0.3602, "strong": 0.4440},
+      "B_MILD_2k": {"fixed": 0.3195, "mild": 0.3518, "strong": 0.4258},
+      "C_STRONG_2k": {"fixed": 0.3218, "mild": 0.3550, "strong": 0.4248}
+    },
+    "selected": "MILD-VARIABLE-DT",
+    "selection_rationale": "B (MILD) dominated on fixed+mild-dt internal-val eval and internal val loss (0.8288 vs C's 0.8867), and was within 0.24% of C on strong-dt eval, with fewer norm-overflow events. Section 15 criteria: (1) variable-dt validation improvement -- yes vs baseline A; (2) fixed-0.1 preservation -- best of the three at 2k; (3) numerical stability -- 1 overflow vs C's 2; (4) data retention -- 99.999% thinning applied. STRONG rejected for weaker overall.",
+    "selection_used_official_val": false
+  },
+
+  "dataset": {
+    "shard_root": "~/datasets/av2/processed/kalmannet_scaleup_v2/train",
+    "split_manifest": "~/datasets/av2/manifests/scaleup_v2_internal_split_9k1k.json",
+    "dataset_manifest_sha256": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+    "split_manifest_sha256": "f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad",
+    "n_train_sequences": 496414,
+    "n_val_sequences": 57369,
+    "n_train_thinned": 496413,
+    "n_train_thinned_fraction": 0.9999979855523817,
+    "note": "20 sequences (0.004%) too short to thin (n<2), dropped -- vs NATURAL baseline's 496434/57372; negligible."
+  },
+
+  "optimizer_config": {
+    "optimizer": "Adam",
+    "batch_size": 64,
+    "lr": 0.004,
+    "grad_clip": 10.0,
+    "max_epochs": 60,
+    "patience": 15,
+    "loss_on_predict_only": true,
+    "condition": "generic_robust",
+    "device": "cpu",
+    "sampler_version": "length_bucketed_v1",
+    "n_buckets": 8,
+    "note": "Frozen from the NATURAL 10k GENERIC-ROBUST baseline (PR #59 family). ONLY new axis vs baseline: temporal thinning (MILD policy). No architecture / hyperparameter retune."
+  },
+
+  "training_outcome": {
+    "best_epoch": 15,
+    "best_val_loss_mse_xy_vxvy": 0.7973205343536709,
+    "n_epochs_run": 31,
+    "early_stopped": true,
+    "train_time_s": 29550.5
+  },
+
+  "numerical_health": {
+    "norm_overflow_count": 39,
+    "norm_overflow_skip_count": 39,
+    "grad_skip_count": 39,
+    "per_element_nonfinite_gradient_count": 0,
+    "nonfinite_gradient_skip_count": 0,
+    "large_finite_gradient_count": 9432,
+    "parameter_collapse_count": 0,
+    "optimizer_state_collapse_count": 0,
+    "training_collapsed": false,
+    "training_unstable": false,
+    "abort_reason": null,
+    "epochs_with_any_nan_train_true": [11, 16, 17, 20, 22, 23, 26, 28, 30],
+    "best_checkpoint_predates_worst_instability": true,
+    "comparison_to_natural_10k_seed1_baseline": {
+      "MILD_norm_overflow_count": 39,
+      "NATURAL_norm_overflow_count": 78,
+      "MILD_per_element_nonfinite": 0,
+      "NATURAL_per_element_nonfinite": 1,
+      "finding": "MILD temporal thinning did NOT increase numerical instability at 10k scale -- it had FEWER norm-overflow events (39 vs 78) and zero element-nonfinite events (vs 1) than the NATURAL FIXED-DT baseline. Section 21's concern about thinning producing harder gradients is not borne out for the MILD policy."
+    }
+  },
+
+  "internal_val_dt_bucket_results": {
+    "_note": "INTERNAL VAL only (9k/1k internal split). Official AV2 VAL results are added in a SEPARATE file AFTER this manifest is frozen.",
+    "primary_comparison_overall_position_rmse_m": {
+      "eval_fixed":  {"NATURAL_10k": 0.3056, "MILD_variable_dt_10k": 0.3087, "delta_pct": 1.0},
+      "eval_mild":   {"NATURAL_10k": 0.3445, "MILD_variable_dt_10k": 0.3439, "delta_pct": -0.2},
+      "eval_strong": {"NATURAL_10k": 0.4262, "MILD_variable_dt_10k": 0.4176, "delta_pct": -2.0}
+    },
+    "dt_bucket_position_rmse_m_MILD_vs_NATURAL_delta_pct": {
+      "strong_eval": {"0.1s": -1.5, "0.2s": -2.0, "0.3s": -2.9, "0.4s+": -3.2},
+      "mild_eval":   {"0.1s": 0.1,  "0.2s": -0.8, "0.3s": -1.5}
+    },
+    "interpretation": "OUTCOME B (tradeoff): temporal-thinning training produces a monotonic dt-dependent tradeoff -- ~+1% position RMSE at dt=0.1s (worse), improving progressively to ~-3.2% position / ~-11% velocity RMSE at dt>=0.4s (better). Net effect is condition-dependent: -2.0% position under strong-thinning eval, +1.0% under fixed-dt eval, ~tie under mild-thinning eval. Magnitude is small. The 2k-screening signal (MILD beats baseline on all 3) did NOT fully hold at 10k -- the NATURAL 10k baseline is strong enough that variable-dt training only helps clearly in the heavier-thinning regime."
+  }
+}

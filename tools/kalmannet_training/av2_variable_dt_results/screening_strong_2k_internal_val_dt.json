@@ -1,0 +1,93 @@
+{
+  "fixed": {
+    "0.1s": {
+      "n": 520144,
+      "position_rmse_m": 0.3194413379778433,
+      "velocity_rmse_mps": 1.4051877021285613
+    },
+    "matched": {
+      "n": 447483,
+      "position_rmse_m": 0.27246939102508627,
+      "velocity_rmse_mps": 1.4980130149605984
+    },
+    "missing": {
+      "n": 83147,
+      "position_rmse_m": 0.5112152518504598,
+      "velocity_rmse_mps": 1.5818601337682439
+    },
+    "overall": {
+      "n": 530630,
+      "position_rmse_m": 0.32180337028901573,
+      "velocity_rmse_mps": 1.511458778840028
+    }
+  },
+  "mild": {
+    "0.1s": {
+      "n": 336110,
+      "position_rmse_m": 0.3402329454899995,
+      "velocity_rmse_mps": 1.4127006784440614
+    },
+    "0.2s": {
+      "n": 61561,
+      "position_rmse_m": 0.38738990252039324,
+      "velocity_rmse_mps": 1.3286200582130496
+    },
+    "0.3s": {
+      "n": 20157,
+      "position_rmse_m": 0.44326563046750134,
+      "velocity_rmse_mps": 1.2051611919602074
+    },
+    "matched": {
+      "n": 361783,
+      "position_rmse_m": 0.2892486745791603,
+      "velocity_rmse_mps": 1.5102280499472023
+    },
+    "missing": {
+      "n": 66531,
+      "position_rmse_m": 0.5971358876551777,
+      "velocity_rmse_mps": 1.5924028910059471
+    },
+    "overall": {
+      "n": 428314,
+      "position_rmse_m": 0.35504364044150244,
+      "velocity_rmse_mps": 1.5232832986332778
+    }
+  },
+  "strong": {
+    "0.1s": {
+      "n": 173110,
+      "position_rmse_m": 0.3856637872063426,
+      "velocity_rmse_mps": 1.4711879516998343
+    },
+    "0.2s": {
+      "n": 77029,
+      "position_rmse_m": 0.4347085640310736,
+      "velocity_rmse_mps": 1.3787048096648986
+    },
+    "0.3s": {
+      "n": 44435,
+      "position_rmse_m": 0.48697571179024435,
+      "velocity_rmse_mps": 1.2759593637459687
+    },
+    "0.4s+": {
+      "n": 14541,
+      "position_rmse_m": 0.5853446979837139,
+      "velocity_rmse_mps": 1.2173102845581742
+    },
+    "matched": {
+      "n": 270708,
+      "position_rmse_m": 0.31399472407037493,
+      "velocity_rmse_mps": 1.5699364029749463
+    },
+    "missing": {
+      "n": 48889,
+      "position_rmse_m": 0.7962338747033337,
+      "velocity_rmse_mps": 1.6646889486054244
+    },
+    "overall": {
+      "n": 319597,
+      "position_rmse_m": 0.4248441832762038,
+      "velocity_rmse_mps": 1.5847978313941653
+    }
+  }
+}

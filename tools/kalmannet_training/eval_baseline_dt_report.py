@@ -33,6 +33,11 @@ def main() -> int:
     split_manifest_path = Path(sys.argv[3])
     output_path = Path(sys.argv[4])
     augmentation_seed = int(sys.argv[5]) if len(sys.argv) > 5 else 1
+    # Optional 7th arg: a single policy name (fixed/mild/strong). On a
+    # RAM-constrained host the full 3-policy loop OOMs on a 10k val split
+    # (~15 GB), so the caller can run this once per policy in separate
+    # processes and merge the per-policy JSON files afterward.
+    only_policy = sys.argv[6] if len(sys.argv) > 6 else None
 
     state_dict, manifest = checkpoint_utils.load_checkpoint(checkpoint_path)
     hidden_size = manifest["model_config"]["hidden_size"]
@@ -58,8 +63,10 @@ def main() -> int:
     net.load_state_dict(state_dict)
     net.eval()
 
+    policies = {only_policy: POLICY_CHOICES[only_policy]} if only_policy else POLICY_CHOICES
+
     report: dict = {}
-    for eval_policy_name, eval_policy in POLICY_CHOICES.items():
+    for eval_policy_name, eval_policy in policies.items():
         eval_sequences = load_split_sequences_with_thinning(
             shard_root, split_manifest, eval_policy, augmentation_seed, corruption_config,
         )["val"]
@@ -68,6 +75,7 @@ def main() -> int:
         )
         print(f"{eval_policy_name}: overall n={report[eval_policy_name]['overall']['n']} "
               f"pos_rmse={report[eval_policy_name]['overall']['position_rmse_m']:.4f}")
+        del eval_sequences
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True))
