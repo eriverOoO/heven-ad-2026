@@ -38,9 +38,27 @@ for filename in "${frames[@]}"; do
   timestamp=${filename%.npz}
   for mode in native source_ring_vlp16_v2; do
     npz="$DERIVED_ROOT/$mode/$filename"
+    output_dir="$OUTPUT_ROOT/$timestamp/$mode"
     [[ -f "$npz" ]] || { echo "missing paired NPZ: $npz" >&2; exit 2; }
-    bash "$RUNNER" --npz "$npz" --output-dir "$OUTPUT_ROOT/$timestamp/$mode" \
-      --stage-dump on --raw-head-dump on
+    succeeded=false
+    for attempt in 1 2 3; do
+      if bash "$RUNNER" --npz "$npz" --output-dir "$output_dir" \
+        --stage-dump on --raw-head-dump on; then
+        succeeded=true
+        break
+      fi
+      failed_dir="${output_dir}.failed_attempt_${attempt}"
+      [[ ! -e "$failed_dir" ]] || {
+        echo "refusing to overwrite failed-attempt directory: $failed_dir" >&2
+        exit 2
+      }
+      mv "$output_dir" "$failed_dir"
+      echo "frame retry $attempt/3 after preserving $failed_dir" >&2
+    done
+    [[ "$succeeded" == true ]] || {
+      echo "frame failed after three attempts: $timestamp/$mode" >&2
+      exit 1
+    }
   done
   completed=$((completed + 1))
   if [[ "$MAX_FRAMES" -gt 0 && "$completed" -ge "$MAX_FRAMES" ]]; then

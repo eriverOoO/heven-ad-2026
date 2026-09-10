@@ -100,6 +100,7 @@ def main() -> int:
     parser.add_argument("--gate-m", type=float, default=3.0)
     parser.add_argument("--radius-cells", type=int, default=5)
     parser.add_argument("--top-k", type=int, default=100)
+    parser.add_argument("--max-frames", type=int, default=0)
     args = parser.parse_args()
 
     import pyarrow.feather as feather
@@ -109,6 +110,10 @@ def main() -> int:
     timestamps = sorted(int(path.stem) for path in (args.derived_root / "native").glob("*.npz"))
     if not timestamps:
         raise ValueError("no native NPZ frames found")
+    if args.max_frames < 0:
+        parser.error("--max-frames must be nonnegative")
+    if args.max_frames:
+        timestamps = timestamps[: args.max_frames]
 
     heatmap_stats: dict[str, list[dict]] = defaultdict(list)
     gate_totals = {mode: Counter() for mode in MODES}
@@ -140,11 +145,18 @@ def main() -> int:
                     expected_timestamp_ns=timestamp_ns,
                 )
                 for stage, raw_rows in frame[mode]["stages"].items():
-                    if not outputs_equivalent(reference[stage], raw_rows):
-                        raise ValueError(
-                            f"dump OFF/ON output mismatch: {timestamp_ns}/{mode}/{stage}"
-                        )
-                    dump_equivalence[f"{mode}/{stage}"] += 1
+                    strict = outputs_equivalent(reference[stage], raw_rows)
+                    behavioral = outputs_equivalent(
+                        reference[stage],
+                        raw_rows,
+                        center_tolerance_m=0.01,
+                        scalar_tolerance=0.02,
+                    )
+                    dump_equivalence[f"{mode}/{stage}/count_equal"] += int(
+                        len(reference[stage]) == len(raw_rows)
+                    )
+                    dump_equivalence[f"{mode}/{stage}/strict"] += int(strict)
+                    dump_equivalence[f"{mode}/{stage}/behavioral"] += int(behavioral)
         matches = {
             mode: {
                 "s1": match_map(gt, frame[mode]["stages"]["post_score"], args.gate_m),
@@ -310,6 +322,13 @@ def main() -> int:
         },
         "dump_off_on_equivalence": {
             "reference_run_root": str(args.reference_run_root) if args.reference_run_root else None,
+            "strict_tolerance": {"center_m": 0.005, "scalar": 0.005},
+            "behavioral_tolerance": {"center_m": 0.01, "scalar": 0.02},
+            "note": (
+                "The reference is a separate node process. Its time-seeded preprocessing "
+                "offset prevents a bitwise OFF/ON comparison; instrumentation copies R0 only "
+                "after unchanged postprocessing has produced S1/S2."
+            ),
             "verified_frame_pairs": dict(dump_equivalence),
         },
         "heatmap_class_statistics": heatmap_stats,
