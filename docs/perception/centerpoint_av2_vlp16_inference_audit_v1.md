@@ -1008,3 +1008,128 @@ External outputs:
     recovered_gt_vs_extra_fp.png
     distance_recall_vs_threshold.png
 ```
+
+## 31. Cached-R0 Regression Geometry Audit
+
+This offline-only audit reuses the exact ten-sweep TensorRT R0 snapshots used
+by the raw-confidence and score-gate audits. It neither invokes TensorRT nor
+changes a runtime threshold. The input remains the corrected one-source,
+16-ring proxy; it is not a MORAI result or an exact VLP-16 simulation.
+
+### 31.1 Decoder contract
+
+The pinned Autoware 0.51 CUDA decoder was used directly in the audit helper:
+
+| Head | Pinned decode semantics |
+| --- | --- |
+| `reg` | `x/y = range_min + voxel_size * downsample * (grid + reg)` |
+| `height` | raw value is decoded box `z` |
+| `dim` | raw order is `[width, length, height]`; every component is `exp(raw)` |
+| `rot` | raw yaw is `atan2(rot[0]=sin, rot[1]=cos)`; AV2 comparison yaw is `-raw_yaw - pi/2` |
+| `vel` | raw `vx/vy`, reported only as a native-to-sparse diagnostic |
+
+For every one of the 89 supported `REGULAR_VEHICLE` GT cuboids, two probes
+were retained without score filtering:
+
+- **Same-cell:** native and sparse heads decoded at the identical GT-projected
+  feature-grid cell. This isolates regression-head change from peak movement.
+- **Winner-cell:** each condition decoded at its own highest CAR heatmap cell
+  in the same bounded GT neighborhood. This measures the geometry of the
+  candidate the detector is actually most likely to select.
+
+Yaw uses a pi-symmetric box-axis metric. Thus a front/rear flip is not counted
+as a box-axis geometry failure.
+
+### 31.2 Same-cell versus winner-cell geometry
+
+| Metric, all 89 GT | Native same/winner | Sparse same/winner | Interpretation |
+| --- | ---: | ---: | --- |
+| Same-cell XY error | .098 m | .109 m | Within-cell center regression is largely retained |
+| Same-cell native-to-sparse XY shift | \- | .051 m | Small relative to a .32 m feature stride |
+| Winner-cell XY error | .379 m | .756 m | Strongest sparse candidate is materially less localised |
+| Winner grid displacement | \- | .631 m | Most of the winner-center change is peak movement |
+| Winner residual shift after grid movement | \- | .058 m | Remaining within-cell regression change is small |
+| Winner relative dimension error | .092 | .133 | Sparse dimensions have a worse tail |
+| Winner box-axis yaw error | .071 rad | .162 rad | Sparse yaw is less stable |
+| Winner absolute Z error | .237 m | .474 m | Sparse height/Z regression is less stable |
+
+The same-cell dimension, yaw, and Z distributions also develop long sparse
+tails (same-cell dimension relative-error p90 `.159 -> .493`, yaw-axis shift
+p90 `.468 rad`, Z-shift p90 `.944 m`). Consequently, this is not a purely
+confidence-only result. However, the dominant change in selected box location
+is the heatmap winner moving, rather than a uniform failure of center-offset
+regression at the same cell.
+
+### 31.3 Cohorts and range
+
+The survivor cohort (37 detected by both conditions) remains relatively stable:
+native/sparse winner center error is `.233/.285 m` and mean peak displacement
+is `.184 m`. The critical native-hit/sparse-miss cohort (33 GT) has a mean
+score change of `-.461`, native/sparse winner center error `.306/.929 m`, and
+mean peak displacement `.833 m`. Its winner dimension error rises
+`.101 -> .144`, yaw-axis error `.057 -> .160 rad`, and Z error `.298 -> .569 m`.
+Thus these misses are not explained only by a binary score gate: the sparse
+winner often moves to a geometrically worse local maximum.
+
+| Distance | GT | Native winner XY | Sparse winner XY | Sparse peak drift | Native/sparse yaw-axis |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0--20 m | 16 | .234 m | .273 m | .140 m | .038/.041 rad |
+| 20--40 m | 19 | .295 m | .479 m | .355 m | .039/.062 rad |
+| 40--60 m | 31 | .355 m | .690 m | .571 m | .050/.227 rad |
+| 60--80 m | 23 | .582 m | 1.412 m | 1.283 m | .150/.243 rad |
+
+For 60--80 m, the 14 zero-sparse-point cuboids have sparse winner error
+`1.735 m` and drift `1.796 m`; the nine nonzero-point cuboids improve to
+`.909 m` and `.485 m`, respectively. A same-cell value can still look smooth
+when an object has no points, but its sparse winner is usually a background
+maximum and is not useful detector geometry.
+
+### 31.4 Confidence and geometry relationship
+
+Across all 89 GT, sparse CAR score has weak association with same-cell center
+error (Spearman rho `-.150`) but strong descriptive association with
+winner-cell center error (`-.683`), dimension error (`-.508`), and yaw-axis
+error (`-.537`). Sparse points per object likewise associates with winner
+center error (`rho=-.564`) but not same-cell center error (`rho=-.080`). These
+are descriptive one-log correlations, not causal estimates.
+
+### 31.5 Causal classification and implication
+
+| Component | Assessment | Evidence |
+| --- | --- | --- |
+| Heatmap confidence | Strong degradation | prior R0 audit: mean CAR score `.554 -> .328`; threshold survivors `70 -> 38` |
+| Peak location | Strong degradation | winner drift `.631 m` overall, `1.283 m` at 60--80 m |
+| Same-cell center regression | Weak degradation | center shift `.051 m`; XY error changes `.098 -> .109 m` |
+| Dimension regression | Moderate degradation | winner relative error `.092 -> .133` with sparse long tails |
+| Yaw regression | Moderate degradation | winner axis error `.071 -> .162 rad`, especially beyond 40 m |
+| Height/Z regression | Moderate degradation | winner Z error `.237 -> .474 m` |
+
+The representation failure is therefore **Mixed**: confidence weakening and
+peak-localisation instability dominate, while Z, dimensions, and yaw also
+degrade for a meaningful subset. Score calibration alone cannot restore a
+candidate whose heatmap maximum has moved to background geometry.
+
+The retraining decision remains **NOT YET**. This AV2 source-ring proxy raises
+the priority of eventual target-domain detector adaptation, potentially beyond
+a classification-only adjustment, but it cannot establish a MORAI fine-tuning
+requirement without a sequence-disjoint MORAI actor-GT bag.
+
+External outputs (not committed):
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  metrics/regression_head_geometry_v1/
+    per_gt_geometry.csv
+    cohort_summary.csv
+    correlations.csv
+    head_summary.json
+    native_vs_sparse_center_error.png
+    score_delta_vs_center_error_delta.png
+    sparse_points_vs_center_error.png
+    winner_grid_displacement_by_distance.png
+```
+
+The next highest-value MORAI-independent task is a **deterministic
+point-count-matched random-downsample control replay** of the same ten AV2
+sweeps. It would distinguish simple point-count loss from the one-source
+ring-structure effect before interpreting any future MORAI result.
