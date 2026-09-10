@@ -83,6 +83,11 @@ class Av2StageSummaryTest(unittest.TestCase):
             ):
                 (root / filename).write_text(payload)
             self.assertTrue(all(not rows for rows in stage_rows(root).values()))
+            self.assertTrue(
+                all(not rows for rows in stage_rows(root, expected_timestamp_ns=0).values())
+            )
+            with self.assertRaises(ValueError):
+                stage_rows(root, expected_timestamp_ns=1)
 
     def test_overlay_stage_dump_defaults_off(self):
         patch = (

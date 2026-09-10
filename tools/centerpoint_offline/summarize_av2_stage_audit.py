@@ -80,10 +80,31 @@ def validate_stage_counts(counts: dict[str, int]) -> None:
         raise ValueError(f"invalid stage count flow: {counts}")
 
 
-def stage_rows(run_dir: Path) -> dict[str, list[dict]]:
+def ros_stamp_ns(message: dict) -> int:
+    stamp = message["header"]["stamp"]
+    return int(stamp["sec"]) * 1_000_000_000 + int(stamp["nanosec"])
+
+
+def stage_rows(
+    run_dir: Path, expected_timestamp_ns: int | None = None
+) -> dict[str, list[dict]]:
+    messages = {
+        stage: load_ros_yaml(run_dir / filename) for stage, filename in STAGE_FILES.items()
+    }
+    if expected_timestamp_ns is not None:
+        mismatches = {
+            stage: ros_stamp_ns(message)
+            for stage, message in messages.items()
+            if ros_stamp_ns(message) != expected_timestamp_ns
+        }
+        if mismatches:
+            raise ValueError(
+                f"stage timestamp mismatch in {run_dir}: expected {expected_timestamp_ns}, "
+                f"got {mismatches}"
+            )
     stages = {
-        stage: detections_from_ros_dict(load_ros_yaml(run_dir / filename), label=None)
-        for stage, filename in STAGE_FILES.items()
+        stage: detections_from_ros_dict(message, label=None)
+        for stage, message in messages.items()
     }
     counts = {stage: len(rows) for stage, rows in stages.items()}
     try:
@@ -414,7 +435,10 @@ def main() -> int:
         final_all = {}
         match_maps = {}
         for mode in modes:
-            stages = stage_rows(args.run_root / str(timestamp_ns) / mode)
+            stages = stage_rows(
+                args.run_root / str(timestamp_ns) / mode,
+                expected_timestamp_ns=timestamp_ns,
+            )
             for stage, rows in stages.items():
                 stage_counts[mode][stage].append(len(rows))
                 stage_scores[mode][stage].extend(row["score"] for row in rows)
