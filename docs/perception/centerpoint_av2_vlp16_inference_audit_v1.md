@@ -618,9 +618,11 @@ equals 1.6 m at the 0.32 m output-grid resolution; it is deliberately smaller
 than the 3 m final-output association gate to reduce contamination from nearby
 actors.
 
-The actual replay and causal results are pending the reserved KalmanNet CPU
-training process. Per the coexistence policy, the CenterPoint overlay rebuild
-and GPU replay are not run concurrently with that training.
+The reserved KalmanNet training was allowed to finish before the isolated
+overlay rebuild. A later CPU-only KalmanNet evaluation briefly pushed
+available memory below 4 GiB during replay; the Codex-owned replay was stopped,
+its partial output was preserved, and the complete run was restarted only
+after that evaluation ended and available memory recovered to 14 GiB.
 
 ### 19.3 Resume checkpoint
 
@@ -641,19 +643,20 @@ bash tools/centerpoint_offline/prepare_autoware_stage_overlay.sh
 nice -n 10 bash tools/centerpoint_offline/build_autoware_centerpoint_isolated.sh
 ```
 
-After the build succeeds, use a new external output directory for the fixed
-10-frame, 20-run paired replay:
+After the build succeeds, use a previously unused external output directory
+for the fixed 10-frame, 20-run paired replay. The completed audit used
+`raw_head_ten_sweep_v3`; substitute another suffix when reproducing it:
 
 ```bash
 bash tools/centerpoint_offline/run_centerpoint_raw_head_sample.sh \
   --derived-root /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/derived \
-  --output-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_v1
+  --output-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_repro
 
 /home/didgang1203/venvs/heven-centerpoint/bin/python \
   tools/centerpoint_offline/summarize_centerpoint_raw_head_audit.py \
   --annotations /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/val/02678d04-cc9f-3148-9f95-1ba66347dff9/annotations.feather \
   --derived-root /home/didgang1203/datasets/centerpoint/av2_sensor_sample_v1/derived \
-  --run-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_v1 \
+  --run-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/raw_head_ten_sweep_repro \
   --reference-run-root /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/stage_dumps/ten_sweep \
   --output /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/metrics/raw_head_gate_summary.json \
   --gt-csv /home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/metrics/raw_head_gt_evidence.csv \
@@ -661,5 +664,172 @@ bash tools/centerpoint_offline/run_centerpoint_raw_head_sample.sh \
 ```
 
 The summarizer deliberately aborts if reproduced R0 gate counts/scores differ
-from S1 or if raw-dump ON changes any S1--S5 output relative to the prior
-raw-dump OFF capture.
+from S1. It reports strict and behavioral S1--S5 comparisons against the prior
+raw-dump OFF capture, but does not treat separate-process numeric drift as an
+instrumentation failure: the pinned node seeds a preprocessing shuffle offset
+from wall-clock time. The probe itself runs only after the unchanged
+postprocess has produced its output.
+
+## 20. GT-conditioned heatmap evidence
+
+The complete replay contains the same 10 sweeps and 89 supported
+`REGULAR_VEHICLE` actor-frames as the corrected source-ring experiment. At
+each GT center, the strongest CAR heatmap value in a 5-cell (1.6 m) radius was
+sampled from R0. This is a GT-conditioned measurement, not forced detector
+pairing.
+
+| R0 CAR evidence near GT | Native | Corrected | Delta |
+| --- | ---: | ---: | ---: |
+| Count | 89 | 89 | 0 |
+| Mean score | .554 | .328 | -.226 |
+| Median score | .669 | .253 | -.416 |
+| p25 | .383 | .039 | -.344 |
+| p75 | .750 | .603 | -.147 |
+| Maximum | .862 | .856 | -.006 |
+| GT neighborhoods at/above .35 | 70 | 38 | -32 |
+
+The maximum remains high because near, well-observed actors survive. The
+distribution, especially its median and lower quartile, moves sharply down.
+This is direct evidence that the TensorRT head heatmap signal weakens under
+the corrected one-source 16-ring input before NMS.
+
+| GT range | GT | Native mean R0 score | Corrected mean | Native >=.35 | Corrected >=.35 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0--20 m | 16 | .739 | .739 | 15 | 15 |
+| 20--40 m | 19 | .649 | .503 | 17 | 15 |
+| 40--60 m | 31 | .544 | .207 | 25 | 8 |
+| 60--80 m | 23 | .362 | .063 | 13 | 0 |
+
+The divergence is negligible at 0--20 m, appears at 20--40 m, and is severe
+beyond 40 m. These are descriptive correlated observations from one AV2 log.
+
+## 21. Score-gate rejection
+
+The CPU reproduction of `generateBoxes3D_kernel()` matched each run's actual
+S1 accepted count and sorted scores. The one-candidate differences from the
+earlier 598/244 totals are consistent with the pinned node's time-seeded
+preprocessing shuffle; the new paired run produced 599/243.
+
+| Gate result over 10 x 480 x 480 cells | Native | Corrected | Delta |
+| --- | ---: | ---: | ---: |
+| Considered cells | 2,304,000 | 2,304,000 | 0 |
+| Accepted into S1 | 599 | 243 | -356 |
+| Below score threshold | 2,303,392 | 2,303,755 | +363 |
+| Rejected by yaw norm after score pass | 9 | 2 | -7 |
+| Outside configured distance bins | 0 | 0 | 0 |
+
+CAR-winner accepted cells account for most of the change: 525 native versus
+219 corrected. The remaining accepted counts are TRUCK 2/1, BUS 0/0,
+BICYCLE 20/3, and PEDESTRIAN 52/20. The configured score threshold is exactly
+0.35 for every class and every distance bin, so no larger far-range threshold
+is present in this experiment.
+
+The surviving S1 score distribution changes much less than its population:
+
+| S1 score | Native | Corrected |
+| --- | ---: | ---: |
+| Count | 599 | 243 |
+| Mean | .509 | .500 |
+| Median | .482 | .465 |
+| p10 | .369 | .365 |
+| p90 | .709 | .698 |
+
+This survivor conditioning is why S1 score summaries alone understated the
+degradation. R0 GT-neighborhood evidence exposes the large population shifted
+below the gate.
+
+The raw probe is default-off and copies R0 only after the unchanged
+postprocess has already produced S1/S2. Across separate OFF and ON processes,
+all final-stage counts and all circle/pre-IoU/post-IoU counts matched in 10/10
+frames for both conditions; S1 count matched 9/10. Strict numeric comparison
+is confounded by the pinned node's wall-clock-seeded preprocessing offset.
+The first frame's final output passed the original 5 mm/0.005 strict
+tolerance; its native S1 maximum center/score changes were 4.3 mm/.0116.
+These small cross-process differences are recorded rather than attributed to
+the post-output read-only tensor copy.
+
+## 22. Native-hit / corrected-miss decomposition
+
+Final detection outcomes are based on independent GT-to-detection Hungarian
+matching with the existing 3 m BEV gate.
+
+| Outcome | Actor-frames |
+| --- | ---: |
+| Detected native and corrected | 37 |
+| Detected native, missed corrected | 33 |
+| Missed native, detected corrected | 1 |
+| Missed both | 18 |
+
+All 33 native-hit/corrected-miss cases are already explained at R0-to-S1:
+
+| B category | Count | Meaning |
+| --- | ---: | --- |
+| B1 | 26 | corrected CAR peak is more than .10 below threshold after a native above-threshold peak |
+| B2 | 7 | corrected CAR peak remains within .10 below threshold |
+| B3 | 0 | peak above threshold but no GT-gated S1 candidate |
+| B4 | 0 | corrected S1 exists but later postprocessing loses the object |
+
+Thus there is no evidence in this sample that circle NMS, IoU NMS, yaw
+validity, class competition, or another decoded-candidate condition explains
+the native-hit/sparse-miss population. The continuous heatmap confidence loss
+is converted into a binary miss by the 0.35 gate.
+
+## 23. Far-range failure decomposition
+
+There are 23 supported GT vehicles at 60--80 m. Fourteen contain zero points
+after source-ring selection and nine retain nonzero points. Nevertheless, all
+23 corrected GT-neighborhood peaks are below 0.35; their maximum is .329 and
+their median is .017. Of the 13 actors detected natively, eight lose every
+selected point and five retain nonzero corrected points, but all 13 fall below
+the score threshold.
+
+Therefore the 0% corrected recall at 60--80 m is not solely an empty-cuboid
+artifact. Complete point loss explains much of it, while the remaining sparse
+evidence is also insufficient for an above-threshold network response.
+
+Across all 89 actors, corrected points/object versus corrected local heatmap
+score has Spearman rho `.848` (`p=9.88e-26`). Point-retention ratio versus
+native-to-corrected score change has rho `.471` (`p=3.25e-6`). These are strong
+descriptive associations, not independent causal estimates.
+
+## 24. Causal interpretation
+
+| Hypothesis | Assessment | Evidence |
+| --- | --- | --- |
+| H1: sparse input weakens/disappears raw vehicle heatmap peaks | Strong | GT-local mean .554 -> .328; above-threshold 70 -> 38; range-dependent collapse starts in R0 |
+| H2: score threshold amplifies continuous confidence loss | Strong | all 33 native-hit/sparse-miss objects are below .35; 7 sit within .10 below it |
+| H3: distance-dependent gate amplifies far loss | Unsupported | all class/bin thresholds are .35 and no cell is outside the configured bins |
+| H4: other decode/validity logic contributes materially | Unsupported | B3/B4 are zero; yaw rejection is 9 native versus 2 corrected |
+
+The primary root cause in this bounded proxy experiment is **network-head
+confidence degradation caused by reduced object evidence**. The fixed score
+gate is the immediate binary mechanism that turns that degradation into S1
+candidate loss. NMS is downstream and is not the source of the 599-to-243
+candidate reduction.
+
+## 25. Decision and artifacts
+
+Retraining remains **NOT YET**. The head is demonstrably sparse-input
+sensitive, which raises the priority of MORAI-domain validation and possible
+fine-tuning, but this is a 10-sweep, one-log AV2 source-ring proxy rather than
+MORAI target-domain evidence. Threshold changes are also not promoted to
+production from this proxy.
+
+The next highest-value MORAI-independent task is a **cached-R0 score-gate
+sensitivity experiment**. It should vary only the gate in offline replay,
+measure recovered GT evidence together with candidate/FP growth, and avoid
+claiming a deployable threshold until MORAI actor-GT data exists.
+
+Completed external artifacts:
+
+```text
+/home/didgang1203/datasets/centerpoint/av2_vlp16_inference_v1/
+  stage_dumps/raw_head_ten_sweep_v3/
+  metrics/raw_head_v1/summary.json
+  metrics/raw_head_v1/gt_evidence.csv
+  metrics/raw_head_v1/top100.jsonl
+  metrics/raw_head_v1/analyzer.log
+  metrics/raw_head_v1/stage_summary.json
+  metrics/raw_head_v1/stage_scores.csv
+  metrics/raw_head_v1/stage_analyzer.log
+```
