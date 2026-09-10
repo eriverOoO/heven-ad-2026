@@ -49,6 +49,11 @@ source "$RUNTIME_ROOT/install/setup.bash"
 set -u
 export ROS_DOMAIN_ID
 export LD_LIBRARY_PATH="$TENSORRT_ROOT/lib:/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# ``ros2 topic echo`` occasionally writes terminal control sequences when a
+# WSL terminal setting leaks into redirected capture.  Stage YAML is a data
+# artifact, so force non-interactive text output rather than stripping bytes.
+export TERM=dumb
+export NO_COLOR=1
 
 pids=()
 cleanup() {
