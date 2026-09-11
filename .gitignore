@@ -91,11 +91,21 @@ route_corridor.json
 !ad_data/map/route_corridor.json
 
 # Model weights and optimized runtimes
-/models/
+/models/*
 *.pt
 *.pth
 *.onnx
 *.engine
+
+# Exception: CenterPoint checkpoint provenance/manifest tracked in git;
+# the checkpoint binary itself is a GitHub Release asset, downloaded by
+# scripts/download_centerpoint_checkpoint.sh, never committed as a git
+# blob (see models/experimental/manifest.yaml). A git-ignored *directory*
+# cannot have individual files re-included by a nested negation, hence
+# `/models/*` here instead of `/models/`.
+!/models/experimental/
+!/models/experimental/manifest.yaml
+!/models/experimental/README.md
 
 # Local data / external clones
 external/

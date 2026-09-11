@@ -1,0 +1,129 @@
+# CenterPoint checkpoint distribution manifest
+#
+# The checkpoint binary itself is NOT a git blob in this repository --
+# git-lfs is non-functional in the environment this manifest was written
+# in, and 89 MB is too large to justify a plain git blob given LFS is
+# unavailable. It is distributed as a GitHub Release asset instead
+# (see `download_url` below), fetched by
+# `scripts/download_centerpoint_checkpoint.sh` and verified against the
+# `sha256` field before use. This file (and README.md) ARE tracked in
+# git so a third party can inspect provenance before downloading
+# anything.
+#
+# This manifest lives on branch `feat/centerpoint-stability-audit-v1`
+# ONLY -- CenterPoint checkpoint distribution is never added to `main`,
+# per this project's branch policy (KalmanNet distribution is the
+# main-branch analog, see `models/experimental/manifest.yaml` on
+# `main`).
+
+schema_version: centerpoint_checkpoint_manifest_v1
+
+models:
+  - name: centerpoint_t14_reproduction
+    file: centerpoint_t14_reproduction.pth
+    role: project-own-trained (self-trained reproduction, NOT an
+      externally-downloaded pretrained checkpoint -- no third-party
+      redistribution-rights question)
+    checkpoint_category: >-
+      project-fine-tuned / self-trained reproduction checkpoint (this
+      project's own OpenPCDet training run, not upstream-pretrained, not
+      a simple test-only smoke artifact, not currently wired into any
+      runtime-used production path -- the production/opt-in Autoware
+      CenterPoint runtime candidate uses a completely separate,
+      third-party Autoware Foundation model; see "not_distributed_here"
+      below)
+    architecture: CenterPoint (OpenPCDet), 3-class head
+      (vehicle/pedestrian/obstacle)
+    n_parameters_in_state_dict: 7767477
+    config: tools/centerpoint_offline/configs/morai_centerpoint_train.yaml
+    training_dataset: >-
+      ~/datasets/morai_heven (dataset_version "unversioned_step03"),
+      single static MORAI scene (static_20260805_003151), full
+      1,764-frame set -- the SAME 1,764 frames used for the T-14
+      evaluation window (see known_limitations below)
+    split: >-
+      train=1764, val=0, test=0 (the historical morai_heven split has no
+      independent validation/test data at all for this checkpoint --
+      see known_limitations)
+    seed: 2026
+    epoch: 3
+    iteration: 5292
+    optimizer_parameter_update_verified: true
+    nan_or_inf_detected_during_training: false
+    training_final_loss: 3.1151533126831055
+    training_initial_loss: 57.58452224731445
+    file_size_bytes: 93474618
+    sha256: 466c8181a377682e032bb32579c8ddb65807b5feebd8625a750b1d5538ddbc95
+    download_url: https://github.com/eriverOoO/heven-ad-2026/releases/download/centerpoint-t14-reproduction-v1/centerpoint_t14_reproduction.pth
+    release_tag: centerpoint-t14-reproduction-v1
+    evaluation_result: >-
+      Inference-only smoke evaluation on the SAME 1,764 frames used for
+      training (T-14 task): mean_predictions_per_frame=16.47,
+      inference_latency_mean_ms=20.11, inference_latency_p50_ms=18.74,
+      inference_latency_p95_ms=26.91 (RTX 4060). Detection-metric numbers
+      recorded in docs/perception/end_to_end_detector_tracker (outside
+      this repo) are IN-DISTRIBUTION / TRAIN-SCENE evaluation ONLY --
+      100% train/eval frame overlap, per the frozen T-14 finding in
+      docs/agent/STATUS.md. No held-out or generalization evaluation
+      exists for this checkpoint.
+    intended_usage: >-
+      scripts/run_camera_lidar_tracking.sh modes 8-10 (CenterPoint +
+      various association metrics), for qualitative/mechanical replay
+      demonstration on the bundled morai_cam4 bag or a similar MORAI
+      capture. NOT validated for any real deployment, competition, or
+      generalization claim.
+    known_limitations:
+      - >-
+        100% train/eval frame overlap (train=1764, val=0, test=0 in the
+        source dataset's own split) -- every number this checkpoint has
+        ever been scored on is on frames it was trained on. This is the
+        single most important caveat and must accompany any performance
+        number quoted for this checkpoint (see the frozen "T-14:
+        End-to-End Detector x Tracker Evaluation" entry in
+        docs/agent/STATUS.md for the full analysis).
+      - >-
+        Single static MORAI scene only (static_20260805_003151) -- no
+        motion, weather, or map diversity in the training data.
+      - >-
+        Reproduction run explicitly logged as
+        purpose="training_pipeline_dry_run_only" /
+        "offline_interface_validation_only" in its own
+        train_summary_epoch3.json / infer_summary.json -- it was built
+        to validate the training/inference pipeline works end-to-end,
+        not as a tuned, presentation-grade detector.
+      - >-
+        3-class head (vehicle/pedestrian/obstacle) -- NOT compatible
+        with the separate vehicle-only
+        tools/centerpoint_offline/configs/centerpoint_morai_v1_model.yaml
+        config from a later task; a strict state_dict load into that
+        config's model will fail by construction (documented in the
+        "CenterPoint MORAI Training Prep v1" STATUS.md entry). Use
+        morai_centerpoint_train.yaml (3-class) with this checkpoint.
+      - >-
+        No independent MORAI ground-truth evaluation exists for this
+        checkpoint beyond the in-distribution numbers above.
+    source_experiment: >-
+      "End-to-End Detector x Tracker Evaluation with Independent MORAI
+      GT" (T-14), reproduced this task from the documented recipe
+      (original checkpoint was ephemeral scratch output, already cleaned
+      up before this task began).
+    source_docs:
+      - >-
+        docs/agent/STATUS.md ("T-14: End-to-End Detector x Tracker
+        Evaluation with Independent MORAI GT")
+      - docs/perception/centerpoint_morai_training_prep_v1.md
+
+not_distributed_here:
+  - name: autoware_lidar_centerpoint (Autoware Foundation official model)
+    reason: >-
+      Third-party (autoware_lidar_centerpoint 0.51.0 package) ONNX +
+      TensorRT-compiled weights. The .engine files are TensorRT-compiled
+      for one specific GPU/driver/TensorRT version and are not portable
+      across machines regardless of licensing; the .onnx files are a
+      third-party artifact this project does not redistribute. Obtain
+      via the package's own standard install/setup flow (see
+      docs/perception/current_pipeline_contract.md section 6). The
+      existing tools/centerpoint_runtime/run_heven_centerpoint_candidate.sh
+      already gates use of this model behind an explicit
+      AD_AUTOWARE_MODEL_LICENSE_REVIEWED=1 environment variable -- that
+      gate is unchanged by this task.
