@@ -1,0 +1,24 @@
+{
+  "fixed": {
+    "0.1s": {
+      "n": 2910832,
+      "position_rmse_m": 0.30832973250540696,
+      "velocity_rmse_mps": 1.2864944732840675
+    },
+    "matched": {
+      "n": 2506243,
+      "position_rmse_m": 0.2696287553125761,
+      "velocity_rmse_mps": 1.3942617240518485
+    },
+    "missing": {
+      "n": 461961,
+      "position_rmse_m": 0.47633067148182956,
+      "velocity_rmse_mps": 1.4585706149464657
+    },
+    "overall": {
+      "n": 2968204,
+      "position_rmse_m": 0.3109621475441876,
+      "velocity_rmse_mps": 1.4044640334634462
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "strong": {
+    "0.1s": {
+      "n": 967146,
+      "position_rmse_m": 0.37998001180475105,
+      "velocity_rmse_mps": 1.4371781194170339
+    },
+    "0.2s": {
+      "n": 430263,
+      "position_rmse_m": 0.4334791685429533,
+      "velocity_rmse_mps": 1.3420405868118104
+    },
+    "0.3s": {
+      "n": 250070,
+      "position_rmse_m": 0.4934026048279044,
+      "velocity_rmse_mps": 1.32200150751078
+    },
+    "0.4s+": {
+      "n": 81240,
+      "position_rmse_m": 0.5612322785286328,
+      "velocity_rmse_mps": 1.3928876409725721
+    },
+    "matched": {
+      "n": 1514161,
+      "position_rmse_m": 0.3119691994428012,
+      "velocity_rmse_mps": 1.550461032609073
+    },
+    "missing": {
+      "n": 271909,
+      "position_rmse_m": 0.7904765845705829,
+      "velocity_rmse_mps": 1.6845891462271623
+    },
+    "overall": {
+      "n": 1786070,
+      "position_rmse_m": 0.4214677142491028,
+      "velocity_rmse_mps": 1.5716193856595788
+    }
+  }
+}

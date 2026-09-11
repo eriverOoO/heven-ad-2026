@@ -1,5 +1,99 @@
 # STATUS
 
+## KalmanNet Mixed Fixed/Variable-dt Curriculum v1 — COMPLETE (REJECT; PR open, do NOT merge)
+
+Branch `exp/kalmannet-av2-dt-curriculum-v1`, from merged PR #61
+`5460027a` (`exp(kalmannet): test variable-dt AV2 training`, verified
+`MERGED` before branching). **Offline AV2-only experiment. No
+`kalmannet_core.py`/`KalmanNetFilter`/`variable_dt.py`/AB3DMOT/
+CenterPoint/ROS/prediction/planner/occupancy-grid file changed. No
+KalmanNet architecture or optimizer-hyperparameter change. No MORAI
+evaluation, no MORAI/competition claim.**
+
+Tested whether a MIXED-50 policy (per-segment deterministic 50/50 split
+between original FIXED sequences and the frozen MILD temporal-thinning,
+`dt_curriculum.py`, reusing `variable_dt.py` entirely -- no second
+thinning implementation, no physical duplicate dataset) could eliminate
+PR #61's ~1% fixed-dt regression while retaining most of its ~2-4%
+strong-dt benefit.
+
+**2k internal-VAL screening (before any 10k commitment): PASSED, looked
+promising.** MIXED-50 improved the FIXED baseline on all three eval
+conditions (fixed -1.7%, mild -2.2%, strong -3.2%), had the lowest
+internal val loss and fewest gradient-overflow events of the
+variable-dt family -- justified a full 10k run per the task's own
+pre-declared stop conditions.
+
+**10k official AV2 VAL (1,000 held-out scenarios) result: did NOT
+reproduce the 2k signal -- REJECT.** Overall position RMSE: NATURAL 10k
+FIXED-DT 0.3063/0.3470/0.4227 (fixed/mild/strong) vs. MILD var-dt 10k
+0.3092/0.3468/0.4141 vs. **MIXED-50 10k 0.3112/0.3497/0.4184**.
+**MIXED-50 is worst-of-three on both fixed and mild** (not best, not
+even a tie -- it makes the fixed-dt regression slightly *larger* than
+MILD-vardt's own regression: +1.6% vs. NATURAL vs. MILD-vardt's own
++0.9%), and sits in the middle on strong, retaining only about half of
+MILD-vardt's own strong-dt improvement (-1.0% vs. MILD-vardt's -2.0%).
+The same ordering holds separately in both matched-frame and
+missing-frame RMSE (not an aggregate artifact) and reproduces on
+internal-VAL as well (structurally disjoint sample, same relative
+ranking). Every KalmanNet variant still clearly beats the AV2-tuned
+LinearCVKF on every condition -- that part of PR #61's finding is
+unaffected. **This is the second consecutive 2k-screening-to-10k-scale
+generalization failure for this class of dt-augmentation policy** (MILD's
+own 2k signal in PR #61 also did not fully predict its 10k
+official-VAL ranking).
+
+**Training numerical health**: 10k MIXED-50 run stayed within STATE A/B
+(healthy / safely-contained aggregate norm-overflow) for its entire
+24-epoch run -- 67 norm-overflow events (vs. MILD's 39, NATURAL's 78),
+0 STATE-C (per-element non-finite) events, 0 parameter/optimizer-state
+collapse, `training_unstable=false`/`training_collapsed=false`. A
+transient val-loss spike to 298.16 at epoch 21 is a real, disclosed
+rough patch, but the selected checkpoint (epoch 8, best val loss
+0.7783) safely predates it. Checkpoint SHA-256
+`0def32d5bf79ea1de76d6febb75b80bfd324889e1c2aa6cb5f90e590b9144550`,
+selected on internal validation only, before any official-VAL read
+(freeze manifest written first).
+
+**Decision: REJECT MIXED-50; no change to PR #61's own recommendation.**
+Keep NATURAL 10k FIXED-DT (seed1) as the preferred AV2-pretrained
+checkpoint for further downstream work, per its clean fixed-dt
+performance -- unchanged from PR #61, since MIXED-50 did not produce a
+policy that dominates it. No further per-segment fixed/thinned-mixture
+curriculum variant is recommended without first understanding why 2k
+internal-validation screening has now twice failed to predict 10k
+official-VAL ranking for this class of policy.
+
+**Tests**: `test_dt_curriculum.py` 17/17 pass (deterministic
+fixed/thinned selection, RNG-stream independence from thinning/
+corruption, resume-safety via static per-segment assignment, no
+official-VAL leakage, temporal-thinning semantics delegated unchanged to
+`variable_dt.py`, manifest serialization). Curriculum-probability-
+schedule tests: N/A -- a per-epoch curriculum ramp was never implemented
+(MIXED-50's own 2k result made it unnecessary per this task's own stop
+condition), so no such code path exists to test. Full
+`tools/kalmannet_training/` regression suite unaffected.
+`py_compile`/`pyflakes`/`git diff --check` clean.
+
+**Files**: `tools/kalmannet_training/{dt_curriculum.py,
+train_kalmannet_dt_curriculum.py, test_dt_curriculum.py}` (new),
+`tools/kalmannet_training/av2_dt_curriculum_results/` (new, small: 2k/10k
+screening reports, freeze manifest, training history CSVs -- no
+checkpoint/resume binaries/AV2 data committed),
+`docs/perception/kalmannet_av2_dt_curriculum_v1.md` (new), this file. No
+`kalmannet_core.py`/`KalmanNetFilter`/`variable_dt.py`/AB3DMOT/
+CenterPoint/ROS/prediction/planner/occupancy-grid file changed.
+
+**Recommended next task**: investigate *why* 2k-scale internal validation
+does not reliably predict 10k-scale official-VAL ranking for this family
+of dt-augmentation policies (e.g. a 2k-vs-10k ranking-correlation study
+across all three tested policies, or a larger screening set) before
+attempting a fourth dt-policy variant. Not started here.
+
+## KalmanNet Mixed Fixed/Variable-dt Curriculum v1 result: **REJECT (PR open, not merged)**
+
+---
+
 ## KalmanNet Physically-Consistent Variable-dt Augmentation v1 — COMPLETE (outcome B, mild dt-dependent tradeoff; PR open, do NOT merge)
 
 Branch `exp/kalmannet-av2-variable-dt-v1`, from `origin/main` `61b03894`

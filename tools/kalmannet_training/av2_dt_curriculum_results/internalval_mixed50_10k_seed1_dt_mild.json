@@ -1,0 +1,34 @@
+{
+  "mild": {
+    "0.1s": {
+      "n": 1880764,
+      "position_rmse_m": 0.33071167024591774,
+      "velocity_rmse_mps": 1.3342735657779539
+    },
+    "0.2s": {
+      "n": 345644,
+      "position_rmse_m": 0.3849015265307947,
+      "velocity_rmse_mps": 1.2456455556613522
+    },
+    "0.3s": {
+      "n": 111998,
+      "position_rmse_m": 0.4327737494320972,
+      "velocity_rmse_mps": 1.1953974275282118
+    },
+    "matched": {
+      "n": 2026132,
+      "position_rmse_m": 0.28614871059111435,
+      "velocity_rmse_mps": 1.4427089622610196
+    },
+    "missing": {
+      "n": 369643,
+      "position_rmse_m": 0.5751702146027619,
+      "velocity_rmse_mps": 1.533067867859931
+    },
+    "overall": {
+      "n": 2395775,
+      "position_rmse_m": 0.34682830429028033,
+      "velocity_rmse_mps": 1.4570160409058344
+    }
+  }
+}
