@@ -91,11 +91,25 @@ route_corridor.json
 !ad_data/map/route_corridor.json
 
 # Model weights and optimized runtimes
-/models/
+/models/*
 *.pt
 *.pth
 *.onnx
 *.engine
+
+# Exception: small, in-house-trained KalmanNet checkpoints committed
+# directly for scripts/run_camera_lidar_tracking.sh (see
+# models/experimental/manifest.yaml for why these are plain git blobs,
+# not LFS, and why CenterPoint checkpoints are deliberately NOT here --
+# a git-ignored *directory* cannot have individual files re-included by
+# a nested negation, hence `/models/*` here instead of `/models/`).
+!/models/experimental/
+!/models/experimental/manifest.yaml
+!/models/experimental/README.md
+!/models/experimental/dense_kalmannet_v2.pt
+!/models/experimental/kalmannet_av2_natural_10k_generic_robust_seed0.pt
+!/models/experimental/kalmannet_av2_natural_10k_generic_robust_seed1.pt
+!/models/experimental/kalmannet_av2_natural_10k_generic_robust_seed2.pt
 
 # Local data / external clones
 external/

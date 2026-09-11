@@ -175,13 +175,27 @@ MCAP은 저장소 루트에서 아래 실행 파일 하나로 연다.
 11.62를 공유한다. 4번과 10번의 Hybrid만 추가로 절대거리 10 m cap을
 사용한다. 따라서 프리셋 간 차이는 표에 기재한 변수로 제한된다.
 
-7번은 체크포인트와 PyTorch 환경을 명시해야 한다.
+7번은 PyTorch 환경이 필요하다. KalmanNet 체크포인트는
+`models/experimental/`에 이미 커밋되어 있으므로(아래 참고) 별도 인자 없이
+바로 실행된다.
+
+```bash
+./scripts/run_camera_lidar_tracking.sh --mode 7 --bag /absolute/path/to/bag
+```
+
+기본값은 저장소가 원래 기대하던 MORAI-domain 체크포인트
+`models/experimental/dense_kalmannet_v2.pt`다. AV2에서 사전학습된
+권장 체크포인트로 바꾸려면:
 
 ```bash
 ./scripts/run_camera_lidar_tracking.sh \
   --mode 7 --bag /absolute/path/to/bag \
-  --kalmannet-checkpoint /absolute/path/to/dense_kalmannet_v2.pt
+  --kalmannet-checkpoint "$(pwd)/models/experimental/kalmannet_av2_natural_10k_generic_robust_seed1.pt"
 ```
+
+두 체크포인트의 차이와 근거는
+[`docs/perception/kalmannet_checkpoint_distribution_v1.md`](../perception/kalmannet_checkpoint_distribution_v1.md)에
+정리되어 있다.
 
 8~10번은 CenterPoint 체크포인트, CUDA 가능한 PyTorch 환경이 필요하다.
 OpenPCDet 소스는 `references/openpcdet` 서브모듈의 검증된 커밋으로
@@ -198,13 +212,19 @@ source /absolute/path/to/centerpoint-venv/bin/activate
 
 경로는 환경변수 `HEVEN_KALMANNET_CHECKPOINT`,
 `HEVEN_CENTERPOINT_CHECKPOINT`, `HEVEN_OPENPCDET_ROOT`로도 제공할 수 있다.
-옵션과 환경변수가 없으면 각각 저장소의 로컬 전용
+옵션과 환경변수가 없으면 각각 저장소의
 `models/experimental/dense_kalmannet_v2.pt`,
 `models/experimental/centerpoint_t14_reproduction.pth`를 찾는다.
-체크포인트와 bag은 저장소에 커밋하지 않는다. 다른 PC에는 별도로 복사하고
-해시와 provenance를 확인한다. 기존 10모드 연구 자산의 SHA-256은
+
+**KalmanNet 체크포인트(`dense_kalmannet_v2.pt`, AV2 seed0/1/2)는 작고
+(31-34 KB) 이 프로젝트가 직접 학습한 결과물이라 저장소에 직접
+커밋되어 있다** — `models/experimental/manifest.yaml` 참고. **CenterPoint
+체크포인트와 bag은 여전히 저장소에 커밋하지 않는다** (CenterPoint는 별도
+feature/experiment branch에서만 배포되며 main에는 포함되지 않는다; bag은
+대용량). 다른 PC에는 CenterPoint 체크포인트만 별도로 복사하고 해시와
+provenance를 확인한다. 기존 10모드 연구 자산의 SHA-256은
 CenterPoint `466c8181a377682e032bb32579c8ddb65807b5feebd8625a750b1d5538ddbc95`,
-KalmanNet `956604975e5204b2c584c3e8fe16a7ba9346097980566ecbbb22c2001fbf7d48`이다.
+KalmanNet(`dense_kalmannet_v2.pt`) `956604975e5204b2c584c3e8fe16a7ba9346097980566ecbbb22c2001fbf7d48`이다.
 
 CenterPoint는 설계된 cropped-only 입력을 사용하므로 해당 모드에서는 지면
 분리를 자동으로 끈다. Euclidean 모드는 기존 지면 분리 경로를 그대로 쓴다.
