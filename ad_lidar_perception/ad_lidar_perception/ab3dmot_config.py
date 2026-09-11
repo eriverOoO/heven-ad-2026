@@ -97,6 +97,13 @@ class AB3DMOTConfig:
     # file; must be supplied via config/launch argument.
     kalmannet_checkpoint: str = ""
     kalmannet_device: str = DEFAULT_KALMANNET_DEVICE
+    # Runtime Readiness v1: optional SHA-256 to verify `kalmannet_checkpoint`
+    # against before loading (e.g. the value recorded in
+    # config/kalmannet/production_candidate.yaml). Empty = verification
+    # disabled (unchanged prior behavior). Never a silent fallback: a
+    # mismatch raises in `load_kalmannet_network`, it never falls back to
+    # linear_kf or loads the file anyway.
+    kalmannet_expected_sha256: str = ""
 
     def __post_init__(self) -> None:
         if self.state_estimator not in SUPPORTED_STATE_ESTIMATORS:
@@ -153,3 +160,11 @@ class AB3DMOTConfig:
             raise ValueError("mahalanobis_gate must be finite and > 0")
         if not math.isfinite(self.mahalanobis_max_distance_m):
             raise ValueError("mahalanobis_max_distance_m must be finite (<=0 disables the cap)")
+        if self.kalmannet_expected_sha256 and (
+            len(self.kalmannet_expected_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.kalmannet_expected_sha256.lower())
+        ):
+            raise ValueError(
+                "kalmannet_expected_sha256 must be empty (verification disabled) or a "
+                f"64-character hex SHA-256 digest, got {self.kalmannet_expected_sha256!r}"
+            )

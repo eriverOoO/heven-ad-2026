@@ -86,6 +86,8 @@ class Ab3dmotTrackerNode(Node):
         self.declare_parameter("imm_ctrv_to_ctrv_probability", 0.95)
         self.declare_parameter("kalmannet_checkpoint", "")
         self.declare_parameter("kalmannet_device", "cpu")
+        # Runtime Readiness v1: optional, empty = verification disabled.
+        self.declare_parameter("kalmannet_expected_sha256", "")
         self.declare_parameter("runtime_summary_interval_frames", 0)
         # Option C published-uncertainty bound (see
         # docs/perception/competition_dynamic_object_pipeline.md). <= 0
@@ -193,6 +195,7 @@ class Ab3dmotTrackerNode(Node):
             imm_ctrv_to_ctrv_probability=float(self.get_parameter("imm_ctrv_to_ctrv_probability").value),
             kalmannet_checkpoint=str(self.get_parameter("kalmannet_checkpoint").value),
             kalmannet_device=str(self.get_parameter("kalmannet_device").value),
+            kalmannet_expected_sha256=str(self.get_parameter("kalmannet_expected_sha256").value),
         )
         root_param = str(self.get_parameter("ab3dmot_root").value)
         ab3dmot_root = Path(root_param) if root_param else None
@@ -200,10 +203,12 @@ class Ab3dmotTrackerNode(Node):
         # T-9B Phase 16: log checkpoint provenance exactly once, at build
         # time -- never per-frame/per-track.
         if tracker.kalmannet_provenance is not None:
+            sha256_verified = bool(config.kalmannet_expected_sha256)
             self.get_logger().info(
                 "KalmanNet checkpoint loaded: "
                 f"path={tracker.kalmannet_provenance['checkpoint_path']} "
                 f"sha256={tracker.kalmannet_provenance['checkpoint_sha256']} "
+                f"sha256_verified={sha256_verified} "
                 f"hidden_size={tracker.kalmannet_provenance['hidden_size']} "
                 f"n_trainable_params={tracker.kalmannet_provenance['n_trainable_params']} "
                 f"device={tracker.kalmannet_provenance['device']}"

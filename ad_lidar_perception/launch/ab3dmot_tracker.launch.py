@@ -114,6 +114,18 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument(
+            "kalmannet_expected_sha256",
+            default_value="",
+            description=(
+                "Runtime Readiness v1: optional 64-char hex SHA-256 to "
+                "verify kalmannet_checkpoint against before loading (see "
+                "config/kalmannet/production_candidate.yaml). Empty "
+                "(default) disables verification -- unchanged prior "
+                "behavior. A mismatch fails startup; it never falls back "
+                "to linear_kf or loads the file anyway."
+            ),
+        ),
+        DeclareLaunchArgument(
             "velocity_audit_enabled", default_value="false"
         ),
         DeclareLaunchArgument(
@@ -188,6 +200,7 @@ def generate_launch_description():
                 ),
                 "kalmannet_checkpoint": LaunchConfiguration("kalmannet_checkpoint"),
                 "kalmannet_device": LaunchConfiguration("kalmannet_device"),
+                "kalmannet_expected_sha256": LaunchConfiguration("kalmannet_expected_sha256"),
                 "velocity_audit_enabled": ParameterValue(
                     LaunchConfiguration("velocity_audit_enabled"),
                     value_type=bool,
