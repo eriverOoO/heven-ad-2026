@@ -24,6 +24,10 @@ REQUIRED_TOPICS = {
     "/tf_static": "tf2_msgs/msg/TFMessage",
     "/clock": "rosgraph_msgs/msg/Clock",
 }
+EXPECTED_XYZIRT_FIELDS = {
+    "x": (0, 7), "y": (4, 7), "z": (8, 7),
+    "intensity": (12, 7), "ring": (16, 4), "time": (18, 7),
+}
 
 
 def _topic_index(metadata: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -97,7 +101,12 @@ def deep_validate(bag_path: Path, result: dict[str, Any]) -> None:
     reader.open(storage, converter)
     types = {item.name: item.type for item in reader.get_all_topics_and_types()}
     previous: dict[str, int] = {}
+    first_stamp: dict[str, int] = {}
+    counts: dict[str, int] = {}
     actor_nonempty = 0
+    actor_id_field = None
+    actor_identifiers = set()
+    lidar_schema = None
     timestamp_failure = False
     while reader.has_next():
         topic, raw, timestamp = reader.read_next()
@@ -106,16 +115,73 @@ def deep_validate(bag_path: Path, result: dict[str, Any]) -> None:
         if timestamp < previous.get(topic, timestamp):
             timestamp_failure = True
         previous[topic] = timestamp
+        first_stamp.setdefault(topic, timestamp)
+        counts[topic] = counts.get(topic, 0) + 1
         if topic == "/ad/dev/objects":
             message = deserialize_message(raw, get_message(types[topic]))
             objects = getattr(message, "objects", getattr(message, "object_list", ()))
             actor_nonempty += int(bool(objects))
+            for actor in objects:
+                for field in ("unique_id", "object_id", "track_id", "actor_id", "id"):
+                    if hasattr(actor, field):
+                        actor_id_field = field
+                        value = getattr(actor, field)
+                        rendered = str(value)
+                        if rendered and rendered not in {"0", "[]", "bytearray(b'')"}:
+                            actor_identifiers.add(rendered)
+                        break
+        elif topic == "/ad/sensors/lidar/points" and lidar_schema is None:
+            message = deserialize_message(raw, get_message(types[topic]))
+            fields = {
+                item.name: (int(item.offset), int(item.datatype), int(item.count))
+                for item in message.fields
+            }
+            mismatches = [
+                name for name, (offset, datatype) in EXPECTED_XYZIRT_FIELDS.items()
+                if fields.get(name) != (offset, datatype, 1)
+            ]
+            lidar_schema = {
+                "frame_id": message.header.frame_id,
+                "point_step": int(message.point_step),
+                "fields": fields,
+                "points": int(message.width) * int(message.height),
+                "xyzirt_exact": (
+                    not bool(mismatches)
+                    and int(message.point_step) == 22
+                    and not bool(message.is_bigendian)
+                ),
+                "mismatches": mismatches,
+            }
     if timestamp_failure:
         result["checks"].append({"status": "FAIL", "name": "timestamp_monotonicity", "detail": "per-topic recorded timestamp regression"})
     else:
         result["checks"].append({"status": "PASS", "name": "timestamp_monotonicity", "detail": "per-topic recorded timestamps monotonic"})
     actor_status = "PASS" if actor_nonempty else "FAIL"
     result["checks"].append({"status": actor_status, "name": "non_empty_gt_frames", "detail": str(actor_nonempty) + " non-empty actor messages"})
+    identifier_status = "PASS" if actor_id_field and actor_identifiers else "FAIL"
+    result["checks"].append({
+        "status": identifier_status,
+        "name": "persistent_actor_ids",
+        "detail": (
+            f"{len(actor_identifiers)} observed identifiers via {actor_id_field}"
+            if identifier_status == "PASS" else "no non-empty supported actor identifier observed"
+        ),
+    })
+    if lidar_schema is None:
+        result["checks"].append({"status": "FAIL", "name": "lidar_schema", "detail": "no LiDAR message deserialized"})
+    elif lidar_schema["xyzirt_exact"]:
+        result["checks"].append({"status": "PASS", "name": "lidar_schema", "detail": "exact MORAI XYZIRT -> XYZIRC converter contract"})
+    else:
+        result["checks"].append({"status": "FAIL", "name": "lidar_schema", "detail": f"unsupported XYZIRT layout: {lidar_schema['mismatches']} point_step={lidar_schema['point_step']}"})
+    result["topic_statistics"] = {
+        topic: {
+            "messages": counts.get(topic, 0),
+            "timestamp_span_sec": (previous[topic] - first_stamp[topic]) / 1e9 if topic in previous else 0.0,
+            "hz": (counts[topic] - 1) / ((previous[topic] - first_stamp[topic]) / 1e9) if topic in previous and previous[topic] > first_stamp[topic] else None,
+        }
+        for topic in REQUIRED_TOPICS
+    }
+    result["lidar_schema"] = lidar_schema
     result["status"] = "FAIL" if any(check["status"] == "FAIL" for check in result["checks"]) else "WARN" if any(check["status"] == "WARN" for check in result["checks"]) else "PASS"
 
 
