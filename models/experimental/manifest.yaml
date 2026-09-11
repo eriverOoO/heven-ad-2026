@@ -1,0 +1,121 @@
+# Model checkpoint manifest for the training-free / model-informed tracking
+# presets (scripts/run_camera_lidar_tracking.sh, docs/perception/
+# kalmannet_checkpoint_distribution_v1.md).
+#
+# Files here are committed as PLAIN GIT BLOBS, not Git LFS, despite the
+# repository's .gitattributes declaring an LFS filter for other large
+# binaries (ad_data/**, *.pcd, etc.): every KalmanNet checkpoint below is
+# (a) this project's OWN in-house-trained artifact -- never a third-party
+# redistributed weight -- and (b) tiny (31-34 KB; KalmanNetGRU
+# hidden_size=32, 7,016 trainable params). Neither condition that
+# motivates ad_camera_perception/models/README.md's "do not commit
+# directly" policy (large size, third-party license review) applies here,
+# so committing directly is the lower-friction, more reliable choice for
+# a clone-and-go experience. A `!models/experimental/*.pt` .gitignore
+# exception makes this an explicit, intentional exception, not an
+# accidental bypass of the repo's blanket `*.pt`/`*.pth` ignore rule.
+#
+# NOT included here: CenterPoint checkpoints. Per this project's explicit
+# branch policy, CenterPoint checkpoint distribution is handled entirely
+# on its own feature/experiment branch and is never added to main -- see
+# that branch's own docs for its checkpoint. `scripts/run_camera_lidar_
+# tracking.sh` modes 8-10 (CenterPoint) therefore still require manually
+# copying `centerpoint_t14_reproduction.pth` into this directory yourself
+# (unchanged, pre-existing limitation, not introduced by this task).
+
+schema_version: kalmannet_checkpoint_manifest_v1
+
+models:
+  - name: dense_kalmannet_v2
+    file: dense_kalmannet_v2.pt
+    role: "existing default for scripts/run_camera_lidar_tracking.sh mode 7 (Euclidean detector + KalmanNet estimator) -- exact path/hash already hardcoded there and in scripts/tests/test_camera_lidar_tracking_runner.py; this task populates the file that script always expected"
+    recommended_for: "testing KalmanNet trained specifically on (a small amount of) real MORAI data"
+    architecture: KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)
+    hidden_size: 32
+    state_dim: 4
+    measurement_dim: 2
+    n_trainable_params: 7016
+    training_dataset: >
+      Historical single-scene MORAI GT capture (T-9A/T-12 research series,
+      NOT AV2). Dense re-training with the T-12.1/T-12.2 fragmentation
+      fix; winner of a 10-seed sweep selected on VALIDATION loss only
+      (T-12.3).
+    evaluation_result: >
+      Measurement-available MORAI TEST (n=130) position RMSE 1.467 m --
+      ties classical Tuned Linear KF (1.456 m) and CTRV EKF (1.490 m).
+      NOT a demonstrated improvement over classical baselines on this
+      small MORAI sample; provided for direct architecture comparison.
+    file_size_bytes: 31436
+    sha256: 956604975e5204b2c584c3e8fe16a7ba9346097980566ecbbb22c2001fbf7d48
+    intended_usage: "already ROS-integration-proven (T-9B): loaded live through the production ab3dmot_core.KalmanNetEstimator against a MORAI replay"
+    known_limitations: "trained on a tiny single-scene MORAI dataset; not a demonstrated improvement over classical KF on that sample"
+    source_experiment: "T-12.3 KalmanNet Training Stability / T-9B ROS Integration"
+
+  - name: kalmannet_av2_natural_10k_generic_robust_seed1
+    file: kalmannet_av2_natural_10k_generic_robust_seed1.pt
+    role: "RECOMMENDED alternative -- point --kalmannet-checkpoint / $HEVEN_KALMANNET_CHECKPOINT at this file to use the AV2-pretrained family instead of the script's historical MORAI-only default"
+    recommended_for: "testing the AV2-pretrained KalmanNet family this project has repeatedly reaffirmed (across the motion-composition, variable-dt, and mixed-curriculum ablations) as the preferred AV2 pretrained candidate over every tested alternative"
+    architecture: KalmanNetGRU (identical architecture to dense_kalmannet_v2.pt)
+    hidden_size: 32
+    state_dim: 4
+    measurement_dim: 2
+    n_trainable_params: 7016
+    training_dataset: "Argoverse 2 Motion Forecasting, scaleup_v2 10,000-scenario fresh TRAIN split (dataset_manifest_sha256 ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12), disjoint from a held-out 1,000-scenario official AV2 VAL split"
+    split_manifest_sha256: f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad
+    condition: "generic_robust (Gaussian noise std=0.3m, dropout_prob=0.1, dropout-burst)"
+    seed: 1
+    best_epoch: 7
+    internal_val_loss_mse_xy_vxvy: 0.7458607519010171
+    evaluation_result: >
+      Official AV2 VAL (1,000 held-out scenarios) position RMSE:
+      CLEAN 0.0428 m (3-seed mean), GENERIC-ROBUST 0.3083 m -- both beat
+      the AV2-tuned Linear KF and the MORAI-domain dense_kalmannet_v2.pt
+      (evaluated cross-domain, diagnostic only) on every tested condition.
+    file_size_bytes: 34216
+    sha256: a9a19353ddb272d3fc0ac3ad7c6754239ef3d8dd00acd3c52a59193d98dc5ee5
+    intended_usage: "primary recommendation for anyone testing the opt-in KalmanNet estimator; validated extensively on AV2 held-out data, NOT yet fine-tuned or independently validated on MORAI"
+    known_limitations: >
+      Pretrained on AV2 (public US driving data) only. The one real,
+      independent MORAI GT evaluation that exists is tiny (n=3 test
+      sequences, one scene) -- see docs/perception/morai_estimator_eval_v2.md.
+      A promising trend on measurement-dropout segments was observed but
+      the sample is too small for a general MORAI performance claim.
+      Treat as an AV2-validated starting point, not a MORAI-validated
+      final model.
+    source_experiment: "AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 (PR #59)"
+    source_docs:
+      - docs/perception/kalmannet_av2_10k_multiseed_v1.md
+      - docs/perception/kalmannet_av2_variable_dt_v1.md
+      - docs/perception/morai_estimator_eval_v2.md
+
+  - name: kalmannet_av2_natural_10k_generic_robust_seed0
+    file: kalmannet_av2_natural_10k_generic_robust_seed0.pt
+    role: "alternate seed of the same frozen family as seed1"
+    note: "PR #59 found <0.1% relative internal-val-loss spread across seeds 0/1/2 -- the three are interchangeable in practice; provided for cross-seed sensitivity testing only"
+    seed: 0
+    best_epoch: 6
+    internal_val_loss_mse_xy_vxvy: 0.7451300733912749
+    file_size_bytes: 33896
+    sha256: 30e0902ef91d2e8f189db163a2ec636d39a7ad9d4f5abc414b8aaa8ae873a778
+    training_dataset: "same as kalmannet_av2_natural_10k_generic_robust_seed1"
+    source_experiment: "AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 (PR #59)"
+
+  - name: kalmannet_av2_natural_10k_generic_robust_seed2
+    file: kalmannet_av2_natural_10k_generic_robust_seed2.pt
+    role: "alternate seed of the same frozen family as seed1"
+    seed: 2
+    best_epoch: 4
+    internal_val_loss_mse_xy_vxvy: 0.7468887660922348
+    file_size_bytes: 34216
+    sha256: a005efc54b63ad92f4972a2731bc4ff1e5e1d9cc7c45e7e18f3030c0bfe91e51
+    training_dataset: "same as kalmannet_av2_natural_10k_generic_robust_seed1"
+    source_experiment: "AV2 10K GENERIC-ROBUST Multi-Seed Completion v1 (PR #59)"
+
+not_distributed_here:
+  - name: centerpoint_t14_reproduction
+    reason: >
+      CenterPoint checkpoint distribution is handled exclusively on its
+      own feature/experiment branch, never on main, per this project's
+      explicit branch-isolation policy. scripts/run_camera_lidar_tracking.sh
+      modes 8-10 already reference this file's expected path/hash but it
+      is deliberately NOT populated here.

@@ -196,8 +196,10 @@ cd "$HOME/heven_ad_2026_ws/src/heven_ad_2026"
 ./scripts/run_camera_lidar_tracking.sh --mode 6 --bag /absolute/path/to/bag
 ```
 
-KalmanNet과 CenterPoint 프리셋은 Git에 포함되지 않는 체크포인트가 필요하다.
-필요한 옵션과 동일 조건 비교 절차는 아래 상세 문서를 따른다.
+KalmanNet 체크포인트는 `models/experimental/`에 이미 포함되어 있어 별도
+준비 없이 7번 프리셋을 바로 실행할 수 있다. CenterPoint 프리셋(8~10번)은
+Git에 포함되지 않는 체크포인트가 필요하다. 필요한 옵션과 동일 조건 비교
+절차는 아래 상세 문서를 따른다.
 
 상세 계약과 제한은
 [`docs/morai/lidar-mcap-replay.md`](docs/morai/lidar-mcap-replay.md)의
