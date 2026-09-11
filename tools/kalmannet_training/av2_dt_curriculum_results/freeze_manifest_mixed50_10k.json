@@ -1,0 +1,81 @@
+{
+  "_comment": "Freeze manifest for the selected 10k MIXED-50 KalmanNet checkpoint. Written BEFORE any official AV2 VAL read (task section 10). Checkpoint selection used INTERNAL VALIDATION ONLY.",
+  "checkpoint_path": "~/datasets/av2/checkpoints/av2_10k_mixed50_seed1.pt",
+  "checkpoint_sha256": "0def32d5bf79ea1de76d6febb75b80bfd324889e1c2aa6cb5f90e590b9144550",
+  "architecture": "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)",
+  "model_config": {"hidden_size": 32, "state_dim": 4, "measurement_dim": 2},
+
+  "mixed_policy": {
+    "name": "MIXED-50",
+    "mechanism": "deterministic per-segment Bernoulli(mild_probability) selects FIXED sequence or the frozen MILD temporal thinning; static assignment, no per-epoch schedule",
+    "mild_probability": 0.5,
+    "policy_seed": 1,
+    "augmentation_seed": 1,
+    "thinned_form_policy": "MILD-VARIABLE-DT (skip_probs=(0.80,0.15,0.05)), unchanged from variable-dt v1",
+    "curriculum_pursued": false,
+    "curriculum_reason": "MIXED-50 already dominated the FIXED baseline on all three 2k eval conditions (section 5 stop condition)"
+  },
+
+  "selection_provenance": {
+    "screening_dataset": "Stage-1 2,000-scenario pilot",
+    "screening_seed": 1,
+    "screening_internal_val_overall_position_rmse_m": {
+      "A_FIXED_2k_baseline": {"fixed": 0.3231, "mild": 0.3602, "strong": 0.4440},
+      "B_MILD_2k": {"fixed": 0.3195, "mild": 0.3518, "strong": 0.4258},
+      "C_STRONG_2k": {"fixed": 0.3218, "mild": 0.3550, "strong": 0.4248},
+      "D_MIXED50_2k": {"fixed": 0.3177, "mild": 0.3523, "strong": 0.4297}
+    },
+    "selection_rationale": "MIXED-50 improved the FIXED baseline on ALL three eval conditions (fixed -1.7%, mild -2.2%, strong -3.2%), had the best fixed-dt of any variant, the lowest internal val loss (0.8245), and 0 norm-overflow events during 2k screening. Passes section 7 criteria cleanly. Not a mere average that loses on both endpoints.",
+    "selection_used_official_val": false
+  },
+
+  "dataset": {
+    "shard_root": "~/datasets/av2/processed/kalmannet_scaleup_v2/train",
+    "split_manifest": "~/datasets/av2/manifests/scaleup_v2_internal_split_9k1k.json",
+    "dataset_manifest_sha256": "ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12",
+    "split_manifest_sha256": "f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad",
+    "note": "identical dataset+split hashes as NATURAL 10k FIXED-DT and MILD variable-dt 10k baselines",
+    "train_fixed_count": 248316,
+    "train_thinned_count": 248109,
+    "realised_mild_fraction": 0.49979150929143373
+  },
+
+  "optimizer_config": {
+    "optimizer": "Adam", "batch_size": 64, "lr": 0.004, "grad_clip": 10.0,
+    "max_epochs": 60, "patience": 15, "loss_on_predict_only": true,
+    "condition": "generic_robust", "device": "cpu",
+    "sampler_version": "length_bucketed_v1", "n_buckets": 8,
+    "note": "frozen, identical to NATURAL 10k and MILD variable-dt 10k baselines. Only new axis vs baseline: per-segment MIXED-50 fixed/thinned assignment."
+  },
+
+  "training_outcome": {
+    "best_epoch": 8,
+    "best_val_loss_mse_xy_vxvy": 0.7783231921867783,
+    "n_epochs_run": 24,
+    "early_stopped": true
+  },
+
+  "numerical_health": {
+    "norm_overflow_count": 67,
+    "per_element_nonfinite_gradient_count": 0,
+    "nonfinite_gradient_skip_count": 0,
+    "parameter_collapse_count": 0,
+    "optimizer_state_collapse_count": 0,
+    "large_finite_gradient_count": 18786,
+    "training_collapsed": false,
+    "training_unstable": false,
+    "abort_reason": null,
+    "epochs_with_any_nan_train_true": [4, 9, 10, 12, 13, 16, 19, 20, 21, 22],
+    "worst_epoch_val_loss": 298.16,
+    "worst_epoch": 21,
+    "best_checkpoint_predates_worst_instability": true,
+    "comparison_to_other_10k_runs": {
+      "MIXED50_norm_overflow_count": 67,
+      "MILD_norm_overflow_count": 39,
+      "NATURAL_norm_overflow_count": 78,
+      "MIXED50_large_finite_gradient_count": 18786,
+      "MILD_large_finite_gradient_count": 9432,
+      "finding": "MIXED-50 had a rougher instability window mid-training (val_loss transiently up to 298 across epochs 9-22) than either single-policy 10k run, but never crossed the escalation thresholds (0 element-nonfinite, 0 collapse, training_unstable=false) and the selected checkpoint (epoch 8) safely predates the entire instability window."
+    }
+  }
+}
