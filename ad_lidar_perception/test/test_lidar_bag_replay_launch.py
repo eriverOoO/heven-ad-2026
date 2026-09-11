@@ -59,6 +59,12 @@ def launch_context(bag, **overrides):
         "include_front_camera": "false",
         "enable_localization": "false",
         "detector_backend": "euclidean",
+        "autoware_selection_config": str(
+            PACKAGE
+            / "config"
+            / "experiments"
+            / "autoware_centerpoint_competition_candidate_v1.yaml"
+        ),
         "tracker_backend": "",
         "dynamic_object_risk": "false",
         "checkpoint_path": "",
@@ -146,6 +152,7 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "include_front_camera",
         "enable_localization",
         "detector_backend",
+        "autoware_selection_config",
         "tracker_backend",
         "dynamic_object_risk",
         "checkpoint_path",
@@ -181,6 +188,12 @@ def test_declares_only_safe_replay_controls_and_installed_defaults(
         "include_front_camera": "false",
         "enable_localization": "false",
         "detector_backend": "euclidean",
+        "autoware_selection_config": str(
+            PACKAGE
+            / "config"
+            / "experiments"
+            / "autoware_centerpoint_competition_candidate_v1.yaml"
+        ),
         "tracker_backend": "",
         "dynamic_object_risk": "false",
         "checkpoint_path": "",
@@ -389,9 +402,15 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
     assert perception_arguments == {
         "composition_config": str(
             PACKAGE / "config" / "lidar_perception_morai_classical.yaml"
-        ),
-        "detector_backend": "euclidean",
-        "tracker_backend": "",
+            ),
+            "detector_backend": "euclidean",
+            "autoware_selection_config": str(
+                PACKAGE
+                / "config"
+                / "experiments"
+                / "autoware_centerpoint_competition_candidate_v1.yaml"
+            ),
+            "tracker_backend": "",
         "dynamic_object_risk": "false",
         "checkpoint_path": "",
         "device": "cuda:0",
@@ -440,31 +459,42 @@ def test_graph_scopes_sim_time_and_replays_only_source_whitelist(
     player = timer.kwargs["actions"][0]
     command = player.kwargs["cmd"]
     assert command == [
-        "ros2",
-        "bag",
-        "play",
-        "--storage",
-        "mcap",
-        "--clock",
-        "100",
-        "--rate",
-        "0.5",
-        "--qos-profile-overrides-path",
+        "ros2", "bag", "play", "--storage", "mcap", "--clock", "100",
+        "--rate", "0.5", "--qos-profile-overrides-path",
         str(PACKAGE / "config" / "replay_qos_overrides.yaml"),
-        "--wait-for-all-acked",
-        "10000",
-        "--disable-keyboard-controls",
-        str(bag.resolve()),
-        "--loop",
-        "--topics",
-        *module.SOURCE_TOPICS,
+        "--wait-for-all-acked", "10000", "--disable-keyboard-controls",
+        str(bag.resolve()), "--loop", "--topics", *module.SOURCE_TOPICS,
     ]
     assert player.kwargs["output"] == "screen"
     assert player.kwargs["emulate_tty"] is True
-    assert not any(
-        "/ad/perception/" in token for token in command
-    )
+    assert not any("/ad/perception/" in token for token in command)
 
+
+def test_autoware_centerpoint_replay_enables_only_xyzirc_adapter(tmp_path, monkeypatch):
+    module = load_launch_module()
+    bag = write_bag(tmp_path)
+    actions = record_setup(
+        module,
+        monkeypatch,
+        launch_context(
+            bag,
+            detector_backend="autoware_centerpoint",
+            composition_config=str(
+                PACKAGE
+                / "config"
+                / "experiments"
+                / "autoware_centerpoint_competition_candidate_v1.yaml"
+            ),
+        ),
+    )
+    perception = actions[0].kwargs["actions"][2]
+    arguments = dict(perception.kwargs["launch_arguments"])
+    assert arguments["detector_backend"] == "autoware_centerpoint"
+    assert arguments["point_layout_adapter_enabled"] == "true"
+    assert arguments["start_ground_segmentation"] == "true"
+    assert arguments["autoware_selection_config"].endswith(
+        "autoware_centerpoint_competition_candidate_v1.yaml"
+    )
 
 def test_prediction_yaw_rate_source_override_reaches_perception_include(
     tmp_path, monkeypatch

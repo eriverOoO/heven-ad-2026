@@ -225,3 +225,16 @@ def test_competition_mot_profile_selects_euclidean_and_ab3dmot():
     assert selection.occupancy.static_enabled is True
     assert selection.occupancy.dynamic_enabled is False
     assert selection.occupancy.publish_combined is False
+
+
+def test_competition_centerpoint_candidate_is_explicit_and_not_default():
+    candidate = (
+        Path(__file__).resolve().parents[1]
+        / "config"
+        / "experiments"
+        / "autoware_centerpoint_competition_candidate_v1.yaml"
+    )
+    selection = load_selection(candidate)
+    assert selection.detector.backend == "centerpoint"
+    assert selection.tracker.backend == "autoware"
+    assert selection.detector.build_only is False

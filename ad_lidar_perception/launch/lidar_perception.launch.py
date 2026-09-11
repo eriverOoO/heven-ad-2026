@@ -61,11 +61,31 @@ def _parse_platform_profile(value):
 
 def _launch_setup(context):
     composition_path = Path(_perform(context, "composition_config"))
-    selection = load_selection(composition_path)
-    detector_backend = _perform(context, "detector_backend")
-    if detector_backend not in {"euclidean", "centerpoint"}:
-        raise RuntimeError("detector_backend must be euclidean or centerpoint")
+    detector_backend = _perform(context, "detector_backend").strip()
+    if detector_backend not in {
+        "euclidean", "centerpoint", "autoware_centerpoint",
+    }:
+        raise RuntimeError(
+            "detector_backend must be euclidean, centerpoint, or "
+            "autoware_centerpoint"
+        )
+    # ``centerpoint`` is the historical local OpenPCDet wrapper.  Keep it
+    # intact for reproducibility.  The competition candidate is explicitly
+    # named ``autoware_centerpoint`` so that it cannot silently select the
+    # wrong model/runtime contract.
     heven_centerpoint = detector_backend == "centerpoint"
+    autoware_centerpoint = detector_backend == "autoware_centerpoint"
+    selection_path = (
+        Path(_perform(context, "autoware_selection_config"))
+        if autoware_centerpoint
+        else composition_path
+    )
+    selection = load_selection(selection_path)
+    if autoware_centerpoint and selection.detector.backend != "centerpoint":
+        raise RuntimeError(
+            "autoware_centerpoint requires a selection whose detector "
+            "backend is exactly centerpoint"
+        )
     tracker_backend_override = _perform(context, "tracker_backend").strip()
     if tracker_backend_override not in {"", "autoware", "ab3dmot"}:
         raise RuntimeError(
@@ -263,7 +283,7 @@ def _launch_setup(context):
         actions.append(
             _include(
                 "object_detection.launch.py",
-                {"selection_config": str(composition_path)},
+                {"selection_config": str(selection_path)},
             )
         )
 
@@ -272,7 +292,7 @@ def _launch_setup(context):
             [
                 _include(
                     "tracking.launch.py",
-                    {"selection_config": str(composition_path)},
+                    {"selection_config": str(selection_path)},
                 ),
                 _include(
                     "prediction.launch.py",
@@ -379,6 +399,19 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument("detector_backend", default_value="euclidean"),
+            DeclareLaunchArgument(
+                "autoware_selection_config",
+                default_value=str(
+                    package_share
+                    / "config"
+                    / "experiments"
+                    / "autoware_centerpoint_competition_candidate_v1.yaml"
+                ),
+                description=(
+                    "Explicit pinned Autoware selection used only by "
+                    "detector_backend:=autoware_centerpoint."
+                ),
+            ),
             DeclareLaunchArgument(
                 "tracker_backend",
                 default_value="",

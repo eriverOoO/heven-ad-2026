@@ -52,8 +52,11 @@ def _parse_bool(name, value):
 
 def _parse_detector_backend(value):
     normalized = str(value).strip()
-    if normalized not in {"euclidean", "centerpoint"}:
-        raise RuntimeError("detector_backend must be euclidean or centerpoint")
+    if normalized not in {"euclidean", "centerpoint", "autoware_centerpoint"}:
+        raise RuntimeError(
+            "detector_backend must be euclidean, centerpoint, or "
+            "autoware_centerpoint"
+        )
     return normalized
 
 
@@ -298,6 +301,9 @@ def _launch_setup(context):
         launch_arguments={
             "composition_config": str(composition_config),
             "detector_backend": detector_backend,
+            "autoware_selection_config": _perform(
+                context, "autoware_selection_config"
+            ),
             "tracker_backend": tracker_backend,
             "dynamic_object_risk": "true" if dynamic_object_risk else "false",
             "checkpoint_path": _perform(context, "checkpoint_path"),
@@ -315,7 +321,13 @@ def _launch_setup(context):
             "patchwork_leveling_enabled": "false",
             "finite_filter_enabled": "true",
             "densifier_enabled": "false",
-            "point_layout_adapter_enabled": "false",
+            # The pinned Autoware CenterPoint node accepts only exact XYZIRC.
+            # The existing adapter fail-closes on an unsupported MORAI source
+            # layout; historical OpenPCDet and Euclidean replay behaviour is
+            # unchanged.
+            "point_layout_adapter_enabled": (
+                "true" if detector_backend == "autoware_centerpoint" else "false"
+            ),
             "ab3dmot_defer_until_tf_ready": _perform(
                 context, "ab3dmot_defer_until_tf_ready"
             ),
@@ -474,7 +486,19 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "detector_backend",
                 default_value="euclidean",
-                description="euclidean (default) or opt-in centerpoint",
+                description=(
+                    "euclidean (default), historical OpenPCDet centerpoint, "
+                    "or opt-in pinned Autoware autoware_centerpoint"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "autoware_selection_config",
+                default_value=str(
+                    perception_share
+                    / "config"
+                    / "experiments"
+                    / "autoware_centerpoint_competition_candidate_v1.yaml"
+                ),
             ),
             DeclareLaunchArgument(
                 "tracker_backend",

@@ -112,6 +112,7 @@ def launch_context(config, **overrides):
         "densifier_enabled": "false",
         "point_layout_adapter_enabled": "true",
         "detector_backend": "euclidean",
+        "autoware_selection_config": "/tmp/autoware-centerpoint.yaml",
         "tracker_backend": "",
         "checkpoint_path": "",
         "score_threshold": "0.1",
@@ -252,6 +253,38 @@ def test_centerpoint_backend_switch_adds_optional_heven_node(tmp_path, monkeypat
     arguments = dict(centerpoint.kwargs["launch_arguments"])
     assert arguments["detector_backend"] == "centerpoint"
     assert str(arguments["input_topic"]) == "/ad/perception/lidar/cropped"
+
+
+def test_autoware_centerpoint_switch_is_mutually_exclusive_and_uses_xyzirc(
+    tmp_path, monkeypatch
+):
+    base = write_composition(
+        tmp_path,
+        composition_text(detector="euclidean_cluster", tracker="autoware"),
+    )
+    candidate = tmp_path / "autoware-centerpoint.yaml"
+    candidate.write_text(
+        composition_text(detector="centerpoint", tracker="autoware"),
+        encoding="utf-8",
+    )
+    _module, actions = record_setup(
+        monkeypatch,
+        base,
+        detector_backend="autoware_centerpoint",
+        autoware_selection_config=str(candidate),
+    )
+    names = [action.source for action in actions]
+    assert "object_detection.launch.py" in names
+    assert "euclidean_clustering.launch.py" not in names
+    assert "centerpoint_detector.launch.py" not in names
+    detection = next(
+        action for action in actions if action.source == "object_detection.launch.py"
+    )
+    tracking = next(
+        action for action in actions if action.source == "tracking.launch.py"
+    )
+    assert dict(detection.kwargs["launch_arguments"])["selection_config"] == str(candidate)
+    assert dict(tracking.kwargs["launch_arguments"])["selection_config"] == str(candidate)
 
 
 def test_optional_branches_forward_only_their_owned_inputs(
@@ -501,6 +534,7 @@ def test_launch_interface_is_small_and_owns_composition_config(monkeypatch):
         "crop_clearance_m",
         "use_sim_time",
         "detector_backend",
+        "autoware_selection_config",
         "tracker_backend",
         "checkpoint_path",
         "score_threshold",

@@ -1,0 +1,13 @@
+# Opt-in competition-candidate selection.  It is never a production default.
+# The detector/model contract is verified by autoware_provenance before launch.
+schema_version: 1
+detector:
+  backend: centerpoint
+  model_subdir: models/autoware
+  build_only: false
+tracker:
+  backend: autoware
+occupancy:
+  static_enabled: true
+  dynamic_enabled: true
+  publish_combined: true
