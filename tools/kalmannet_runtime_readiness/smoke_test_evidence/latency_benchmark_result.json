@@ -1,0 +1,90 @@
+[
+  {
+    "state_estimator": "linear_kf",
+    "n_tracks": 1,
+    "iterations": 50,
+    "mean_ms": 0.14531500288285315,
+    "median_ms": 0.12259800860192627,
+    "p95_ms": 0.34320299164392054,
+    "max_ms": 0.4062610096298158,
+    "rss_delta_kb": 416,
+    "n_live_tracks_at_end": 1
+  },
+  {
+    "state_estimator": "kalmannet",
+    "n_tracks": 1,
+    "iterations": 50,
+    "mean_ms": 0.531411778065376,
+    "median_ms": 0.49267199938185513,
+    "p95_ms": 0.7984169933479279,
+    "max_ms": 1.5778689994476736,
+    "rss_delta_kb": 4212,
+    "n_live_tracks_at_end": 1
+  },
+  {
+    "state_estimator": "linear_kf",
+    "n_tracks": 10,
+    "iterations": 50,
+    "mean_ms": 0.9896513581043109,
+    "median_ms": 1.0234954970655963,
+    "p95_ms": 1.2627590040210634,
+    "max_ms": 2.0497950026765466,
+    "rss_delta_kb": 0,
+    "n_live_tracks_at_end": 10
+  },
+  {
+    "state_estimator": "kalmannet",
+    "n_tracks": 10,
+    "iterations": 50,
+    "mean_ms": 4.306762861087918,
+    "median_ms": 3.8783835188951343,
+    "p95_ms": 5.256866017589346,
+    "max_ms": 5.7464540004730225,
+    "rss_delta_kb": 128,
+    "n_live_tracks_at_end": 10
+  },
+  {
+    "state_estimator": "linear_kf",
+    "n_tracks": 50,
+    "iterations": 50,
+    "mean_ms": 8.95801501988899,
+    "median_ms": 7.745029492070898,
+    "p95_ms": 13.393825996899977,
+    "max_ms": 13.679611001862213,
+    "rss_delta_kb": 0,
+    "n_live_tracks_at_end": 50
+  },
+  {
+    "state_estimator": "kalmannet",
+    "n_tracks": 50,
+    "iterations": 50,
+    "mean_ms": 36.062120742863044,
+    "median_ms": 35.493136500008404,
+    "p95_ms": 43.3575369825121,
+    "max_ms": 44.005375006236136,
+    "rss_delta_kb": 256,
+    "n_live_tracks_at_end": 50
+  },
+  {
+    "state_estimator": "linear_kf",
+    "n_tracks": 100,
+    "iterations": 50,
+    "mean_ms": 31.8537204596214,
+    "median_ms": 29.71485299349297,
+    "p95_ms": 40.54482901119627,
+    "max_ms": 46.03268799837679,
+    "rss_delta_kb": 128,
+    "n_live_tracks_at_end": 100
+  },
+  {
+    "state_estimator": "kalmannet",
+    "n_tracks": 100,
+    "iterations": 50,
+    "mean_ms": 99.77937103831209,
+    "median_ms": 98.98567201162223,
+    "p95_ms": 118.47592101548798,
+    "max_ms": 122.93545401189476,
+    "rss_delta_kb": 384,
+    "n_live_tracks_at_end": 100
+  }
+]

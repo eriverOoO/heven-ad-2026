@@ -1,0 +1,165 @@
+# KalmanNet Production Candidate Freeze + Runtime Integration Readiness v1
+#
+# Identifies the ONE preferred pretrained KalmanNet checkpoint for AB3DMOT's
+# opt-in `state_estimator=kalmannet` path, with unambiguous provenance, so
+# a deployer never has to guess "which checkpoint" from a filename alone.
+#
+# This is a documentation/provenance manifest, not a ROS parameter file --
+# `ab3dmot_tracker.launch.py`'s own `kalmannet_checkpoint` /
+# `kalmannet_expected_sha256` launch arguments are still how the checkpoint
+# and its verification hash actually reach the runtime; the values below
+# are exactly what a deployer should copy into those arguments (or into a
+# custom params-file override).
+#
+# No machine-specific absolute path is embedded here -- `checkpoint_file`
+# is a relative path within the repository checkout
+# (`models/experimental/`, committed on `main`; see that directory's own
+# `manifest.yaml` for the checkpoint's own byte-level provenance).
+
+schema_version: kalmannet_production_candidate_v1
+date_frozen: "2026-09-11"
+
+candidate_name: NATURAL_AV2_10K_FIXED_DT_GENERIC_ROBUST_SEED1
+
+checkpoint_file: models/experimental/kalmannet_av2_natural_10k_generic_robust_seed1.pt
+checkpoint_sha256: a9a19353ddb272d3fc0ac3ad7c6754239ef3d8dd00acd3c52a59193d98dc5ee5
+
+model_class: "KalmanNetGRU (ad_lidar_perception/ad_lidar_perception/kalmannet_core.py, unmodified)"
+hidden_size: 32
+state_definition: [x, y, vx, vy]
+measurement_definition: [x, y]
+
+coordinate_convention: >-
+  first_state_relative (translation-equivariant training-time convention;
+  see av2_kalmannet_adapter_v1.md). NOTE: the runtime KalmanNetEstimator
+  consumes AB3DMOT's own odom-frame detections directly, not AV2's
+  training-time relative frame -- this field documents the TRAINING-time
+  convention only, not a runtime coordinate transform that exists.
+
+dt_semantics: >-
+  Runtime math (F/Q inside kalmannet_core.py) is evaluated at the actual
+  dt passed to predict() every call -- never a hardcoded fixed value; see
+  docs/perception/kalmannet_runtime_readiness_v1.md section 9 for the
+  direct runtime verification of this. This specific candidate was
+  itself TRAINED on FIXED dt=0.1s only (see training_corruption below),
+  so its own learned gain has not seen variable-dt examples during
+  training, even though the runtime it executes through supports
+  variable dt unconditionally.
+
+training_dataset_lineage:
+  source: "av2_kalmannet_scaleup_v2 TRAIN-source pool (10,000 AV2 Motion Forecasting scenarios)"
+  split_counts: {train: 9000, internal_val: 1000, train_sequences: 496434, internal_val_sequences: 57372}
+  internal_split_seed: 20260930
+  dataset_manifest_sha256: ab0f9faa8318ecc13a9c0eea37c5414335540adca3b027194f5267da36baeb12
+  split_manifest_sha256: f4bb07b2c9a763f088d719c2722cc6f9be4a2255d87d012db7ea5024573983ad
+  train_scenario_manifest_sha256: 12ae390ea1b01e714b6e9d3b8d4a06822547b035d8aa8e5746ebdc92526c4c59
+  official_val_scenario_manifest_sha256: bebbfd3bc1caca11ece6af6f8c78c88b2fbbd08b221b18824590d584348a66d0
+  verified_overlap_with_official_val: {internal_train_vs_official_val: 0, internal_val_vs_official_val: 0}
+
+training_seed: 1
+training_seed_policy: {init_seed: 1, order_seed: 1, shuffle_seed: 1}
+
+training_git_sha: "754d6dcb30afb186acadfba71114a18361090605"
+training_git_sha_note: >-
+  This is the merge commit of the fix that finalized the 3-state
+  numerical safety guard (STATE A healthy / STATE B aggregate
+  norm-overflow, safely skipped / STATE C per-element non-finite
+  gradient, safely skipped). This checkpoint was trained end-to-end
+  under that finalized guard, not the earlier pre-guard vintage --
+  contrast: seed0 of this same checkpoint family predates this
+  finalized guard and its real training log shows a genuine NaN
+  collapse at epoch 16 (its retained checkpoint is safe only because
+  the best-checkpoint mechanism saved an earlier epoch before that
+  collapse). See docs/agent/STATUS.md "AV2 10K GENERIC-ROBUST
+  Multi-Seed Completion v1".
+
+training_config:
+  optimizer: Adam
+  batch_size: 64
+  learning_rate: 0.004
+  gradient_clip: 10.0
+  max_epochs: 60
+  patience: 15
+  loss_on_predict_only: true
+  sampler: "length_bucketed_v1 (8 buckets)"
+  device: cpu
+
+training_corruption:
+  name: GENERIC-ROBUST
+  mode: custom
+  gaussian_noise_std_m: 0.3
+  dropout_prob: 0.1
+  dropout_burst_enabled: true
+  dropout_burst_prob: 0.02
+  dropout_burst_min_len: 2
+  dropout_burst_max_len: 5
+  seed: 20260905
+  sampling: "NATURAL (unweighted -- no motion-composition class reweighting)"
+  dt_policy: "FIXED (dt=0.1s for every training sample)"
+
+best_epoch: 7
+n_epochs_run: 23
+internal_validation_metric: "mean per-frame MSE over [x,y,vx,vy], loss_on_predict_only semantics -- NEVER official AV2 VAL"
+internal_validation_best_loss: 0.7458607519010171
+
+numerical_safety_at_training_time:
+  catastrophic: false
+  training_unstable: false
+  training_collapsed: false
+  norm_overflow_count: 78
+  per_element_nonfinite_gradient_count: 1
+  parameter_collapse_count: 0
+  optimizer_state_collapse_count: 0
+
+official_av2_val_provenance:
+  note: >-
+    Official AV2 VAL (1,000 held-out val-split scenarios, never used for
+    training or checkpoint selection). AV2 diagnostics only -- NOT a
+    MORAI evaluation and NOT a competition-performance claim.
+  A_clean: {position_rmse_m: 0.0392, velocity_rmse_mps: 1.2506, n: 2918906}
+  B_generic_robust_same_seed: {position_rmse_m: 0.3063, velocity_rmse_mps: 1.3892, n: 2908189}
+  C_generic_robust_different_seed: {position_rmse_m: 0.3076, velocity_rmse_mps: 1.3928, n: 2908098}
+  D_morai_calibrated_diagnostic:
+    position_rmse_m: 1.7151
+    velocity_rmse_mps: 2.0593
+    n: 2899090
+    note: "AV2 diagnostic condition calibrated toward measured MORAI residual statistics -- still AV2 data, not a MORAI evaluation."
+  divergence_count: 0
+  nonfinite_count: 0
+  source_doc: "tools/kalmannet_training/av2_10k_multiseed_results/seed1_official_val_report.json (outside this repo)"
+
+selection_rationale: >-
+  NATURAL 10k FIXED-DT GENERIC-ROBUST seed1 is the ONLY AV2-pretrained
+  KalmanNet candidate this project selects as the current production
+  default, based on three separate downstream ablations run against the
+  full NATURAL/MILD/MIXED-50/motion-focused family: (1) a
+  motion-composition (BALANCED/motion-focused) variant improved
+  moving-object RMSE modestly under corrupted conditions but caused a
+  severe (approximately 55-59 percent) regression on CLEAN AV2 data --
+  rejected as default; (2) a MILD variable-dt-trained variant improved
+  strong-variable-dt RMSE by roughly 2-4 percent but regressed fixed-dt
+  RMSE by roughly 0.9-1.6 percent -- kept as a diagnostic-only reference,
+  not a default; (3) a MIXED-50 fixed/thinned curriculum (a 50/50
+  per-segment mix of FIXED and MILD-thinned sequences), hypothesized to
+  eliminate MILD's fixed-dt regression while retaining most of its
+  strong-dt gain, did neither -- it was worst-of-three on fixed and mild,
+  and recovered only about half of MILD's own strong-dt improvement --
+  rejected, no change to this recommendation. NATURAL 10k FIXED-DT seed1
+  remains the cleanest, most-tested, and least-caveated AV2-pretrained
+  candidate across every one of these comparisons.
+
+status:
+  motion_focused_model: "rejected as default (severe CLEAN-condition regression)"
+  mild_variable_dt_model: "diagnostic only (real dt-dependent tradeoff, not adopted as default)"
+  mixed_50_model: "rejected (dominated by both NATURAL and MILD on every condition)"
+  morai_final_validation: >-
+    Still pending. No independent MORAI GT evaluation of this checkpoint
+    exists beyond n=3 test sequences from one scene (see
+    docs/perception/morai_estimator_eval_v2.md). This manifest freezes
+    the AV2-side candidate only; it does NOT claim MORAI validation.
+
+related_docs:
+  - docs/perception/kalmannet_checkpoint_distribution_v1.md
+  - docs/perception/kalmannet_runtime_readiness_v1.md
+  - docs/perception/morai_estimator_eval_v2.md
+  - docs/agent/STATUS.md

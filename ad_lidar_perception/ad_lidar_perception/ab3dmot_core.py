@@ -1169,7 +1169,7 @@ class IMMEstimator:
         )
 
 
-def load_kalmannet_network(checkpoint_path: str, device: str = "cpu"):
+def load_kalmannet_network(checkpoint_path: str, device: str = "cpu", expected_sha256: str | None = None):
     """T-9B Phase 4: load the SHARED, immutable DENSE-KALMANNET-v2 weight
     module once (never per-track -- see `KalmanNetEstimator`'s own
     docstring for the per-track/shared-weight split). Deferred/lazy
@@ -1179,8 +1179,11 @@ def load_kalmannet_network(checkpoint_path: str, device: str = "cpu"):
     requirement for every non-KalmanNet path.
 
     Fails clearly (never silently falls back to random weights) on:
-    missing file, architecture-metadata mismatch, or a state_dict that
-    does not load cleanly.
+    missing file, SHA-256 mismatch (when ``expected_sha256`` is given --
+    Runtime Readiness v1's production-candidate manifest verification;
+    checked BEFORE `torch.load`, so a hash-mismatched or corrupted file
+    never gets as far as being deserialized), architecture-metadata
+    mismatch, or a state_dict that does not load cleanly.
     """
     try:
         import torch
@@ -1195,6 +1198,16 @@ def load_kalmannet_network(checkpoint_path: str, device: str = "cpu"):
     path = Path(checkpoint_path)
     if not path.is_file():
         raise FileNotFoundError(f"kalmannet_checkpoint {checkpoint_path!r} does not exist")
+
+    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+    if expected_sha256 and checksum != expected_sha256:
+        raise RuntimeError(
+            f"kalmannet_checkpoint {checkpoint_path!r} SHA-256 mismatch: "
+            f"got {checksum}, expected {expected_sha256} -- refusing to load an "
+            "unverified checkpoint. This is not a fallback path: fix the checkpoint "
+            "or the expected hash (kalmannet_expected_sha256 / "
+            "config/kalmannet/production_candidate.yaml) before retrying."
+        )
 
     raw = torch.load(path, map_location=device)
     state_dict = raw["state_dict"] if isinstance(raw, dict) and "state_dict" in raw else raw
@@ -1225,7 +1238,6 @@ def load_kalmannet_network(checkpoint_path: str, device: str = "cpu"):
     net.eval()
     net.to(device)
 
-    checksum = hashlib.sha256(path.read_bytes()).hexdigest()
     n_params = sum(p.numel() for p in net.parameters())
     return net, {"checkpoint_path": str(path), "checkpoint_sha256": checksum,
                  "hidden_size": hidden_size, "n_trainable_params": n_params, "device": device}
@@ -1587,6 +1599,7 @@ class AB3DMOTTracker:
         if config.state_estimator == "kalmannet":
             self._kalmannet_net, self.kalmannet_provenance = load_kalmannet_network(
                 config.kalmannet_checkpoint, config.kalmannet_device,
+                expected_sha256=(config.kalmannet_expected_sha256 or None),
             )
         # T-3 Phase 11/12: opt-in, additive-only per-frame instrumentation
         # (never read by predict/update/lifecycle/association math itself).

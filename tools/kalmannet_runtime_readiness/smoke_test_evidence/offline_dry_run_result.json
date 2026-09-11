@@ -1,0 +1,32 @@
+{
+  "A_linear_kf": {
+    "state_estimator": "linear_kf",
+    "kalmannet_provenance": null,
+    "n_frames_processed": 1742,
+    "n_frames_skipped_duplicate_or_backward": 22,
+    "n_output_states": 18107,
+    "n_nonfinite": 0,
+    "n_unique_track_ids": 1758,
+    "n_live_tracks_at_end": 1,
+    "n_distinct_hidden_state_objects_at_end": 0,
+    "exception": null
+  },
+  "B_kalmannet": {
+    "state_estimator": "kalmannet",
+    "kalmannet_provenance": {
+      "checkpoint_path": "../../models/experimental/kalmannet_av2_natural_10k_generic_robust_seed1.pt",
+      "checkpoint_sha256": "a9a19353ddb272d3fc0ac3ad7c6754239ef3d8dd00acd3c52a59193d98dc5ee5",
+      "hidden_size": 32,
+      "n_trainable_params": 7016,
+      "device": "cpu"
+    },
+    "n_frames_processed": 1742,
+    "n_frames_skipped_duplicate_or_backward": 22,
+    "n_output_states": 18064,
+    "n_nonfinite": 0,
+    "n_unique_track_ids": 1731,
+    "n_live_tracks_at_end": 1,
+    "n_distinct_hidden_state_objects_at_end": 1,
+    "exception": null
+  }
+}

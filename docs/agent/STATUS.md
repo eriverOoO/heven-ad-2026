@@ -1,5 +1,138 @@
 # STATUS
 
+## KalmanNet Production Candidate Freeze + Runtime Integration Readiness v1 — COMPLETE (PR open, do NOT merge)
+
+Branch `feat/kalmannet-runtime-readiness-v1`, from merged PR #62
+`9f3db1f9` (`feat(kalmannet): distribute checkpoints for third-party
+MORAI testing`, verified `MERGED` before branching). **Engineering/
+integration readiness only. No new KalmanNet training, no AV2 experiment,
+no MORAI evaluation -- explicitly leaving the AV2 research/ablation
+phase, per this task's own framing. No `kalmannet_core.py`/
+`KalmanNetGRU`/`KalmanNetFilter`/`F_matrix`/`Q_matrix`/AB3DMOT
+association-or-lifecycle-math/CenterPoint/IMM-algorithm/planner/
+occupancy-grid file changed.**
+
+**Frozen production candidate: NATURAL AV2 10k FIXED-DT GENERIC-ROBUST
+seed1** (`models/experimental/kalmannet_av2_natural_10k_generic_robust_seed1.pt`,
+SHA-256 `a9a19353ddb272d3fc0ac3ad7c6754239ef3d8dd00acd3c52a59193d98dc5ee5`)
+-- verified against its own embedded provenance sidecar (not guessed from
+filename), new
+`ad_lidar_perception/config/kalmannet/production_candidate.yaml` records
+full training dataset lineage, seed, `frozen_at_git_sha` (PR #58 merge --
+the finalized numerical safety guard generation), best epoch (7),
+internal-val loss, official AV2 VAL provenance (4 conditions, 0
+divergence/nonfinite), and explicit rejection/diagnostic status for every
+other AV2-pretrained candidate tested to date (motion-focused: rejected;
+MILD variable-dt: diagnostic only; MIXED-50: rejected). MORAI final
+validation explicitly still pending.
+
+**Runtime audit (real code, not old docs)**: traced the exact
+detector -> association -> `AB3DMOTTracker.step()` ->
+`Track.predict/update` -> `TrackedState` -> `ab3dmot_ros.py` message ->
+`autoware_prediction_node.cpp` path. Confirmed KalmanNet owns only
+`[x,y,vx,vy]`; the rest (`z`/`yaw`/dims/covariance-for-schema) comes from
+an internally-composed `LinearKFEstimator` (unchanged T-9B design).
+`AB3DMOTConfig.state_estimator` (`linear_kf`/`ekf`/`imm`/`kalmannet`)
+already provides the required explicit selector -- default safe
+(`linear_kf`, never imports torch), invalid name fails clearly,
+KalmanNet requires an explicit checkpoint, no detector/association
+behavior changes with estimator choice. Confirmed by direct grep that
+neither `ab3dmot_ros.py`'s message serialization nor
+`autoware_prediction_node.cpp` contain any reference to estimator type
+-- downstream compatibility is structural, not conventional.
+
+**New, additive-only capability**: `load_kalmannet_network()` gained an
+optional `expected_sha256` parameter (checked *before* `torch.load`, so a
+hash-mismatched/corrupted file never gets deserialized), wired through
+`AB3DMOTConfig.kalmannet_expected_sha256` (empty = disabled, unchanged
+default behavior) and a new `ab3dmot_tracker.launch.py`
+`kalmannet_expected_sha256` launch argument. On mismatch: `RuntimeError`,
+never a silent fallback to `linear_kf`. **Scope note**: not yet threaded
+through `lidar_perception.launch.py`/`lidar_bag_replay.launch.py`/
+`study_pipeline_rviz.launch.py` -- flagged as a follow-up, not silently
+omitted.
+
+**Lifecycle/isolation, verified against the real classes (18 new tests
+in `test_ab3dmot_kalmannet.py`)**: several-consecutive-missing-
+measurements-then-reacquire under the same `track_id` (max_age
+configured wide enough to exercise beyond the default 2); GRU hidden
+state proven **byte-identical** (`torch.equal`) across 4 consecutive
+predict-only frames, only changing once a real matched `update()` occurs
+-- direct proof missing-measurement handling never touches the learned
+network; 3-simultaneous-tracks-through-the-real-tracker (not just the
+raw estimator) with one having a genuine multi-frame gap, all 3 stay
+numerically isolated with 3 distinct hidden-state tensor object
+identities; an irregular real-world dt sequence
+(`[0.10,0.11,0.18,0.10,0.25,0.09]`) stays finite end-to-end and a direct
+test confirms `predict(dt)`'s analytical advance genuinely differs by
+`dt` (never coerced to a hidden fixed 0.1); `dt<=0`/NaN/+Inf all raise
+`ValueError` (pre-existing guard, re-verified), a large-but-finite
+`dt=120s` stays finite.
+
+**Offline integration smoke test (section 14, real data, no MORAI/ROS
+needed)**: new `tools/kalmannet_runtime_readiness/offline_dry_run.py`
+drove the real, unmodified `AB3DMOTTracker` with both `linear_kf` and the
+frozen `kalmannet` candidate against a real, previously-recorded
+1,764-frame Euclidean detection stream (from the "End-to-End Detector x
+Tracker Evaluation" task) -- 1,742 frames processed both arms (22
+duplicate/backward-stamp frames skipped, a real property of the
+recording), 0 exceptions, 0 non-finite outputs, checkpoint SHA-256
+confirmed exactly matching the frozen manifest. **Latency smoke test**
+(new `latency_benchmark.py`, CPU, 1/10/50/100 simultaneous synthetic
+tracks): KalmanNet costs roughly 3-4x Linear KF's per-step time at every
+scale (e.g. 100 tracks: 31.9ms vs. 99.8ms mean) -- a real, disclosed
+scaling difference, not optimized further per this task's own "smoke
+test, not research" scope.
+
+**No silent model fallback**: every checkpoint failure mode (missing
+file, corrupt file, architecture-incompatible, missing expected key, and
+now SHA-256 mismatch) raises before `AB3DMOTTracker.__init__` returns --
+verified by test for all five. A KF fallback only ever happens if a
+deployer explicitly sets `state_estimator=linear_kf` themselves.
+
+**MORAI A/B readiness**: once real MORAI data exists, switching
+`linear_kf` <-> `kalmannet` needs zero code edits (config/launch-argument
+only, exact commands in the new doc's section 17); the offline dry-run
+harness is directly reusable against any future real MORAI-sourced
+detection stream in the same JSONL shape.
+
+**Tests**: `test_ab3dmot_kalmannet.py` 37/37 (19 pre-existing + 18 new).
+New `test_kalmannet_production_candidate.py` 9/9 (manifest schema +
+SHA-256/hidden-size cross-checked against the actual checkpoint file, so
+the manifest cannot silently drift from reality). New
+`tools/kalmannet_runtime_readiness/test_offline_dry_run.py` 6/6.
+Regression: `test_ab3dmot_{core,geometry,association,
+association_metrics,ekf,heading,hybrid_gate,imm}.py` 154/154,
+`test_ab3dmot_ros.py`+`test_ab3dmot_tf_deferred_queue.py` 71/71,
+`test_ab3dmot_tracker_node.py` (ROS Humble sourced) 27/27 -- all
+unaffected by the additive changes. `py_compile`/`pyflakes`/
+`git diff --check` clean.
+
+**Files**: `ad_lidar_perception/config/kalmannet/production_candidate.yaml`
+(new), `ad_lidar_perception/ad_lidar_perception/{ab3dmot_config.py,
+ab3dmot_core.py,ab3dmot_tracker_node.py}` (additive SHA-256 verification
+only), `ad_lidar_perception/launch/ab3dmot_tracker.launch.py` (+1 launch
+arg), `ad_lidar_perception/test/{test_ab3dmot_kalmannet.py (+18),
+test_kalmannet_production_candidate.py (new)}`,
+`tools/kalmannet_runtime_readiness/{offline_dry_run.py,
+latency_benchmark.py,test_offline_dry_run.py,smoke_test_evidence/*.json}` (new),
+`docs/perception/kalmannet_runtime_readiness_v1.md` (new), this file. No
+KalmanNet architecture/training/AB3DMOT-math/CenterPoint/IMM-algorithm
+file changed.
+
+**Recommended next task**: capture at least one real MORAI-recorded
+scenario (GT actor trajectories + ego GT + TF via the existing
+`ad_morai_dataset_capture`/`ad_morai_dataset_export_kalmannet`/
+`ad_morai_dataset_attach_kalmannet_measurements` pipeline) and populate
+the still-missing `MORAI_ESTIMATOR_EVAL_V2`, zero-shot-evaluating this
+exact frozen NATURAL 10k FIXED-DT seed1 checkpoint against the Tuned
+Linear KF baseline. **Do NOT start any new KalmanNet training or AV2
+ablation as part of that next task.**
+
+## KalmanNet Production Candidate Freeze + Runtime Integration Readiness v1 result: **COMPLETE**
+
+---
+
 ## KalmanNet Physically-Consistent Variable-dt Augmentation v1 — COMPLETE (outcome B, mild dt-dependent tradeoff; PR open, do NOT merge)
 
 Branch `exp/kalmannet-av2-variable-dt-v1`, from `origin/main` `61b03894`
